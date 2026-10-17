@@ -1,3 +1,4 @@
+import { ConnectionPanel } from "connection-view.slint";
 import { Palette } from "std-widgets.slint";
 import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
@@ -46,7 +47,7 @@ export component AppWindow inherits Window {
     in property <bool> low-contrast-warning:false;
     out property <float> editor-scroll-y:editor.scroll-y;
     out property <length> editor-line-height:editor.line-height;
-    out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0);
+    out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0) + (connection.visible ? 1 : 0);
     callback save-now();
     in-out property <bool> find-visible:false;
     in-out property <string> find-query;
@@ -64,6 +65,13 @@ export component AppWindow inherits Window {
     callback open-page(string);
     callback new-note();
     callback show-appearance();
+    callback show-connection();
+    callback test-connection();
+    in-out property <string> connection-url;
+    in-out property <string> connection-token;
+    in-out property <bool> connection-remember:false;
+    in property <bool> connection-busy:false;
+    in property <string> connection-message;
     callback return-to-note();
     callback note-edited(string);
     callback history-step(int);
@@ -103,7 +111,9 @@ export component AppWindow inherits Window {
     changed active-view => {
         if (root.active-view == "pages") { pages.focus-query(); }
         else if (root.active-view == "appearance") { appearance.focus-panel(); }
+        else if (root.active-view == "connection") { connection.focus-panel(); }
         else if (root.active-view == "note") { editor.focus-editor(); }
+        if (root.active-view != "connection") { root.connection-token = ""; }
     }
     Rectangle {
         background: root.theme.paper;
@@ -282,15 +292,25 @@ export component AppWindow inherits Window {
                 import-theme => { root.import-theme(); }
                 export-theme => { root.export-theme(); }
                 return-to-note => { root.return-to-note(); }
+                show-connection => { root.show-connection(); }
                 apply-low-contrast => { root.apply-low-contrast(); }
                 cancel-theme-import => { root.cancel-theme-import(); }
             }
 
+            connection := ConnectionPanel {
+                y:36px; height:parent.height - 36px; width:parent.width;
+                visible:root.active-view == "connection";
+                theme:root.theme; server-url <=> root.connection-url;
+                token <=> root.connection-token; remember <=> root.connection-remember;
+                busy:root.connection-busy; message:root.connection-message;
+                test-connection => { root.test-connection(); }
+                return-to-note => { root.return-to-note(); }
+            }
             auxiliary := Rectangle {
                 y: 36px;
                 height: parent.height - 36px;
                 width: parent.width;
-                visible: root.active-view == "connection" || root.active-view == "recovery";
+                visible: root.active-view == "recovery";
                 Text {
                     x: 24px;
                     y: 14px;

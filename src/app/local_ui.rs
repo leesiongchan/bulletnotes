@@ -607,6 +607,10 @@ pub fn bind(
     }
     {
         let state = state.clone();
+        window.on_show_connection(move || state.dispatch(AppAction::Navigate(View::Connection)));
+    }
+    {
+        let state = state.clone();
         window.on_return_to_note(move || state.dispatch(AppAction::Navigate(View::Note)));
     }
     {

@@ -69,10 +69,16 @@ impl Worker {
         let backup = path.with_extension(format!("pre-migration-{}.sqlite", uuid::Uuid::new_v4()));
         migrate(
             &mut db,
-            &[Migration {
-                version: 1,
-                sql: include_str!("../../migrations/001_initial.sql"),
-            }],
+            &[
+                Migration {
+                    version: 1,
+                    sql: include_str!("../../migrations/001_initial.sql"),
+                },
+                Migration {
+                    version: 2,
+                    sql: include_str!("../../migrations/002_probe_journal.sql"),
+                },
+            ],
             Some(&backup),
         )?;
         db.execute("UPDATE outbox SET state='unknown' WHERE state='leased'", [])?;

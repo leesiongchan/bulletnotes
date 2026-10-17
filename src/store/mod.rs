@@ -1,6 +1,7 @@
 //! A bounded async handle to one blocking SQLite owner.
 mod outbox;
 mod pages;
+mod probes;
 pub mod recovery;
 pub mod search;
 pub mod settings;
@@ -128,6 +129,18 @@ impl StoreHandle {
     ) -> Result<Option<PageSnapshot>, StoreError> {
         self.call(move |w| outbox::acknowledge(&mut w.db, id, ack))
             .await
+    }
+    pub async fn register_probe(&self, key: &PageKey) -> Result<(), StoreError> {
+        let key = key.clone();
+        self.call(move |w| probes::register(&w.db, &key)).await
+    }
+    pub async fn pending_probes(&self, id: &ConnectionId) -> Result<Vec<PageKey>, StoreError> {
+        let id = id.clone();
+        self.call(move |w| probes::pending(&w.db, &id)).await
+    }
+    pub async fn forget_probe(&self, key: &PageKey) -> Result<(), StoreError> {
+        let key = key.clone();
+        self.call(move |w| probes::forget(&w.db, &key)).await
     }
     pub async fn durability(&self) -> Result<Durability, StoreError> {
         self.call(|w| Ok(w.durability.clone())).await

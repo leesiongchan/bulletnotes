@@ -1,4 +1,8 @@
 //! Stateful loopback SilverBullet contract fixture; all content is generated.
+#![expect(
+    dead_code,
+    reason = "individual integration targets use different fixture faults and request fields"
+)]
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -24,6 +28,7 @@ pub enum Fault {
     Catalogue(serde_json::Value),
     Redirect(String),
     TimeoutAfterWrite,
+    IgnorePreconditions,
 }
 #[derive(Clone)]
 pub struct Seen {
@@ -177,8 +182,9 @@ async fn handle(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) -
                     .and_then(|v| v.to_str().ok())
                     == Some("*");
                 let expected = parts.headers.get("if-match").and_then(|v| v.to_str().ok());
-                if !(create && parts.method == Method::PUT && data.body.is_none()
-                    || !create && data.body.is_some() && expected == Some(revision.as_str()))
+                if !matches!(fault, Fault::IgnorePreconditions)
+                    && !(create && parts.method == Method::PUT && data.body.is_none()
+                        || !create && data.body.is_some() && expected == Some(revision.as_str()))
                 {
                     return response(412, Vec::new(), &[]);
                 }

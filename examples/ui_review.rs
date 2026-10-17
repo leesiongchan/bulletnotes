@@ -149,6 +149,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = slint::quit_event_loop();
         })?;
     }
+    let active =
+        bulletnotes::domain::connection::ConnectionConfig::parse("https://notes.example/")?;
+    let _connection = bulletnotes::app::connection_ui::bind(
+        &window,
+        bulletnotes::app::connection::ConnectionController::new(
+            store.clone(),
+            bulletnotes::platform::credentials::CredentialStore::keychain(),
+        ),
+        active.id(),
+        runtime.handle().clone(),
+    );
+    {
+        let weak = window.as_weak();
+        window.on_show_connection(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_active_view("connection".into());
+            }
+        });
+    }
+    if args.iter().any(|arg| arg == "--connection-contract") {
+        let weak = window.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(300), move || {
+            let window = weak.upgrade().unwrap();
+            window.invoke_show_connection();
+            // Slint queues changed handlers. Model separate user events rather
+            // than opening and closing the view inside one callback.
+            let weak = window.as_weak();
+            slint::Timer::single_shot(Duration::from_millis(30), move || {
+                let window = weak.upgrade().unwrap();
+                let source = window.get_note_text();
+                assert_eq!(window.get_primary_view_count(), 1);
+                window.set_connection_url("http://notes.example/".into());
+                window.set_connection_token("generated-private-token".into());
+                window.invoke_test_connection();
+                assert!(window.get_connection_token().is_empty());
+                assert!(!window.get_connection_busy());
+                assert!(window.get_connection_message().contains("HTTPS"));
+                window.set_connection_token("another-generated-token".into());
+                window.invoke_return_to_note();
+                let weak = window.as_weak();
+                slint::Timer::single_shot(Duration::from_millis(30), move || {
+                    let window = weak.upgrade().unwrap();
+                    assert!(window.get_connection_token().is_empty());
+                    assert_eq!(window.get_note_text(), source);
+                    println!("native_connection_contract_passed: true");
+                    let _ = slint::quit_event_loop();
+                });
+            });
+        });
+    }
     let original = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n";
     window.set_note_text(original.into());
     window.set_current_path("Journal/Saturday.md".into());

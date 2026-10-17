@@ -18,6 +18,7 @@ pub struct SilverBulletClient {
     client: Client,
     base: Url,
     connection: ConnectionId,
+    instance: uuid::Uuid,
 }
 impl SilverBulletClient {
     pub fn new(config: &ConnectionConfig, token: Option<SecretToken>) -> Result<Self, SyncError> {
@@ -60,6 +61,7 @@ impl SilverBulletClient {
             client,
             base,
             connection: config.id().clone(),
+            instance: uuid::Uuid::new_v4(),
         })
     }
     /// Explicitly gated loopback transport for controlled integration fixtures.
@@ -81,6 +83,12 @@ impl SilverBulletClient {
             return Err(SyncError::Incompatible);
         }
         Self::build(config, base, token, timeout, false)
+    }
+    pub fn connection_id(&self) -> &ConnectionId {
+        &self.connection
+    }
+    pub(crate) fn instance_id(&self) -> uuid::Uuid {
+        self.instance
     }
     fn endpoint(&self, key: Option<&PageKey>) -> Result<Url, SyncError> {
         if key.is_some_and(|key| {

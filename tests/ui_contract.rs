@@ -242,3 +242,28 @@ fn maximum_text_size_keeps_native_navigation_visible() {
         );
     }
 }
+
+#[test]
+#[ignore = "opens generated-text native connection form; build ui_review first"]
+fn native_connection_form_preserves_editor_and_clears_credentials() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let output = std::process::Command::new(executable)
+        .arg("--connection-contract")
+        .env("SLINT_BACKEND", "winit-femtovg")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("native_connection_contract_passed: true")
+    );
+}

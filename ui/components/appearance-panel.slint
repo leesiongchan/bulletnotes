@@ -71,6 +71,7 @@ export component AppearancePanel inherits Rectangle {
     in property <string> message;
     in property <bool> low-contrast-warning:false;
     callback return-to-note();
+    callback show-connection();
     callback changed();
     callback theme-selected(string);
     callback import-theme();
@@ -307,6 +308,11 @@ export component AppearancePanel inherits Rectangle {
             text: "Export theme…";
             theme: root.theme;
             clicked => { root.export-theme(); }
+        }
+        ChoiceButton {
+            text: "Connection…";
+            theme: root.theme;
+            clicked => { root.show-connection(); }
         }
     }
 }

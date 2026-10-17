@@ -1,0 +1,71 @@
+import { ScrollView, VerticalBox, CheckBox } from "std-widgets.slint";
+import { UiTheme } from "types.slint";
+import { ActionButton, ChoiceButton } from "components/action-button.slint";
+component ConnectionField inherits Rectangle {
+    in property <UiTheme> theme;
+    in-out property <string> text;
+    in property <string> label;
+    in property <string> placeholder;
+    in property <bool> password: false;
+    in property <bool> enabled: true;
+    height: 36px;
+    border-radius: 6px;
+    background: root.theme.surface;
+    border-width: 1px;
+    border-color: input.has-focus ? root.theme.accent : root.theme.line;
+    public function focus-field() { input.focus(); }
+    input := TextInput {
+        x: 10px; width: parent.width - 20px; height: parent.height;
+        text <=> root.text;
+        single-line: true; vertical-alignment: center;
+        color: root.theme.ink; font-size: 12px;
+        input-type: root.password ? InputType.password : InputType.text;
+        selection-background-color: root.theme.selection;
+        selection-foreground-color: root.theme.ink;
+        input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
+        accessible-label: root.label;
+        enabled: root.enabled;
+    }
+    Text {
+        x: 10px; width: parent.width - 20px; height: parent.height;
+        text: root.placeholder; visible: root.text == "";
+        color: root.theme.muted; font-size: 11px;
+        vertical-alignment: center; accessible-role: none;
+    }
+}
+export component ConnectionPanel inherits Rectangle {
+    in property <UiTheme> theme;
+    in-out property <string> server-url;
+    in-out property <string> token;
+    in-out property <bool> remember: false;
+    in property <bool> busy: false;
+    in property <string> message;
+    callback test-connection();
+    callback return-to-note();
+    public function focus-panel() { url.focus-field(); }
+    background: root.theme.paper;
+    Text { x:24px; y:14px; text:"Connection"; font-size:17px; color:root.theme.ink; }
+    ActionButton {
+        x: parent.width - 44px; y: 9px; theme: root.theme;
+        icon: @image-url("../assets/icons/close.svg"); label: "Return to note";
+        clicked => { root.return-to-note(); }
+    }
+    scroll := ScrollView {
+        x:24px; y:54px; width:parent.width - 48px; height:parent.height - 78px;
+        content-width:self.visible-width; content-height:form.preferred-height;
+        form := VerticalBox {
+            width:scroll.visible-width; padding:0px; spacing:12px;
+            Text { text:"SilverBullet server"; color:root.theme.ink; font-size:12px; }
+            url := ConnectionField { theme:root.theme; text <=> root.server-url; label:"SilverBullet HTTPS server URL"; placeholder:"https://notes.example.com"; enabled: !root.busy; }
+            Text { text:"Bearer token · optional"; color:root.theme.ink; font-size:12px; }
+            ConnectionField { theme:root.theme; text <=> root.token; password:true; label:"SilverBullet bearer token"; placeholder:"Leave blank to use Keychain or public access"; enabled:!root.busy; }
+            CheckBox { text:"Remember token in Keychain"; checked <=> root.remember; enabled:!root.busy; }
+            Text {
+                text:"Testing uses one temporary page in Quick Notes/Bulletnotes Probe to check safe updates, then removes it. Your existing notes stay untouched.";
+                wrap:word-wrap; color:root.theme.muted; font-size:11px;
+            }
+            ChoiceButton { theme:root.theme; text:root.busy ? "Checking connection…" : "Test connection"; enabled:!root.busy; clicked => { root.test-connection(); } }
+            Text { text:root.message; wrap:word-wrap; color:root.theme.ink; font-size:12px; }
+        }
+    }
+}

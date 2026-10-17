@@ -112,3 +112,22 @@ pub enum SyncError {
     #[error("the response exceeds available client resources; remote data is unchanged")]
     ResponseTooLarge,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum CredentialError {
+    #[error("Keychain access was denied; this session can still be used")]
+    Denied,
+    #[error("Keychain is unavailable; this session can still be used")]
+    Unavailable,
+    #[error("the saved credential is invalid")]
+    Invalid,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error(transparent)]
+    Connection(#[from] ConnectionError),
+    #[error(transparent)]
+    Sync(#[from] SyncError),
+    #[error("local connection state could not be saved")]
+    Store(#[from] StoreError),
+}

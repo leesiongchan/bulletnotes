@@ -25,6 +25,7 @@ url = "=2.5.8"
 slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
 rfd = { version = "=0.17.2", default-features = false }
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder", "NSApplication", "NSEvent", "NSButton", "NSControl", "NSScreen", "NSAppearance", "block2"] }
@@ -45,4 +46,12 @@ all = "warn"
 
 [[test]]
 name = "protocol_contract"
+required-features = ["protocol-validation"]
+
+[[test]]
+name = "compatibility_probe"
+required-features = ["protocol-validation"]
+
+[[test]]
+name = "connection_security"
 required-features = ["protocol-validation"]

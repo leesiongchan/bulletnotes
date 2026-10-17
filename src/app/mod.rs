@@ -12,3 +12,7 @@ pub mod startup;
 pub mod theme_files;
 pub mod ui;
 pub mod window_placement;
+
+pub mod connection;
+
+pub mod connection_ui;

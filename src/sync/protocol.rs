@@ -3,6 +3,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use std::collections::HashSet;
 
+#[derive(Clone)]
 pub struct SecretToken(HeaderValue);
 impl SecretToken {
     pub fn new(value: String) -> Result<Self, SyncError> {
@@ -13,6 +14,10 @@ impl SecretToken {
             .map_err(|_| SyncError::Authentication)?;
         header.set_sensitive(true);
         Ok(Self(header))
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn credential_bytes(&self) -> &[u8] {
+        &self.0.as_bytes()["Bearer ".len()..]
     }
     pub(super) fn into_header(self) -> HeaderValue {
         self.0

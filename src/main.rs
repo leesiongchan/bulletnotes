@@ -1,9 +1,12 @@
 #[cfg(target_os = "macos")]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     use bulletnotes::{
-        app::{native_app::LocalApplication, startup},
+        app::{
+            connection::ConnectionController, connection_ui, native_app::LocalApplication, startup,
+        },
         domain::connection::ConnectionConfig,
         platform::application::{NativeApplication, database_path},
+        platform::credentials::CredentialStore,
     };
     let native = NativeApplication::prepare()?;
     let runtime = tokio::runtime::Runtime::new()?;
@@ -11,7 +14,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .id()
         .clone();
     let startup = runtime.block_on(startup::open(&database_path()?, connection))?;
+    let controller = ConnectionController::new(startup.store.clone(), CredentialStore::keychain());
+    let connection = startup.connection.clone();
     let app = LocalApplication::new(startup, native)?;
+    let _connection_ui = connection_ui::bind(
+        app.window(),
+        controller,
+        &connection,
+        runtime.handle().clone(),
+    );
     app.run()
 }
 #[cfg(target_os = "macos")]
