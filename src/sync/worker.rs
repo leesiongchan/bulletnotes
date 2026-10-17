@@ -310,6 +310,10 @@ async fn observe(
     let decision = storage(store.apply_remote(observation).await)?;
     if matches!(decision, ReconcileDecision::Conflict(_)) {
         shared.fail(SyncError::Conflict, Some(key));
+    } else {
+        shared.snapshot.send_modify(|snapshot| {
+            snapshot.page_errors.remove(key);
+        });
     }
     shared.online();
     Ok(())
@@ -427,7 +431,9 @@ async fn perform(
                     storage(store.mark_unknown(operation.id).await)?;
                     if matches!(
                         error,
-                        SyncError::Conflict | SyncError::UnknownMutationOutcome
+                        SyncError::Conflict
+                            | SyncError::Missing
+                            | SyncError::UnknownMutationOutcome
                     ) {
                         if error == SyncError::UnknownMutationOutcome {
                             shared.fail(error, None);
@@ -604,7 +610,9 @@ async fn supervise(
                 result=controls.changed()=>{if result.is_err(){break;}},
                 result=changes.changed()=>{
                     if result.is_err(){return Err(SyncError::LocalStorage);}
-                    rescan=true;shared.publish(&store).await?;
+                    rescan=true;
+                    reads.extend(shared.snapshot.borrow().page_errors.keys().cloned());
+                    shared.publish(&store).await?;
                 },
                 result=async{match listing.as_mut(){Some(task)=>Some(task.await),None=>std::future::pending().await}}=>{
                     listing=None;poll=Instant::now()+Duration::from_secs(if control.active{30}else{60});

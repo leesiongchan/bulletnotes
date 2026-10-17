@@ -82,6 +82,10 @@ impl Worker {
                     version: 3,
                     sql: include_str!("../../migrations/003_remote_cache.sql"),
                 },
+                Migration {
+                    version: 4,
+                    sql: include_str!("../../migrations/004_recovery_intents.sql"),
+                },
             ],
             Some(&backup),
         )?;

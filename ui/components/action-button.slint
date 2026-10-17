@@ -58,6 +58,7 @@ export component ChoiceButton inherits FocusScope {
         border-color: root.theme.accent;
         Text {
             text: root.text;
+            overflow: elide;
             color: root.selected ? root.theme.ink : root.theme.muted;
             font-size: 11px;
             vertical-alignment: center;

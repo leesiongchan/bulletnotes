@@ -1,3 +1,4 @@
+import { RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
 import { Palette } from "std-widgets.slint";
 import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
@@ -48,6 +49,33 @@ export component AppWindow inherits Window {
     out property <float> editor-scroll-y:editor.scroll-y;
     out property <length> editor-line-height:editor.line-height;
     out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0) + (connection.visible ? 1 : 0);
+    in property <[PageRow]> recovery-items;
+    in-out property <string> recovery-section:"conflicts";
+    in property <string> recovery-selected-id;
+    in property <string> recovery-path;
+    in property <string> recovery-local;
+    in property <string> recovery-remote;
+    in property <string> recovery-base;
+    in-out property <string> recovery-merge;
+    in-out property <string> recovery-destination;
+    in property <string> recovery-message;
+    in property <bool> recovery-selected:false;
+    in property <bool> recovery-remote-deleted:false;
+    in property <bool> recovery-has-base:false;
+    in property <bool> recovery-writable:false;
+    in property <bool> recovery-stale:false;
+    in property <bool> recovery-busy:false;
+    callback show-recovery();
+    callback recovery-section-changed();
+    callback recovery-select(string);
+    callback recovery-apply(string);
+    callback recovery-merge-edited();
+    callback recovery-restore();
+    callback recovery-purge();
+    callback recovery-reload();
+    callback recovery-completed(bool,string);
+    callback refresh-recovery();
+    callback trash-current-note();
     callback save-now();
     in-out property <bool> find-visible:false;
     in-out property <string> find-query;
@@ -113,6 +141,7 @@ export component AppWindow inherits Window {
     changed active-view => {
         if (root.active-view == "pages") { pages.focus-query(); }
         else if (root.active-view == "appearance") { appearance.focus-panel(); }
+        else if (root.active-view == "recovery") { auxiliary.focus-panel(); }
         else if (root.active-view == "connection") { connection.focus-panel(); }
         else if (root.active-view == "note") { editor.focus-editor(); }
         if (root.active-view != "connection") { root.connection-token = ""; }
@@ -186,8 +215,9 @@ export component AppWindow inherits Window {
                     text <=> root.note-text;
                     font-size-px: root.font-size-px;
                     paper-style: root.paper-style;
-                    read-only: root.note-read-only;
+                    read-only: root.note-read-only || root.recovery-busy;
                     edited(text) => { root.note-edited(text); }
+                    move-to-trash => { root.trash-current-note(); }
                     key-pressed(event) => { root.shortcut(event) }
                 }
 
@@ -217,6 +247,7 @@ export component AppWindow inherits Window {
                             clicked => { root.show-appearance(); }
                         }
 
+                        ActionButton { theme:root.theme; icon:@image-url("../assets/icons/recovery.svg"); label:"Review changes, Trash, and kept versions"; clicked => { root.show-recovery(); } }
                         ActionButton {
                             theme: root.theme;
                             icon: @image-url("../assets/icons/plus.svg");
@@ -308,27 +339,24 @@ export component AppWindow inherits Window {
                 test-connection => { root.test-connection(); }
                 return-to-note => { root.return-to-note(); }
             }
-            auxiliary := Rectangle {
-                y: 36px;
-                height: parent.height - 36px;
-                width: parent.width;
-                visible: root.active-view == "recovery";
-                Text {
-                    x: 24px;
-                    y: 14px;
-                    text: root.active-view == "connection" ? "Connection" : "Recovery";
-                    font-size: 17px;
-                    color: root.theme.ink;
-                }
-
-                ActionButton {
-                    x: parent.width - 44px;
-                    y: 9px;
-                    theme: root.theme;
-                    icon: @image-url("../assets/icons/close.svg");
-                    label: "Return to note";
-                    clicked => { root.return-to-note(); }
-                }
+            auxiliary := RecoveryPanel {
+                y:36px; height:parent.height - 36px; width:parent.width;
+                visible:root.active-view == "recovery";
+                theme:root.theme; section <=> root.recovery-section; items:root.recovery-items;
+                selected-id:root.recovery-selected-id; path:root.recovery-path;
+                local-text:root.recovery-local; remote-text:root.recovery-remote; base-text:root.recovery-base;
+                merge-text <=> root.recovery-merge; destination <=> root.recovery-destination;
+                selected:root.recovery-selected; remote-deleted:root.recovery-remote-deleted;
+                has-base:root.recovery-has-base; writable:root.recovery-writable;
+                stale:root.recovery-stale; busy:root.recovery-busy; message:root.recovery-message;
+                return-to-note => { root.return-to-note(); }
+                section-changed => { root.recovery-section-changed(); }
+                select-item(id) => { root.recovery-select(id); }
+                apply-choice(choice) => { root.recovery-apply(choice); }
+                merge-edited => { root.recovery-merge-edited(); }
+                restore-item => { root.recovery-restore(); }
+                purge-item => { root.recovery-purge(); }
+                reload => { root.recovery-reload(); }
             }
         }
     }

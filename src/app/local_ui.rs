@@ -1,4 +1,4 @@
-//! Local-only UI wiring. Network access and the production macOS lifecycle are separate tasks.
+//! Local durability, guarded sync presentation, and native UI coordination.
 use super::{
     appearance_ui::AppearanceUi,
     coordinator::{AppAction, AppEffect, AppEvent, Coordinator, SearchRequest},
@@ -116,6 +116,11 @@ impl LocalUi {
         self.0.sync_snapshot.replace(Some(snapshot));
         self.0.render();
         self.0.refresh_remote();
+        if self.0.coordinator.borrow().view() == View::Recovery
+            && let Some(window) = self.0.window.upgrade()
+        {
+            window.invoke_refresh_recovery();
+        }
         if self.0.coordinator.borrow().view() == View::AllPages
             && !self.0.sync_search_timer.running()
         {
@@ -144,6 +149,14 @@ impl LocalUi {
         }
     }
     pub async fn change_connection(&self, connection: ConnectionId) -> Result<(), LocalUiError> {
+        if self
+            .0
+            .window
+            .upgrade()
+            .is_some_and(|window| window.get_recovery_busy())
+        {
+            return Err(LocalUiError::SaveFailed);
+        }
         if connection == self.connection_id() {
             return self
                 .0
@@ -194,6 +207,13 @@ impl LocalUi {
         self.0.changing_connection.set(false);
         self.0.render();
         result
+    }
+    pub fn current_revision(&self) -> Option<LocalRevision> {
+        self.0
+            .coordinator
+            .borrow()
+            .editor()
+            .map(|editor| editor.revision())
     }
     pub fn current_key(&self) -> Option<PageKey> {
         self.0
@@ -315,6 +335,22 @@ impl State {
         self.arm_save();
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
+        let recovery = match &event {
+            AppEvent::RecoveryFinished { connection, result }
+                if connection == self.coordinator.borrow().connection() =>
+            {
+                Some((
+                    result.is_ok(),
+                    match result {
+                        Ok(_) => "Recovery action saved locally.".to_owned(),
+                        Err(error) => format!(
+                            "{error}. Review the latest version or choose another destination."
+                        ),
+                    },
+                ))
+            }
+            _ => None,
+        };
         let uncached = match &event {
             AppEvent::PageLoaded {
                 key,
@@ -340,6 +376,16 @@ impl State {
         self.execute(effects);
         self.render();
         self.arm_save();
+        if let Some((success, message)) = recovery
+            && let Some(window) = self.window.upgrade()
+        {
+            self.sync_facts.borrow_mut().take();
+            window.invoke_recovery_completed(success, message.into());
+            if let Some(sync) = self.sync.borrow().as_ref() {
+                sync.refresh();
+            }
+            self.refresh_remote();
+        }
         if let Some(key) = uncached
             && self.coordinator.borrow().selected_uncached() == Some(&key)
             && let Some(sync) = self.sync.borrow().as_ref()
@@ -500,6 +546,10 @@ impl State {
                         && let Work::Effect(effect) = error.into_inner()
                     {
                         let event = match effect {
+                            AppEffect::Recovery(_) => AppEvent::RecoveryFinished {
+                                connection: self.coordinator.borrow().connection().clone(),
+                                result: Err(StoreError::Closed),
+                            },
                             AppEffect::CreateDraft(key) => {
                                 AppEvent::LocalSaveFailed(key, LocalRevision(0), StoreError::Closed)
                             }
@@ -807,6 +857,17 @@ pub fn bind(
                         let _ = sender.send(());
                         continue;
                     }
+                    Work::Effect(AppEffect::Recovery(intent)) => {
+                        let Some(state) = weak.upgrade() else {
+                            break;
+                        };
+                        let connection = state.coordinator.borrow().connection().clone();
+                        drop(state);
+                        Some(AppEvent::RecoveryFinished {
+                            connection: connection.clone(),
+                            result: super::recovery::execute(&store, &connection, intent).await,
+                        })
+                    }
                     Work::Effect(AppEffect::CreateDraft(key)) => {
                         Some(match store.create_draft(key.clone()).await {
                             Ok(saved) => AppEvent::LocalSaved(saved),
@@ -858,7 +919,7 @@ pub fn bind(
             while load_requests.changed().await.is_ok() {
                 let request = load_requests.borrow_and_update().clone();
                 if let Some(request) = request {
-                    let result = store.load_page(&request.key).await;
+                    let result = store.load_active_page(&request.key).await;
                     if let Some(state) = weak.upgrade() {
                         state.receive(AppEvent::PageLoaded {
                             request_id: request.id,

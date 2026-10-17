@@ -12,13 +12,21 @@ pub(super) fn queue_put(
         "DELETE FROM outbox WHERE page_id=?1 AND state IN ('pending','blocked')",
         [page_id],
     )?;
+    let (trashed, explicit_create): (bool, bool) = db.query_row(
+        "SELECT trashed,explicit_create FROM pages WHERE id=?1",
+        [page_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    if trashed {
+        return queue_delete(db, page_id, snapshot);
+    }
     let inflight = db.query_row(
         "SELECT EXISTS(SELECT 1 FROM outbox WHERE page_id=?1 AND state IN ('leased','unknown'))",
         [page_id],
         |row| row.get::<_, bool>(0),
     )?;
     if !inflight
-        && ((snapshot.remote_base.is_none() && snapshot.body.is_empty())
+        && ((snapshot.remote_base.is_none() && snapshot.body.is_empty() && !explicit_create)
             || snapshot
                 .remote_base
                 .as_ref()
@@ -42,6 +50,32 @@ pub(super) fn queue_put(
         state = "blocked";
     }
     db.execute("INSERT INTO outbox(operation_id,page_id,local_revision,kind,body,condition_kind,condition_revision,state) VALUES(?1,?2,?3,'put',?4,?5,?6,?7)",rusqlite::params![OperationId::new().0.to_string(),page_id,snapshot.local_revision.0.to_string(),snapshot.body,condition,revision,state])?;
+    Ok(())
+}
+fn queue_delete(db: &Connection, page_id: i64, snapshot: &PageSnapshot) -> Result<(), StoreError> {
+    let inflight: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE page_id=?1 AND state IN ('leased','unknown'))",
+        [page_id],
+        |row| row.get(0),
+    )?;
+    // Wait for an earlier upload/readback before choosing a delete revision.
+    if inflight {
+        return Ok(());
+    }
+    let Some(base) = &snapshot.remote_base else {
+        db.execute(
+            "UPDATE pages SET remote_deleted=1,catalogued=0 WHERE id=?1",
+            [page_id],
+        )?;
+        return Ok(());
+    };
+    let revision = base.revision.as_ref().ok_or(StoreError::ReadOnly)?;
+    let conflict: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM conflicts WHERE connection=?1 AND path=?2)",
+        [snapshot.key.connection.as_str(), snapshot.key.path.as_str()],
+        |row| row.get(0),
+    )?;
+    db.execute("INSERT INTO outbox(operation_id,page_id,local_revision,kind,condition_kind,condition_revision,state) VALUES(?1,?2,?3,'delete','match',?4,?5)",rusqlite::params![OperationId::new().0.to_string(),page_id,snapshot.local_revision.0.to_string(),revision.0,if conflict{"blocked"}else{"pending"}])?;
     Ok(())
 }
 pub(super) fn read_operation(db: &Connection, id: &str) -> Result<PendingMutation, StoreError> {
@@ -122,7 +156,7 @@ pub(super) fn acknowledge(
     let page_id = pages::id(&tx, &sent.key)?;
     let current = pages::load(&tx, &sent.key)?.ok_or(StoreError::PageMissing)?;
     if let MutationKind::Put(body) = &sent.kind {
-        tx.execute("UPDATE pages SET remote_body=?1,remote_revision=?2,remote_modified_ms=NULL WHERE id=?3",rusqlite::params![body,ack.remote_revision.map(|rev|rev.0),page_id])?;
+        tx.execute("UPDATE pages SET remote_body=?1,remote_revision=?2,remote_modified_ms=NULL,explicit_create=0 WHERE id=?3",rusqlite::params![body,ack.remote_revision.map(|rev|rev.0),page_id])?;
     } else if current.local_revision == sent.local_revision {
         tx.execute("DELETE FROM pages WHERE id=?1", [page_id])?;
         tx.commit()?;

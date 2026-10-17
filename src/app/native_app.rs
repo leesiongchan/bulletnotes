@@ -30,6 +30,7 @@ pub struct LocalApplication {
     local: LocalUi,
     native: Rc<NativeApplication>,
     _appearance: AppearanceUi,
+    _recovery: super::recovery_ui::RecoveryUi,
     _chrome: Rc<RefCell<Option<ChromeMonitor>>>,
 }
 impl LocalApplication {
@@ -45,10 +46,11 @@ impl LocalApplication {
         )?;
         let local = local_ui::bind(
             &window,
-            startup.store,
+            startup.store.clone(),
             startup.connection,
             appearance.clone(),
         )?;
+        let recovery = super::recovery_ui::bind(&window, local.clone(), startup.store)?;
         native.bind_quit(&window);
         let native = Rc::new(native);
         let transition_pending = Rc::new(Cell::new(false));
@@ -56,6 +58,7 @@ impl LocalApplication {
             let weak = window.as_weak();
             let local = local.clone();
             let appearance = appearance.clone();
+            let recovery = recovery.clone();
             let pending = transition_pending.clone();
             let action = move || {
                 if pending.replace(true) {
@@ -64,10 +67,14 @@ impl LocalApplication {
                 let weak = weak.clone();
                 let local = local.clone();
                 let appearance = appearance.clone();
+                let recovery = recovery.clone();
                 let pending = pending.clone();
                 let rollback = pending.clone();
                 if slint::spawn_local(async move {
                     if let Some(window) = weak.upgrade() {
+                        if recovery.flush().await.is_err(){
+                            let _=window.show();window.set_status_text("Merged draft could not be saved. Keep it available to copy, or retry closing.".into());pending.set(false);return;
+                        }
                         let metadata = match capture(&window) {
                             Ok(placement) => appearance.save_window(placement).await.map_err(|_| ()),
                             Err(_) => Err(()),
@@ -165,6 +172,7 @@ impl LocalApplication {
             local,
             native,
             _appearance: appearance,
+            _recovery: recovery,
             _chrome: chrome,
         })
     }

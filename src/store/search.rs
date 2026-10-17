@@ -46,14 +46,14 @@ pub(super) fn search(db: &Connection, query: SearchQuery) -> Result<SearchResult
     } else {
         format!("\"{}\"", query.text.replace('"', "\"\""))
     };
-    let predicate = "p.connection=?1 AND p.remote_deleted=0 AND (?2='' OR substr(p.path,1,length(?2))=?2) AND (?3='' OR p.id IN (SELECT rowid FROM page_fts WHERE page_fts MATCH ?3))";
+    let predicate = "p.connection=?1 AND p.remote_deleted=0 AND p.trashed=0 AND (?2='' OR substr(p.path,1,length(?2))=?2) AND (?3='' OR p.id IN (SELECT rowid FROM page_fts WHERE page_fts MATCH ?3))";
     let total = db.query_row(
         &format!("SELECT count(*) FROM pages p WHERE {predicate}"),
         params![query.connection.as_str(), folder, phrase],
         |row| row.get::<_, i64>(0),
     )?;
     let (catalogue_total, indexed) = db.query_row(
-        "SELECT count(*),count(body) FROM pages WHERE connection=?1 AND remote_deleted=0",
+        "SELECT count(*),count(body) FROM pages WHERE connection=?1 AND remote_deleted=0 AND trashed=0",
         [query.connection.as_str()],
         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     )?;

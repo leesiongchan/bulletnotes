@@ -3,6 +3,7 @@ use super::{
     editor::EditorSession,
     model::{EditorPosition, View},
     navigation::NavigationState,
+    recovery::{RecoveryIntent, RecoveryOutcome},
 };
 use crate::{
     domain::{connection::ConnectionId, error::StoreError, page::*},
@@ -16,6 +17,11 @@ pub struct SearchRequest {
     pub query: SearchQuery,
 }
 pub enum AppAction {
+    ResolveConflict(ConflictResolution),
+    MoveToTrash(PageKey, LocalRevision),
+    RestoreTrash(TrashId, Option<PagePath>),
+    RestoreRecovery(uuid::Uuid, Option<PagePath>),
+    EmptyTrash(Vec<TrashId>),
     EditText(String),
     CancelOpen,
     Navigate(View),
@@ -30,6 +36,10 @@ pub enum AppAction {
     Tick(Duration),
 }
 pub enum AppEvent {
+    RecoveryFinished {
+        connection: ConnectionId,
+        result: Result<RecoveryOutcome, StoreError>,
+    },
     RemoteApplied(PageSnapshot),
     CatalogueProgress {
         connection: ConnectionId,
@@ -57,6 +67,7 @@ pub enum AppEvent {
     },
 }
 pub enum AppEffect {
+    Recovery(RecoveryIntent),
     CreateDraft(PageKey),
     SaveLocal {
         key: PageKey,
@@ -78,6 +89,7 @@ pub enum AppEffect {
     HideReady,
 }
 enum Transition {
+    Recovery(RecoveryIntent),
     Open(PageKey, Option<NavigationState>),
     New,
     Quit,
@@ -223,6 +235,30 @@ impl Coordinator {
     pub fn dispatch(&mut self, action: AppAction) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match action {
+            AppAction::ResolveConflict(request) => self.transition(
+                Transition::Recovery(RecoveryIntent::Resolve(request)),
+                &mut effects,
+            ),
+            AppAction::MoveToTrash(key, revision) => {
+                if key.connection == self.connection {
+                    self.transition(
+                        Transition::Recovery(RecoveryIntent::Trash(key, revision)),
+                        &mut effects,
+                    );
+                }
+            }
+            AppAction::RestoreTrash(id, path) => self.transition(
+                Transition::Recovery(RecoveryIntent::RestoreTrash(id, path)),
+                &mut effects,
+            ),
+            AppAction::RestoreRecovery(id, path) => self.transition(
+                Transition::Recovery(RecoveryIntent::RestoreCopy(id, path)),
+                &mut effects,
+            ),
+            AppAction::EmptyTrash(ids) => self.transition(
+                Transition::Recovery(RecoveryIntent::EmptyTrash(ids)),
+                &mut effects,
+            ),
             AppAction::CancelOpen => {
                 self.pending_load = None;
                 self.pending_transition = None;
@@ -339,6 +375,36 @@ impl Coordinator {
     pub fn receive(&mut self, event: AppEvent) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match event {
+            AppEvent::RecoveryFinished { connection, result } => {
+                if connection != self.connection {
+                    return effects;
+                }
+                match result {
+                    Ok(outcome) => {
+                        self.active_conflict = None;
+                        if let Some(key) = outcome.restored {
+                            self.transition(Transition::Open(key, None), &mut effects);
+                        } else if outcome.affected.as_ref().is_some_and(|key| {
+                            self.editor.as_ref().is_some_and(|editor| {
+                                editor.key() == key && !editor.dirty() && !editor.writing()
+                            })
+                        }) {
+                            match outcome.page {
+                                Some(page) => self.editor = Some(EditorSession::restore(page)),
+                                None => {
+                                    self.editor = None;
+                                    self.finish_new_after_recovery(&mut effects);
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        self.notice = Some(
+                            "Recovery action could not finish. Your note and recovery copies are still available.",
+                        )
+                    }
+                }
+            }
             AppEvent::CatalogueProgress {
                 connection,
                 indexed,
@@ -497,6 +563,12 @@ impl Coordinator {
         }
         effects
     }
+    fn finish_new_after_recovery(&mut self, effects: &mut Vec<AppEffect>) {
+        let view = self.navigation.view();
+        self.pending_transition = Some(Transition::New);
+        self.finish_transition(effects);
+        self.navigation.set_view(view);
+    }
     fn flush(&mut self, effects: &mut Vec<AppEffect>) {
         let Some(editor) = &mut self.editor else {
             return;
@@ -543,6 +615,7 @@ impl Coordinator {
             return;
         };
         match transition {
+            Transition::Recovery(intent) => effects.push(AppEffect::Recovery(intent)),
             Transition::Hide => effects.push(AppEffect::HideReady),
             Transition::Quit => effects.push(AppEffect::QuitReady),
             Transition::Open(key, history) => {

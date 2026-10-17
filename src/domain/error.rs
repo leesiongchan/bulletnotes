@@ -78,6 +78,8 @@ pub enum StoreError {
     PageMissing,
     #[error("page is read only")]
     ReadOnly,
+    #[error("that page path is already in use; choose another destination")]
+    PathCollision,
     #[error("a newer local revision is already saved")]
     StaleRevision,
     #[error("operation is unavailable or already acknowledged")]

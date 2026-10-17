@@ -9,6 +9,7 @@ export component NoteEditor inherits Rectangle {
     out property <float> scroll-y:-scroll.content-y / 1px;
     out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
     callback edited(string);
+    callback move-to-trash();
     callback key-pressed(KeyEvent) -> EventResult;
     public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }
     public function focus-editor() { input.focus(); }
@@ -64,6 +65,8 @@ export component NoteEditor inherits Rectangle {
     }
     context := ContextMenuArea {
         Menu {
+            MenuItem { title:"Move note to Trash"; enabled:!root.read-only; activated => { root.move-to-trash(); } }
+            MenuSeparator {}
             MenuItem {
                 title: "Undo";
                 enabled: !root.read-only;

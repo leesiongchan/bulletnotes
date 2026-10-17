@@ -218,3 +218,56 @@ pub struct EditorBaseline {
     pub body: String,
     pub remote_base: Option<RemoteFile>,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResolutionChoice {
+    AcceptRemote,
+    KeepLocal,
+    Merge(String),
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConflictResolution {
+    pub conflict_id: Uuid,
+    pub expected_local: LocalRevision,
+    pub choice: ResolutionChoice,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RecoveryReason {
+    CommonBase,
+    LocalVersion,
+    RemoteVersion,
+    RemoteDeletion,
+    MergedDraft,
+}
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RecoveryCopy {
+    pub id: Uuid,
+    pub page: PageSnapshot,
+    pub reason: RecoveryReason,
+}
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TrashRecord {
+    pub id: TrashId,
+    pub page: PageSnapshot,
+    pub pending: Vec<PendingMutation>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryKind {
+    Conflict,
+    Trash,
+    Copy,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoverySummary {
+    pub label: String,
+    pub id: Uuid,
+    pub key: PageKey,
+    pub kind: RecoveryKind,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum RecoveryItem {
+    Conflict(Box<ConflictRecord>),
+    Trash(Box<TrashRecord>),
+    Copy(Box<RecoveryCopy>),
+}

@@ -4,6 +4,7 @@ mod pages;
 mod probes;
 pub mod recovery;
 mod remote;
+mod restoration;
 mod sync_queue;
 pub use sync_queue::{CacheProgress, PageSyncFacts, PendingHead};
 pub mod search;
@@ -65,6 +66,13 @@ impl StoreHandle {
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
         self.call(move |w| pages::load(&w.db, &key)).await
+    }
+    pub async fn load_active_page(
+        &self,
+        key: &PageKey,
+    ) -> Result<Option<PageSnapshot>, StoreError> {
+        let key = key.clone();
+        self.call(move |w| pages::load_active(&w.db, &key)).await
     }
     pub async fn create_draft(&self, key: PageKey) -> Result<SavedRevision, StoreError> {
         let saved = self.call(move |w| pages::create(&mut w.db, key)).await?;
@@ -211,6 +219,93 @@ impl StoreHandle {
     ) -> Result<CacheProgress, StoreError> {
         let id = connection.clone();
         self.call(move |w| sync_queue::progress(&w.db, &id)).await
+    }
+    pub async fn merge_draft(&self, key: &PageKey) -> Result<Option<String>, StoreError> {
+        let key = key.clone();
+        self.call(move |w| restoration::merge_draft(&w.db, &key))
+            .await
+    }
+    pub async fn save_merge_drafts(
+        &self,
+        drafts: Vec<(PageKey, String)>,
+    ) -> Result<(), StoreError> {
+        self.call(move |w| restoration::save_merge_drafts(&mut w.db, drafts))
+            .await
+    }
+    pub async fn recovery_index(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<RecoverySummary>, StoreError> {
+        let id = connection.clone();
+        self.call(move |w| restoration::index(&w.db, &id)).await
+    }
+    pub async fn recovery_item(
+        &self,
+        connection: &ConnectionId,
+        kind: RecoveryKind,
+        id: uuid::Uuid,
+    ) -> Result<RecoveryItem, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| restoration::item(&w.db, &connection, kind, id))
+            .await
+    }
+    pub async fn resolve_conflict(
+        &self,
+        request: ConflictResolution,
+    ) -> Result<Option<SavedRevision>, StoreError> {
+        let result = self
+            .call(move |w| restoration::resolve(&mut w.db, request))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(result)
+    }
+    pub async fn move_to_trash(
+        &self,
+        key: PageKey,
+        revision: LocalRevision,
+    ) -> Result<TrashId, StoreError> {
+        let id = self
+            .call(move |w| restoration::move_to_trash(&mut w.db, key, revision))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(id)
+    }
+    pub async fn trash(&self, connection: &ConnectionId) -> Result<Vec<TrashRecord>, StoreError> {
+        let id = connection.clone();
+        self.call(move |w| restoration::trash(&w.db, &id)).await
+    }
+    pub async fn recovery_copies(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<RecoveryCopy>, StoreError> {
+        let id = connection.clone();
+        self.call(move |w| restoration::copies(&w.db, &id)).await
+    }
+    pub async fn restore_trash(
+        &self,
+        id: TrashId,
+        destination: Option<PagePath>,
+    ) -> Result<PageKey, StoreError> {
+        let key = self
+            .call(move |w| restoration::restore_trash(&mut w.db, id, destination))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(key)
+    }
+    pub async fn restore_recovery(
+        &self,
+        id: uuid::Uuid,
+        destination: Option<PagePath>,
+    ) -> Result<PageKey, StoreError> {
+        let key = self
+            .call(move |w| restoration::restore_copy(&mut w.db, id, destination))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(key)
+    }
+    pub async fn empty_trash(&self, ids: Vec<TrashId>) -> Result<(), StoreError> {
+        self.call(move |w| restoration::empty_trash(&mut w.db, ids))
+            .await
     }
     pub async fn save_conflict(&self, record: ConflictRecord) -> Result<(), StoreError> {
         self.call(move |w| remote::save_conflict(&mut w.db, record))

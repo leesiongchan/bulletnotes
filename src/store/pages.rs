@@ -69,6 +69,22 @@ pub(super) fn load(db: &Connection, key: &PageKey) -> Result<Option<PageSnapshot
         permission,
     }))
 }
+pub(super) fn load_active(
+    db: &Connection,
+    key: &PageKey,
+) -> Result<Option<PageSnapshot>, StoreError> {
+    let hidden: Option<bool> = db
+        .query_row(
+            "SELECT trashed OR remote_deleted FROM pages WHERE connection=?1 AND path=?2",
+            [key.connection.as_str(), key.path.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if hidden == Some(true) {
+        return Err(StoreError::PageMissing);
+    }
+    load(db, key)
+}
 pub(super) fn id(db: &Connection, key: &PageKey) -> Result<i64, StoreError> {
     db.query_row(
         "SELECT id FROM pages WHERE connection=?1 AND path=?2",
@@ -122,6 +138,14 @@ pub(super) fn save_transaction(
     revision: LocalRevision,
 ) -> Result<SavedRevision, StoreError> {
     let mut snapshot = load(db, &key)?.ok_or(StoreError::PageMissing)?;
+    let hidden: bool = db.query_row(
+        "SELECT trashed OR remote_deleted FROM pages WHERE id=?1",
+        [id(db, &key)?],
+        |row| row.get(0),
+    )?;
+    if hidden {
+        return Err(StoreError::PageMissing);
+    }
     if snapshot.permission == Permission::ReadOnly {
         return Err(StoreError::ReadOnly);
     }
@@ -182,7 +206,7 @@ pub(super) fn record_visit(
     }
     Ok(())
 }
-fn now_ms() -> Result<i64, StoreError> {
+pub(super) fn now_ms() -> Result<i64, StoreError> {
     let duration = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| StoreError::InvalidData)?;
@@ -194,7 +218,7 @@ pub(super) fn last_cached(
     connection: &ConnectionId,
 ) -> Result<Option<PageKey>, StoreError> {
     let path: Option<String> = db.query_row(
-        "SELECT path FROM pages WHERE connection=?1 AND body IS NOT NULL ORDER BY last_visited_ms IS NULL,last_visited_ms DESC,path COLLATE BINARY LIMIT 1",
+        "SELECT path FROM pages WHERE connection=?1 AND body IS NOT NULL AND trashed=0 AND remote_deleted=0 ORDER BY last_visited_ms IS NULL,last_visited_ms DESC,path COLLATE BINARY LIMIT 1",
         [connection.as_str()], |row| row.get(0),
     ).optional()?;
     path.map(|path| {

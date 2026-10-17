@@ -63,3 +63,7 @@ required-features = ["protocol-validation"]
 [[example]]
 name = "sync_review"
 required-features = ["native-validation", "protocol-validation"]
+
+[[example]]
+name = "recovery_review"
+required-features = ["native-validation", "protocol-validation"]

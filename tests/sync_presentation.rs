@@ -287,3 +287,32 @@ fn background_reindexing_keeps_the_current_page_results_visible() {
     assert_eq!(app.search_generation(), Some(1));
     assert_eq!(app.search_results().unwrap().total, 12);
 }
+
+#[test]
+fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
+    let mut app = app();
+    app.dispatch(AppAction::EditText("unsaved before trash".into()));
+    let effects = app.dispatch(AppAction::MoveToTrash(
+        snapshot("base").key,
+        LocalRevision(1),
+    ));
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::SaveLocal { .. }))
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::Recovery(_)))
+    );
+    let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
+        key: snapshot("base").key,
+        local_revision: LocalRevision(1),
+    }));
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::Recovery(_)))
+    );
+}

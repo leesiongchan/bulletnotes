@@ -153,7 +153,7 @@ pub(super) fn progress(
     connection: &ConnectionId,
 ) -> Result<CacheProgress, StoreError> {
     let (total, indexed) = db.query_row(
-        "SELECT count(*),count(body) FROM pages WHERE connection=?1 AND remote_deleted=0",
+        "SELECT count(*),count(body) FROM pages WHERE connection=?1 AND remote_deleted=0 AND trashed=0",
         [connection.as_str()],
         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     )?;

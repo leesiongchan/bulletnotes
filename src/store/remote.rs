@@ -6,27 +6,30 @@ use crate::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
-fn read_conflict(db: &Connection, key: &PageKey) -> Result<Option<ConflictRecord>, StoreError> {
-    let value = db
+pub(super) fn read_conflict(
+    db: &Connection,
+    key: &PageKey,
+) -> Result<Option<ConflictRecord>, StoreError> {
+    let row = db
         .query_row(
-            "SELECT snapshot FROM conflicts WHERE connection=?1 AND path=?2",
+            "SELECT id,snapshot FROM conflicts WHERE connection=?1 AND path=?2",
             [key.connection.as_str(), key.path.as_str()],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()?;
-    value
-        .map(|value| serde_json::from_str(&value).map_err(|_| StoreError::InvalidData))
-        .transpose()
+    row.map(|(id, value)| {
+        let record: ConflictRecord =
+            serde_json::from_str(&value).map_err(|_| StoreError::InvalidData)?;
+        validate_record(&record)?;
+        if record.key != *key || record.id.to_string() != id {
+            return Err(StoreError::InvalidData);
+        }
+        Ok(record)
+    })
+    .transpose()
 }
-fn capture(db: &Connection, mut record: ConflictRecord) -> Result<ConflictRecord, StoreError> {
-    if let Some(previous) = read_conflict(db, &record.key)? {
-        record.id = previous.id;
-        record.base = previous.base;
-    }
-    db.execute(
-        "UPDATE pages SET remote_deleted=0 WHERE connection=?1 AND path=?2",
-        [record.key.connection.as_str(), record.key.path.as_str()],
-    )?;
+fn validate_record(record: &ConflictRecord) -> Result<(), StoreError> {
+    super::restoration::validate_page(&record.local)?;
     let remote_key = match &record.remote {
         RemoteRead::Present(file) => &file.key,
         RemoteRead::Missing(key) => key,
@@ -37,12 +40,36 @@ fn capture(db: &Connection, mut record: ConflictRecord) -> Result<ConflictRecord
             .base
             .as_ref()
             .is_some_and(|base| base.key != record.key)
-        || record.local.position.validate(&record.local.body).is_err()
     {
         return Err(StoreError::InvalidData);
     }
+    Ok(())
+}
+
+fn capture(db: &Connection, mut record: ConflictRecord) -> Result<ConflictRecord, StoreError> {
+    if let Some(previous) = read_conflict(db, &record.key)? {
+        let changed = match (&previous.remote, &record.remote) {
+            (RemoteRead::Present(a), RemoteRead::Present(b)) => !same_base(Some(a), Some(b)),
+            (RemoteRead::Missing(a), RemoteRead::Missing(b)) => a != b,
+            _ => true,
+        };
+        if changed || previous.local.body != record.local.body {
+            super::restoration::preserve_conflict(db, &previous)?;
+        }
+        record.id = if !changed {
+            previous.id
+        } else {
+            uuid::Uuid::new_v4()
+        };
+        record.base = previous.base;
+    }
+    db.execute(
+        "UPDATE pages SET remote_deleted=0 WHERE connection=?1 AND path=?2",
+        [record.key.connection.as_str(), record.key.path.as_str()],
+    )?;
+    validate_record(&record)?;
     let value = serde_json::to_string(&record).map_err(|_| StoreError::InvalidData)?;
-    db.execute("INSERT INTO conflicts(connection,path,snapshot,id) VALUES(?1,?2,?3,?4) ON CONFLICT(connection,path) DO UPDATE SET snapshot=excluded.snapshot",params![record.key.connection.as_str(),record.key.path.as_str(),value,record.id.to_string()])?;
+    db.execute("INSERT INTO conflicts(connection,path,snapshot,id) VALUES(?1,?2,?3,?4) ON CONFLICT(connection,path) DO UPDATE SET snapshot=excluded.snapshot,id=excluded.id",params![record.key.connection.as_str(),record.key.path.as_str(),value,record.id.to_string()])?;
     db.execute("UPDATE outbox SET state=CASE state WHEN 'pending' THEN 'blocked' WHEN 'leased' THEN 'unknown' ELSE state END WHERE page_id=?1",[pages::id(db,&record.key)?])?;
     Ok(record)
 }
@@ -51,12 +78,22 @@ pub(super) fn conflicts(
     connection: &ConnectionId,
 ) -> Result<Vec<ConflictRecord>, StoreError> {
     let mut statement =
-        db.prepare("SELECT snapshot FROM conflicts WHERE connection=?1 ORDER BY path")?;
-    statement
+        db.prepare("SELECT path FROM conflicts WHERE connection=?1 ORDER BY path")?;
+    let paths = statement
         .query_map([connection.as_str()], |row| row.get::<_, String>(0))?
-        .map(|value| serde_json::from_str(&value?).map_err(|_| StoreError::InvalidData))
+        .collect::<Result<Vec<_>, _>>()?;
+    paths
+        .into_iter()
+        .map(|path| {
+            let key = PageKey {
+                connection: connection.clone(),
+                path: PagePath::parse(&path).map_err(|_| StoreError::InvalidData)?,
+            };
+            read_conflict(db, &key)?.ok_or(StoreError::InvalidData)
+        })
         .collect()
 }
+
 pub(super) fn catalogue(
     db: &mut Connection,
     connection: &ConnectionId,
@@ -98,7 +135,11 @@ pub(super) fn catalogue(
 fn permission(value: Permission) -> i64 {
     i64::from(value == Permission::ReadWrite)
 }
-fn set_base(db: &Connection, key: &PageKey, base: Option<&RemoteFile>) -> Result<(), StoreError> {
+pub(super) fn set_base(
+    db: &Connection,
+    key: &PageKey,
+    base: Option<&RemoteFile>,
+) -> Result<(), StoreError> {
     let modified = base
         .and_then(|file| file.modified_ms)
         .map(i64::try_from)
@@ -148,7 +189,28 @@ pub(super) fn apply(
                 ..existing
             }))
         } else {
-            reconcile(local, &remote)
+            let (trashed, explicit_create): (bool, bool) = tx.query_row(
+                "SELECT trashed,explicit_create FROM pages WHERE id=?1",
+                [pages::id(&tx, key)?],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if match &remote {
+                RemoteRead::Present(file) => {
+                    trashed && !same_base(local.remote_base.as_ref(), Some(file))
+                        || explicit_create && local.remote_base.is_none()
+                }
+                RemoteRead::Missing(_) => false,
+            } {
+                ReconcileDecision::Conflict(Box::new(ConflictRecord {
+                    id: uuid::Uuid::new_v4(),
+                    key: key.clone(),
+                    base: local.remote_base.clone(),
+                    local: local.clone(),
+                    remote: remote.clone(),
+                }))
+            } else {
+                reconcile(local, &remote)
+            }
         }
     } else {
         match &remote {
@@ -173,6 +235,17 @@ pub(super) fn apply(
             ReconcileDecision::Conflict(Box::new(capture(&tx, *record)?))
         }
         ReconcileDecision::RetainDeletedSnapshot => {
+            let already: bool = tx
+                .query_row(
+                    "SELECT remote_deleted FROM pages WHERE connection=?1 AND path=?2",
+                    [key.connection.as_str(), key.path.as_str()],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .unwrap_or(false);
+            if !already && let Some(local) = &local {
+                super::restoration::preserve(&tx, local.clone(), RecoveryReason::RemoteDeletion)?;
+            }
             tx.execute(
                 "UPDATE pages SET remote_deleted=1,catalogued=0 WHERE connection=?1 AND path=?2",
                 [key.connection.as_str(), key.path.as_str()],
@@ -215,6 +288,12 @@ pub(super) fn save_from_base(
             && expected.body != before.body;
     if changed {
         set_base(&tx, &key, expected.remote_base.as_ref())?;
+        if deleted {
+            tx.execute(
+                "UPDATE pages SET remote_deleted=0 WHERE id=?1",
+                [pages::id(&tx, &key)?],
+            )?;
+        }
     }
     let saved = pages::save_transaction(&tx, key.clone(), body, revision)?;
     let local = pages::load(&tx, &key)?.ok_or(StoreError::PageMissing)?;
