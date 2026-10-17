@@ -46,6 +46,7 @@ export component AppWindow inherits Window {
     out property <float> editor-scroll-y:editor.scroll-y;
     out property <length> editor-line-height:editor.line-height;
     out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0);
+    callback save-now();
     callback browse-pages();
     callback open-page(string);
     callback new-note();
@@ -66,6 +67,7 @@ export component AppWindow inherits Window {
     public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
     function shortcut(event: KeyEvent) -> EventResult {
         if (event.modifiers.meta) {
+            if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
             if (event.text == "k" || event.text == "K") { root.browse-pages(); return accept; }
             if (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
             if (event.text == ",") { root.show-appearance(); return accept; }

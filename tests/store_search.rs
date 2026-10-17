@@ -136,3 +136,38 @@ async fn punctuation_only_searches_do_not_become_fts_syntax() {
     }
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn recording_a_visit_does_not_invent_or_replace_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    let page = key("a.md");
+    store.create_draft(page.clone()).await.unwrap();
+    store
+        .save_local(page.clone(), "café\ntext".into(), LocalRevision(1))
+        .await
+        .unwrap();
+    let position = EditorPosition {
+        anchor: 3,
+        caret: 5,
+        scroll_y: 42.0,
+    };
+    store.save_position(&page, position, 10).await.unwrap();
+    store.record_visit(&page, 20).await.unwrap();
+    assert_eq!(
+        store.load_page(&page).await.unwrap().unwrap().position,
+        position
+    );
+    let results = store
+        .search(SearchQuery {
+            connection: page.connection.clone(),
+            text: String::new(),
+            folder: None,
+            offset: 0,
+            limit: 50,
+        })
+        .await
+        .unwrap();
+    assert_eq!(results.items[0].last_visited_ms, Some(20));
+    store.shutdown().await.unwrap();
+}

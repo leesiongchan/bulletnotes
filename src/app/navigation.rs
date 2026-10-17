@@ -3,7 +3,7 @@ use super::model::{EditorPosition, View};
 use crate::domain::page::PageKey;
 use std::collections::HashMap;
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct NavigationState {
     history: Vec<PageKey>,
     cursor: Option<usize>,
@@ -35,6 +35,13 @@ impl NavigationState {
         if let Some(key) = self.current().cloned() {
             self.positions.insert(key, position);
         }
+    }
+    pub fn can_go_back(&self) -> bool {
+        self.cursor.is_some_and(|index| index > 0)
+    }
+    pub fn can_go_forward(&self) -> bool {
+        self.cursor
+            .is_some_and(|index| index + 1 < self.history.len())
     }
     pub fn back(&mut self) -> Option<PageKey> {
         self.cursor = Some(self.cursor?.checked_sub(1)?);

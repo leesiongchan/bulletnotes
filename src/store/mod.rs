@@ -79,6 +79,12 @@ impl StoreHandle {
         self.call(move |w| pages::save_position(&mut w.db, &key, position, visited_ms))
             .await
     }
+    /// Record recency without pretending to have observed the editor's selection.
+    pub async fn record_visit(&self, key: &PageKey, visited_ms: u64) -> Result<(), StoreError> {
+        let key = key.clone();
+        self.call(move |w| pages::record_visit(&w.db, &key, visited_ms))
+            .await
+    }
     pub async fn load_settings(&self) -> Result<AppSettings, StoreError> {
         self.call(|w| settings::load(&w.db)).await
     }

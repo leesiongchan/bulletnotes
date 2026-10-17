@@ -158,6 +158,21 @@ pub(super) fn save_position(
     db.execute("UPDATE pages SET anchor=?1,caret=?2,scroll_y=?3,last_visited_ms=?4 WHERE connection=?5 AND path=?6",rusqlite::params![position.anchor as i64,position.caret as i64,position.scroll_y,visited_ms,key.connection.as_str(),key.path.as_str()])?;
     Ok(())
 }
+pub(super) fn record_visit(
+    db: &Connection,
+    key: &PageKey,
+    visited_ms: u64,
+) -> Result<(), StoreError> {
+    let visited_ms = i64::try_from(visited_ms).map_err(|_| StoreError::InvalidData)?;
+    let changed = db.execute(
+        "UPDATE pages SET last_visited_ms=?1 WHERE connection=?2 AND path=?3",
+        rusqlite::params![visited_ms, key.connection.as_str(), key.path.as_str()],
+    )?;
+    if changed != 1 {
+        return Err(StoreError::PageMissing);
+    }
+    Ok(())
+}
 fn now_ms() -> Result<i64, StoreError> {
     let duration = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

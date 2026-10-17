@@ -60,7 +60,7 @@ This makes TextKit a concrete architecture candidate for a macOS-first client. I
 | First-class upstream Slint snapshot/cursor API | Direct access to the state needed for exact history/relaunch | Cleanest fit for the current design; requires upstream API agreement and a released implementation, or explicit acceptance of maintaining a framework patch |
 | AppKit editor embedded beside Slint UI | Public TextKit APIs expose selection ranges and affinity/direction | Requires a new reviewed design and native embedding proof; no implementation or exact-restoration claim is made here |
 
-Recommendation: retain the approved exact-restoration requirement. For this macOS-first, production-grade client, evaluate a narrowly scoped public TextKit editor integration next, preserving Slint for the surrounding UI; this requires review of the earlier editor choice and an embedding proof. Keeping Slint's own input primitive instead requires a first-class upstream editor-state API, with acceptance/release timing outside our control, or explicit acceptance of maintaining a framework patch. The tested accessibility route is useful evidence but is not an exact production snapshot mechanism. There is no approved private-property workaround, fork, or editor replacement. No scope reduction is inferred from the user's request to investigate.
+Historical recommendation from the deeper investigation: retain the approved exact-restoration requirement. For this macOS-first, production-grade client, evaluate a narrowly scoped public TextKit editor integration next, preserving Slint for the surrounding UI; this requires review of the earlier editor choice and an embedding proof. Keeping Slint's own input primitive instead requires a first-class upstream editor-state API, with acceptance/release timing outside our control, or explicit acceptance of maintaining a framework patch. The tested accessibility route is useful evidence but is not an exact production snapshot mechanism. There is no approved private-property workaround, fork, or editor replacement. No scope reduction is inferred from the user's request to investigate.
 
 ## Reproduce the evidence
 
@@ -71,3 +71,9 @@ SLINT_BACKEND=winit-femtovg target/debug/examples/selection_geometry_probe
 # Expected nonzero: the public range + cursor geometry approach is not exact.
 SLINT_BACKEND=winit-femtovg target/debug/examples/selection_geometry_probe --require-exact-focus
 ```
+
+## Current decision after investigation
+
+The user explicitly asked to skip AppKit prototyping. The read-only exploration stopped before an editor implementation or dependency change. Keep the approved Slint editor; proceed with independent durable local coordination, autosave, browsing, and recovery. Exact cross-page/relaunch anchor/focus capture remains an open requirement. This is not approval to defer it from the final product, use private properties, or maintain a framework fork.
+
+`EditorSession` now distinguishes a persisted restoration target from a freshly observed native position. Its snapshot returns an optional observation. Ordinary visits update recency without overwriting a saved selection with invented zero offsets. The local milestone callback fixture checks exact note bytes; it does not claim exact caret restoration or real IME/VoiceOver verification.

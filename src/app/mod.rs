@@ -1,5 +1,8 @@
 pub mod appearance;
 pub mod appearance_ui;
+pub mod coordinator;
+pub mod editor;
+pub mod local_ui;
 pub mod model;
 pub mod navigation;
 pub mod theme_files;

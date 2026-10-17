@@ -105,3 +105,293 @@ fn save_position_follows_page_identity_across_visits() {
     nav.back();
     assert_eq!(nav.position(), Some(updated));
 }
+
+mod coordination {
+    use super::key;
+    use bulletnotes::{
+        app::{coordinator::*, model::View},
+        domain::{error::StoreError, page::*, status::LocalSaveState},
+        store::search::{SearchQuery, SearchResults},
+    };
+    use std::time::Duration;
+    fn page(path: &str, body: &str) -> PageSnapshot {
+        PageSnapshot {
+            key: key(path),
+            body: body.into(),
+            local_revision: LocalRevision(0),
+            remote_base: None,
+            position: Default::default(),
+            permission: Permission::ReadWrite,
+        }
+    }
+    fn app() -> Coordinator {
+        let mut app = Coordinator::new(key("a.md").connection.clone(), || key("draft.md"));
+        let effects = app.dispatch(AppAction::OpenPage(key("a.md")));
+        let request = load(&effects);
+        app.receive(AppEvent::PageLoaded {
+            request_id: request,
+            key: key("a.md"),
+            result: Ok(Some(page("a.md", "original"))),
+        });
+        app
+    }
+    fn load(effects: &[AppEffect]) -> u64 {
+        effects
+            .iter()
+            .find_map(|effect| {
+                if let AppEffect::LoadPage { request_id, .. } = effect {
+                    Some(*request_id)
+                } else {
+                    None
+                }
+            })
+            .expect("load request")
+    }
+    fn save(effects: &[AppEffect]) -> (PageKey, String, LocalRevision) {
+        effects
+            .iter()
+            .find_map(|effect| {
+                if let AppEffect::SaveLocal {
+                    key,
+                    body,
+                    revision,
+                } = effect
+                {
+                    Some((key.clone(), body.clone(), *revision))
+                } else {
+                    None
+                }
+            })
+            .expect("save request")
+    }
+    fn ack(app: &mut Coordinator, write: (PageKey, String, LocalRevision)) -> Vec<AppEffect> {
+        app.receive(AppEvent::LocalSaved(SavedRevision {
+            key: write.0,
+            local_revision: write.2,
+        }))
+    }
+    #[test]
+    fn save_is_due_by_250ms_and_only_acknowledgement_is_clean() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("changed".into()));
+        assert!(
+            app.dispatch(AppAction::Tick(Duration::from_millis(249)))
+                .is_empty()
+        );
+        assert_eq!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Dirty(LocalRevision(1))
+        );
+        let effects = app.dispatch(AppAction::Tick(Duration::from_millis(250)));
+        let write = save(&effects);
+        assert_eq!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Saving(LocalRevision(1))
+        );
+        assert!(
+            app.dispatch(AppAction::Tick(Duration::from_secs(1)))
+                .is_empty()
+        );
+        ack(&mut app, write);
+        assert_eq!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Clean(LocalRevision(1))
+        );
+    }
+    #[test]
+    fn continuous_typing_does_not_postpone_durability_forever() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("first".into()));
+        app.dispatch(AppAction::Tick(Duration::from_millis(240)));
+        app.dispatch(AppAction::EditText("latest".into()));
+        let write = save(&app.dispatch(AppAction::Tick(Duration::from_millis(250))));
+        assert_eq!((write.1, write.2), ("latest".into(), LocalRevision(2)));
+    }
+    #[test]
+    fn page_navigation_flushes_and_waits_for_durability() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("keep me".into()));
+        let effects = app.dispatch(AppAction::OpenPage(key("b.md")));
+        let write = save(&effects);
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, AppEffect::LoadPage { .. }))
+        );
+        assert_eq!(app.editor().unwrap().key(), &key("a.md"));
+        let effects = ack(&mut app, write);
+        assert!(load(&effects) > 0);
+    }
+    #[test]
+    fn failed_save_preserves_buffer_and_blocks_implicit_discard_or_quit() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("unsaved 日本語".into()));
+        let write = save(&app.dispatch(AppAction::RequestQuit));
+        let effects = app.receive(AppEvent::LocalSaveFailed(
+            write.0,
+            write.2,
+            StoreError::Closed,
+        ));
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, AppEffect::QuitReady))
+        );
+        assert_eq!(app.editor().unwrap().body(), "unsaved 日本語");
+        assert_eq!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Failed(LocalRevision(1))
+        );
+        let retry = save(&app.dispatch(AppAction::Flush));
+        assert_eq!(
+            (retry.1, retry.2),
+            ("unsaved 日本語".into(), LocalRevision(1))
+        );
+    }
+    #[test]
+    fn older_acknowledgement_cannot_mark_newer_edits_saved() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("one".into()));
+        let first = save(&app.dispatch(AppAction::Flush));
+        app.dispatch(AppAction::EditText("two".into()));
+        ack(&mut app, first);
+        assert_eq!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Dirty(LocalRevision(2))
+        );
+        let second = save(&app.dispatch(AppAction::Tick(Duration::from_millis(250))));
+        assert_eq!(second.1, "two");
+    }
+    #[test]
+    fn late_load_cannot_replace_active_note_including_repeated_page_identity() {
+        let mut app = Coordinator::new(key("a.md").connection.clone(), || key("draft.md"));
+        let old_a = load(&app.dispatch(AppAction::OpenPage(key("a.md"))));
+        let b = load(&app.dispatch(AppAction::OpenPage(key("b.md"))));
+        let new_a = load(&app.dispatch(AppAction::OpenPage(key("a.md"))));
+        assert!(new_a > b && b > old_a);
+        app.receive(AppEvent::PageLoaded {
+            request_id: new_a,
+            key: key("a.md"),
+            result: Ok(Some(page("a.md", "new A"))),
+        });
+        app.receive(AppEvent::PageLoaded {
+            request_id: b,
+            key: key("b.md"),
+            result: Ok(Some(page("b.md", "B"))),
+        });
+        app.receive(AppEvent::PageLoaded {
+            request_id: old_a,
+            key: key("a.md"),
+            result: Ok(Some(page("a.md", "old A"))),
+        });
+        assert_eq!(app.editor().unwrap().body(), "new A");
+    }
+    #[test]
+    fn a_late_search_cannot_replace_newer_results() {
+        let mut app = app();
+        let query = |text: &str| SearchQuery {
+            connection: key("a.md").connection,
+            text: text.into(),
+            folder: None,
+            offset: 0,
+            limit: 50,
+        };
+        app.dispatch(AppAction::Search(SearchRequest {
+            id: 1,
+            query: query("old"),
+        }));
+        app.dispatch(AppAction::Search(SearchRequest {
+            id: 2,
+            query: query("new"),
+        }));
+        let results = |total| SearchResults {
+            items: vec![],
+            total,
+            indexed: 0,
+            catalogue_total: 0,
+            complete: true,
+        };
+        app.receive(AppEvent::SearchReady(2, Ok(results(2))));
+        app.receive(AppEvent::SearchReady(1, Ok(results(1))));
+        assert_eq!(app.search_results().unwrap().total, 2);
+    }
+    #[test]
+    fn appearance_transition_flushes_without_replacing_editor() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("unchanged by view".into()));
+        let effects = app.dispatch(AppAction::Navigate(View::Appearance));
+        assert_eq!(save(&effects).1, "unchanged by view");
+        assert_eq!(app.view(), View::Appearance);
+        assert_eq!(app.editor().unwrap().body(), "unchanged by view");
+    }
+    #[test]
+    fn an_unacknowledged_empty_draft_is_not_yet_saved() {
+        let mut app = Coordinator::new(key("a.md").connection.clone(), || key("draft.md"));
+        let effects = app.dispatch(AppAction::NewNote);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e,AppEffect::CreateDraft(key) if key.path.as_str()=="draft.md"))
+        );
+        assert_ne!(
+            app.editor().unwrap().save_state(),
+            LocalSaveState::Clean(LocalRevision(0))
+        );
+        app.dispatch(AppAction::EditText(
+            "typed before create acknowledgement".into(),
+        ));
+        app.dispatch(AppAction::RequestQuit);
+        let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
+            key: key("draft.md"),
+            local_revision: LocalRevision(0),
+        }));
+        let write = save(&effects);
+        assert_eq!(write.1, "typed before create acknowledgement");
+        assert!(
+            ack(&mut app, write)
+                .iter()
+                .any(|e| matches!(e, AppEffect::QuitReady))
+        );
+    }
+
+    #[test]
+    fn editing_while_another_page_loads_preserves_current_buffer() {
+        let mut app = app();
+        let request = load(&app.dispatch(AppAction::OpenPage(key("b.md"))));
+        app.dispatch(AppAction::EditText("late typing in A".into()));
+        app.receive(AppEvent::PageLoaded {
+            request_id: request,
+            key: key("b.md"),
+            result: Ok(Some(page("b.md", "B"))),
+        });
+        assert_eq!(app.editor().unwrap().key(), &key("a.md"));
+        assert_eq!(app.editor().unwrap().body(), "late typing in A");
+    }
+    #[test]
+    fn successful_retry_clears_the_failed_save_notice() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("keep".into()));
+        let first = save(&app.dispatch(AppAction::Flush));
+        app.receive(AppEvent::LocalSaveFailed(
+            first.0,
+            first.2,
+            StoreError::Closed,
+        ));
+        assert!(app.notice().is_some());
+        let retry = save(&app.dispatch(AppAction::Flush));
+        ack(&mut app, retry);
+        assert!(app.notice().is_none());
+    }
+
+    #[test]
+    fn explicit_flush_drains_edits_that_arrived_during_a_write() {
+        let mut app = app();
+        app.dispatch(AppAction::EditText("first".into()));
+        let first = save(&app.dispatch(AppAction::Flush));
+        app.dispatch(AppAction::EditText("second".into()));
+        app.dispatch(AppAction::Flush);
+        let effects = ack(&mut app, first);
+        let second = save(&effects);
+        assert_eq!(second.1, "second");
+    }
+}
