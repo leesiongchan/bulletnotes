@@ -28,6 +28,7 @@ pub enum Fault {
     ProxyRevision,
     InvalidDedicated,
     Catalogue(serde_json::Value),
+    RawCatalogue(Arc<[u8]>),
     Redirect(String),
     TimeoutAfterWrite,
     DelayedCreate,
@@ -172,6 +173,13 @@ async fn handle(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) -
             return response(400, Vec::new(), &[]);
         }
         if parts.method == Method::GET && parts.uri.path().ends_with("/.fs") {
+            if let Fault::RawCatalogue(bytes) = &fault {
+                return response(
+                    200,
+                    bytes.to_vec(),
+                    &[("content-type", "application/json".into())],
+                );
+            }
             let catalogue = match fault {
                 Fault::Catalogue(value) => value,
                 _ if data.catalogue_override.is_some() => data.catalogue_override.clone().unwrap(),

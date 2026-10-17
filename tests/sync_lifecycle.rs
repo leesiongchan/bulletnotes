@@ -361,9 +361,9 @@ async fn permission_and_resource_failures_pause_catalogue_retries() {
             .unwrap();
         let f = Fixture::start(None).await;
         if oversized {
-            f.fault(Fault::Catalogue(
-                serde_json::json!([{"name":"x".repeat(16*1024*1024)}]),
-            ));
+            // Build the payload outside the request deadline: this test checks
+            // resource-limit pausing, not debug JSON serialization throughput.
+            f.fault(Fault::RawCatalogue(vec![b' '; 16 * 1024 * 1024 + 1].into()));
         } else {
             f.fault(Fault::Status(403));
         }
@@ -374,7 +374,18 @@ async fn permission_and_resource_failures_pause_catalogue_retries() {
         } else {
             SyncError::Permission
         };
-        until(|| sync.snapshot().error == Some(expected)).await;
+        let reached = tokio::time::timeout(Duration::from_secs(5), async {
+            while sync.snapshot().error != Some(expected) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        assert!(
+            reached.is_ok(),
+            "oversized={oversized}, expected={expected:?}, actual={:?}, requests={}",
+            sync.snapshot().error,
+            f.seen().len()
+        );
         tokio::time::sleep(Duration::from_millis(100)).await;
         let requests = f.seen().len();
         sync.shutdown().await.unwrap();
