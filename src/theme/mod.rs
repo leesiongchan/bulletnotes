@@ -192,6 +192,8 @@ pub fn select_theme(
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ThemeError {
+    #[error("appearance settings are invalid")]
+    InvalidSettings,
     #[error("theme exceeds the 32 KiB limit")]
     TooLarge,
     #[error("theme is not valid JSON with unique object keys")]
