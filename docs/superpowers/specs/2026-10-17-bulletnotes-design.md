@@ -2,7 +2,7 @@
 
 Date: 2026-10-17
 
-Status: UI/UX direction approved in conversation. Written specification awaiting review. This document proposes the engineering requirements for that direction; it does not authorize implementation.
+Status: UI/UX and written specification approved in conversation on 2026-10-17. Implementation planning is authorized; implementation requires review of the plan and selection of an execution method.
 
 ## Intent and agreed decisions
 
