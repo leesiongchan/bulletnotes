@@ -79,6 +79,15 @@ impl StoreHandle {
         self.call(move |w| pages::save_position(&mut w.db, &key, position, visited_ms))
             .await
     }
+    /// Most recently visited cached page, scoped to the selected space.
+    pub async fn last_cached_page(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Option<PageKey>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| pages::last_cached(&w.db, &connection))
+            .await
+    }
     /// Record recency without pretending to have observed the editor's selection.
     pub async fn record_visit(&self, key: &PageKey, visited_ms: u64) -> Result<(), StoreError> {
         let key = key.clone();

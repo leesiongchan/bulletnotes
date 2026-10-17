@@ -1,14 +1,14 @@
-//! Disposable public-AppKit frame/hover experiment; retains Slint's content view.
+//! Public AppKit frame/hover adapter; retains Slint ownership of its content view.
 use block2::RcBlock;
 pub trait ChromeWindow: slint::ComponentHandle {
     fn reveal_chrome(&self, revealed: bool);
 }
-impl ChromeWindow for bulletnotes::AppWindow {
+impl ChromeWindow for crate::AppWindow {
     fn reveal_chrome(&self, revealed: bool) {
         self.set_chrome_revealed(revealed);
     }
 }
-impl ChromeWindow for bulletnotes::NativePreviewWindow {
+impl ChromeWindow for crate::NativePreviewWindow {
     fn reveal_chrome(&self, revealed: bool) {
         self.set_chrome_revealed(revealed);
     }

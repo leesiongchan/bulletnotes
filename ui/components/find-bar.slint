@@ -1,0 +1,49 @@
+import { UiTheme } from "../types.slint";
+import { ActionButton } from "action-button.slint";
+export component FindBar inherits Rectangle {
+    in property <UiTheme> theme;
+    in-out property <string> query;
+    in property <string> status;
+    callback query-changed(string);
+    callback step(int);
+    callback close();
+    public function focus-query() { query-input.focus(); }
+    background: root.theme.paper;
+    HorizontalLayout {
+        padding-left: 26px; padding-right: 10px;
+        padding-top: 3px; padding-bottom: 3px; spacing: 4px;
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 5px;
+            background: root.theme.surface;
+            border-width: 1px;
+            border-color: query-input.has-focus ? root.theme.accent : root.theme.line;
+            query-input := TextInput {
+                x: 8px; width: parent.width - 16px; height: parent.height;
+                vertical-alignment: center; single-line: true;
+                text <=> root.query;
+                color: root.theme.ink; font-size: 12px;
+                selection-background-color: root.theme.selection;
+                selection-foreground-color: root.theme.ink;
+                input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
+                accessible-label: "Find in note, case sensitive";
+                edited => { root.query-changed(self.text); }
+                key-pressed(event) => {
+                    if (event.text == Key.Return) { root.step(event.modifiers.shift ? -1 : 1); return accept; }
+                    if (event.text == Key.Escape) { root.close(); return accept; }
+                    return reject;
+                }
+            }
+            Text {
+                x: 8px; width: parent.width - 16px; height: parent.height;
+                text: "Find · match case"; visible: root.query == "";
+                vertical-alignment: center; font-size: 11px; color: root.theme.muted;
+                accessible-role: none;
+            }
+        }
+        Text { width: 66px; text: root.status; color: root.theme.muted; font-size: 9px; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
+        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/left.svg"); label: "Previous match, Shift Enter"; clicked => { root.step(-1); } }
+        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/right.svg"); label: "Next match, Enter"; clicked => { root.step(1); } }
+        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/close.svg"); label: "Close find, Escape"; clicked => { root.close(); } }
+    }
+}

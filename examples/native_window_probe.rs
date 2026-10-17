@@ -1,6 +1,5 @@
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
-#[path = "support/chrome.rs"]
-mod chrome;
+use bulletnotes::platform::window_chrome as chrome;
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
 #[path = "support/hover_probe.rs"]
 mod hover_probe;

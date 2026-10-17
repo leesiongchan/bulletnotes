@@ -2,8 +2,13 @@ pub mod appearance;
 pub mod appearance_ui;
 pub mod coordinator;
 pub mod editor;
+pub mod find;
 pub mod local_ui;
 pub mod model;
+#[cfg(target_os = "macos")]
+pub mod native_app;
 pub mod navigation;
+pub mod startup;
 pub mod theme_files;
 pub mod ui;
+pub mod window_placement;

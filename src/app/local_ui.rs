@@ -2,6 +2,7 @@
 use super::{
     appearance_ui::AppearanceUi,
     coordinator::{AppAction, AppEffect, AppEvent, Coordinator, SearchRequest},
+    find::NoteFind,
     model::View,
 };
 use crate::{
@@ -41,6 +42,7 @@ struct LoadRequest {
 }
 struct State {
     coordinator: RefCell<Coordinator>,
+    find: RefCell<NoteFind>,
     window: slint::Weak<AppWindow>,
     writes: mpsc::Sender<Work>,
     loads: watch::Sender<Option<LoadRequest>>,
@@ -215,6 +217,11 @@ impl State {
                     }));
                 }
                 AppEffect::QuitReady => self.quit(),
+                AppEffect::HideReady => {
+                    if let Some(window) = self.window.upgrade() {
+                        let _ = window.hide();
+                    }
+                }
                 effect => {
                     if let Err(error) = self.writes.try_send(Work::Effect(effect))
                         && let Work::Effect(effect) = error.into_inner()
@@ -269,6 +276,41 @@ impl State {
         self.dispatch(AppAction::Search(SearchRequest { id, query }));
         Some(id)
     }
+    fn present_find(&self, window: &AppWindow) {
+        let find = self.find.borrow();
+        window.set_find_status(
+            match find.current() {
+                Some(current) => format!("{current} of {}", find.total()),
+                None => format!("{} matches", find.total()),
+            }
+            .into(),
+        );
+    }
+    fn find(&self, direction: Option<i32>) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let app = self.coordinator.borrow();
+        let Some(editor) = app.editor() else {
+            return;
+        };
+        let mut find = self.find.borrow_mut();
+        if direction.is_none() {
+            find.set_query(editor.body(), window.get_find_query().to_string());
+        }
+        let selection = find.step(editor.body(), direction.unwrap_or(1));
+        drop(find);
+        self.present_find(&window);
+        if let Some(selection) = selection {
+            if let (Ok(anchor), Ok(caret)) =
+                (i32::try_from(selection.start), i32::try_from(selection.end))
+            {
+                window.invoke_select_find_match(anchor, caret);
+            } else {
+                window.set_find_status("Match too far".into());
+            }
+        }
+    }
     fn render(&self) {
         let Some(window) = self.window.upgrade() else {
             return;
@@ -292,10 +334,15 @@ impl State {
                 if window.get_note_text().as_str() != editor.body() {
                     window.set_note_text(editor.body().into());
                 }
+                self.find.borrow_mut().refresh(editor.body());
+                self.present_find(&window);
                 window.set_current_path(editor.key().path.as_str().into());
                 self.rendered_key.replace(Some(editor.key().clone()));
                 self.rendered_revision.set(Some(editor.revision()));
                 if changed {
+                    if app.view() == View::Note {
+                        window.invoke_focus_editor();
+                    }
                     let position = editor.restore_target();
                     if let (Ok(anchor), Ok(caret)) = (
                         i32::try_from(position.anchor),
@@ -429,6 +476,7 @@ pub fn bind(
     let (updates, _) = watch::channel(());
     let state = Rc::new(State {
         coordinator: RefCell::new(coordinator),
+        find: RefCell::new(NoteFind::default()),
         window: window.as_weak(),
         writes,
         loads,
@@ -528,6 +576,18 @@ pub fn bind(
     }
     {
         let state = state.clone();
+        window.on_find_opened(move || state.find(None));
+    }
+    {
+        let state = state.clone();
+        window.on_find_query_changed(move |_| state.find(None));
+    }
+    {
+        let state = state.clone();
+        window.on_find_step(move |direction| state.find(Some(direction)));
+    }
+    {
+        let state = state.clone();
         window.on_note_edited(move |text| state.dispatch(AppAction::EditText(text.to_string())));
     }
     {
@@ -589,8 +649,18 @@ pub fn bind(
     }
     {
         let state = state.clone();
+        window.on_request_quit(move || state.dispatch(AppAction::RequestQuit));
+    }
+    {
+        let state = state.clone();
+        window.on_request_hide(move || state.dispatch(AppAction::RequestHide));
+    }
+    {
+        let weak = window.as_weak();
         window.window().on_close_requested(move || {
-            state.dispatch(AppAction::RequestQuit);
+            if let Some(window) = weak.upgrade() {
+                window.invoke_request_hide();
+            }
             slint::CloseRequestResponse::KeepWindowShown
         });
     }

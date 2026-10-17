@@ -2,7 +2,7 @@
 use bulletnotes::{
     AppWindow,
     app::{appearance_ui, coordinator::AppAction, local_ui},
-    domain::connection::ConnectionConfig,
+    domain::{connection::ConnectionConfig, page::LocalRevision},
     store::{StoreHandle, settings::AppSettings},
     theme::SystemAppearance,
 };
@@ -48,6 +48,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     != source.as_bytes()
                 {
                     return Err("UI callback source was not durably saved".into());
+                }
+                window.invoke_show_find();
+                window.set_find_query("café".into());
+                window.invoke_find_query_changed("café".into());
+                if !window.get_find_visible() || window.get_find_status() != "1 of 1" {
+                    return Err("native find callback did not select the literal match".into());
+                }
+                window.invoke_find_step(-1);
+                window.invoke_close_find();
+                if window.get_find_visible() || window.get_note_text().as_bytes() != source.as_bytes()
+                    || store.load_page(&original_key).await?.ok_or("find page absent")?.local_revision != LocalRevision(1) {
+                    return Err("find modified source or left its bar open".into());
                 }
                 let injector = rusqlite::Connection::open(&path)?;
                 injector.execute_batch(

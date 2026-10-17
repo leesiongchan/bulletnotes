@@ -13,7 +13,7 @@ This is a provisional UI checkpoint. The native input/accessibility gate is stil
 | All pages, Paper | [Capture](native-ui/pages-default.png) | [Capture](native-ui/pages-minimum.png) |
 | Appearance, Paper | [Capture](native-ui/appearance-default.png) | [Capture](native-ui/appearance-minimum.png) |
 
-The note editor remains instantiated while another primary view is shown. All pages has literal text search and a folder field, with virtualized keyboard-navigable rows. The fixture's page rows are explicitly generated examples; opening real pages and executing searches belong to the next coordinator task. Native frame/hover behavior uses the public-AppKit configuration tested in Preview 2; the user confirmed physical resizing and hover/drag there. The main application has not yet adopted the production lifecycle adapter.
+The note editor remains instantiated while another primary view is shown. All pages has literal text search and a folder field, with virtualized keyboard-navigable rows. The fixture's page rows are explicitly generated examples; the main application's local coordinator now opens stored pages and executes local search. Native frame/hover behavior uses the public-AppKit configuration tested in Preview 2; the user confirmed physical resizing and hover/drag there. The main application now adopts the public window adapter and local save/hide/quit flow; the remaining native lifecycle gates are tracked in [the local checkpoint](local-milestone.md).
 
 Appearance provides four built-ins, independent Light/Dark assignments, System mode, four paper patterns, 11–24 point text, and native JSON import/export dialogs. Palette cards show their own colors. Long imported names elide instead of overlapping the selection indicator. Import/export remain outside the scrolling controls at minimum size. The file picker callbacks are wired; manual picker interaction and live macOS appearance notifications remain unobserved. No translucency or inline Markdown coloring is claimed under approved revisions B/A.
 
@@ -31,3 +31,5 @@ SLINT_BACKEND=winit-femtovg target/debug/examples/ui_review --theme paper --capt
 SLINT_BACKEND=winit-femtovg target/debug/examples/ui_review --view appearance --minimum --capture /tmp/bulletnotes-appearance.png
 rustup run 1.99.1 cargo test --test ui_contract --features native-validation --locked -- --include-ignored
 ```
+
+The current-note find bar was reviewed separately at minimum size in [Paper](native-ui/find-paper-minimum.png) and [Graphite](native-ui/find-graphite-minimum.png). The path, field, match navigation, editor, and footer remain visible; the extra row reduces the editor viewport. These generated presentation captures do not prove physical keyboard behavior or selection direction. The existing missing-glyph observation at the tab/emoji line is still visible and remains open.

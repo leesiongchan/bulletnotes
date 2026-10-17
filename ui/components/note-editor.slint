@@ -10,6 +10,7 @@ export component NoteEditor inherits Rectangle {
     out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
     callback edited(string);
     callback key-pressed(KeyEvent) -> EventResult;
+    public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }
     public function focus-editor() { input.focus(); }
     public function restore-selection(anchor: int, caret: int, y: float) { input.set-selection-offsets(anchor,caret); scroll.content-y = -max(0,y) * 1px; }
     background: root.theme.paper;

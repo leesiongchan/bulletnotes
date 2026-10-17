@@ -154,7 +154,7 @@ pub(super) fn save_position(
     position
         .validate(&snapshot.body)
         .map_err(|_| StoreError::InvalidData)?;
-    let visited_ms = i64::try_from(visited_ms).map_err(|_| StoreError::InvalidData)?;
+    let visited_ms = visit_time(db, &key.connection, visited_ms)?;
     db.execute("UPDATE pages SET anchor=?1,caret=?2,scroll_y=?3,last_visited_ms=?4 WHERE connection=?5 AND path=?6",rusqlite::params![position.anchor as i64,position.caret as i64,position.scroll_y,visited_ms,key.connection.as_str(),key.path.as_str()])?;
     Ok(())
 }
@@ -163,7 +163,7 @@ pub(super) fn record_visit(
     key: &PageKey,
     visited_ms: u64,
 ) -> Result<(), StoreError> {
-    let visited_ms = i64::try_from(visited_ms).map_err(|_| StoreError::InvalidData)?;
+    let visited_ms = visit_time(db, &key.connection, visited_ms)?;
     let changed = db.execute(
         "UPDATE pages SET last_visited_ms=?1 WHERE connection=?2 AND path=?3",
         rusqlite::params![visited_ms, key.connection.as_str(), key.path.as_str()],
@@ -178,4 +178,42 @@ fn now_ms() -> Result<i64, StoreError> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| StoreError::InvalidData)?;
     i64::try_from(duration.as_millis()).map_err(|_| StoreError::InvalidData)
+}
+
+pub(super) fn last_cached(
+    db: &Connection,
+    connection: &ConnectionId,
+) -> Result<Option<PageKey>, StoreError> {
+    let path: Option<String> = db.query_row(
+        "SELECT path FROM pages WHERE connection=?1 AND body IS NOT NULL ORDER BY last_visited_ms IS NULL,last_visited_ms DESC,path COLLATE BINARY LIMIT 1",
+        [connection.as_str()], |row| row.get(0),
+    ).optional()?;
+    path.map(|path| {
+        Ok(PageKey {
+            connection: connection.clone(),
+            path: PagePath::parse(&path).map_err(|_| StoreError::InvalidData)?,
+        })
+    })
+    .transpose()
+}
+
+// Recency is strictly increasing within a space even when the wall clock stalls
+// or moves backwards. The worker serializes visits; these values order history.
+fn visit_time(
+    db: &Connection,
+    connection: &ConnectionId,
+    requested: u64,
+) -> Result<i64, StoreError> {
+    let requested = i64::try_from(requested).map_err(|_| StoreError::InvalidData)?;
+    let previous: Option<i64> = db.query_row(
+        "SELECT max(last_visited_ms) FROM pages WHERE connection=?1",
+        [connection.as_str()],
+        |row| row.get(0),
+    )?;
+    match previous {
+        Some(previous) if previous >= requested => {
+            previous.checked_add(1).ok_or(StoreError::InvalidData)
+        }
+        _ => Ok(requested),
+    }
 }

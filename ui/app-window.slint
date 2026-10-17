@@ -1,6 +1,7 @@
 import { Palette } from "std-widgets.slint";
 import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
+import { FindBar } from "components/find-bar.slint";
 import { NoteEditor } from "components/note-editor.slint";
 import { PageBrowser } from "components/page-browser.slint";
 import { AppearancePanel } from "components/appearance-panel.slint";
@@ -47,6 +48,18 @@ export component AppWindow inherits Window {
     out property <length> editor-line-height:editor.line-height;
     out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0);
     callback save-now();
+    in-out property <bool> find-visible:false;
+    in-out property <string> find-query;
+    in property <string> find-status;
+    callback find-opened();
+    callback find-query-changed(string);
+    callback find-step(int);
+    public function show-find() { if (root.active-view != "note") { root.return-to-note(); } root.find-visible = true; find.focus-query(); root.find-opened(); }
+    public function close-find() { root.find-visible = false; editor.focus-editor(); }
+    public function select-find-match(anchor:int, caret:int) { editor.select-match(anchor,caret); }
+    callback native-window-ready();
+    callback request-quit();
+    callback request-hide();
     callback browse-pages();
     callback open-page(string);
     callback new-note();
@@ -67,6 +80,10 @@ export component AppWindow inherits Window {
     public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
     function shortcut(event: KeyEvent) -> EventResult {
         if (event.modifiers.meta) {
+            if (event.text == "f" || event.text == "F") { root.show-find(); return accept; }
+            if ((event.text == "g" || event.text == "G") && root.active-view == "note") { root.find-step(event.modifiers.shift ? -1 : 1); return accept; }
+            if (event.text == "q" || event.text == "Q") { root.request-quit(); return accept; }
+            if (event.text == "w" || event.text == "W") { root.request-hide(); return accept; }
             if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
             if (event.text == "k" || event.text == "K") { root.browse-pages(); return accept; }
             if (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
@@ -74,6 +91,7 @@ export component AppWindow inherits Window {
             if (event.text == "[") { root.history-step(-1); return accept; }
             if (event.text == "]") { root.history-step(1); return accept; }
         }
+        if (event.text == Key.Escape && root.active-view == "note" && root.find-visible) { root.close-find(); return accept; }
         if (event.text == Key.Escape && root.active-view != "note") {
             if (root.low-contrast-warning) { root.cancel-theme-import(); } else { root.return-to-note(); }
             return accept;
@@ -140,10 +158,18 @@ export component AppWindow inherits Window {
                     overflow: elide;
                 }
 
+                find := FindBar {
+                    y: 32px; height: 36px; width: parent.width;
+                    visible: root.find-visible;
+                    theme: root.theme; query <=> root.find-query; status: root.find-status;
+                    query-changed(query) => { root.find-query-changed(query); }
+                    step(direction) => { root.find-step(direction); }
+                    close => { root.close-find(); }
+                }
                 editor := NoteEditor {
-                    y: 32px;
+                    y: 32px + (root.find-visible ? 36px : 0px);
                     width: parent.width;
-                    height: parent.height - 72px;
+                    height: parent.height - 72px - (root.find-visible ? 36px : 0px);
                     theme: root.theme;
                     text <=> root.note-text;
                     font-size-px: root.font-size-px;
@@ -283,5 +309,18 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+}
+
+export component LocalTray inherits SystemTrayIcon {
+    icon: @image-url("../assets/native-preview-tray.svg");
+    title: "BN";
+    tooltip: "Bulletnotes · local notes";
+    callback reopen();
+    callback quit();
+    Menu {
+        MenuItem { title: "Show Bulletnotes"; activated => { root.reopen(); } }
+        MenuSeparator {}
+        MenuItem { title: "Quit Bulletnotes"; activated => { root.quit(); } }
     }
 }

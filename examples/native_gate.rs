@@ -1,6 +1,5 @@
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
-#[path = "support/chrome.rs"]
-mod chrome;
+use bulletnotes::platform::window_chrome as chrome;
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
 #[path = "support/interactive.rs"]
 mod interactive;

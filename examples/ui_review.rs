@@ -1,7 +1,6 @@
 //! Native UI contract fixture with generated text only; no SilverBullet connection.
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
-#[path = "support/chrome.rs"]
-mod chrome;
+use bulletnotes::platform::window_chrome as chrome;
 use bulletnotes::{
     AppWindow,
     app::ui::{apply_theme, present_settings},
@@ -39,6 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .window()
             .set_size(slint::LogicalSize::new(400.0, 440.0));
+    }
+    if args.iter().any(|arg| arg == "--find") {
+        window.set_find_visible(true);
+        window.set_find_query("café".into());
+        window.set_find_status("1 of 1".into());
     }
     if let Some(view) = argument("--view") {
         window.set_active_view(view.into());

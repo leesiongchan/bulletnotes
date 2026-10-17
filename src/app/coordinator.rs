@@ -25,6 +25,7 @@ pub enum AppAction {
     SavePosition(EditorPosition),
     Flush,
     RequestQuit,
+    RequestHide,
     Tick(Duration),
 }
 pub enum AppEvent {
@@ -56,11 +57,13 @@ pub enum AppEffect {
     },
     RecordVisit(PageKey),
     QuitReady,
+    HideReady,
 }
 enum Transition {
     Open(PageKey, Option<NavigationState>),
     New,
     Quit,
+    Hide,
 }
 struct PendingLoad {
     id: u64,
@@ -216,6 +219,7 @@ impl Coordinator {
                 self.flush_target = self.editor.as_ref().map(|editor| editor.revision());
                 self.flush(&mut effects);
             }
+            AppAction::RequestHide => self.transition(Transition::Hide, &mut effects),
             AppAction::RequestQuit => self.transition(Transition::Quit, &mut effects),
         }
         effects
@@ -234,12 +238,19 @@ impl Coordinator {
                 }
             }
             AppEvent::LocalSaved(saved) => {
+                let newly_created = self
+                    .editor
+                    .as_ref()
+                    .is_some_and(|editor| editor.needs_create());
                 if self
                     .editor
                     .as_mut()
                     .is_some_and(|editor| editor.acknowledge(&saved))
                 {
                     self.notice = None;
+                    if newly_created {
+                        effects.push(AppEffect::RecordVisit(saved.key.clone()));
+                    }
                     if self
                         .flush_target
                         .is_some_and(|target| saved.local_revision >= target)
@@ -383,6 +394,7 @@ impl Coordinator {
             return;
         };
         match transition {
+            Transition::Hide => effects.push(AppEffect::HideReady),
             Transition::Quit => effects.push(AppEffect::QuitReady),
             Transition::Open(key, history) => {
                 let Some(request_id) = self.next_load.checked_add(1) else {

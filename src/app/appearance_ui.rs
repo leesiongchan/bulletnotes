@@ -17,7 +17,10 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 enum Write {
-    Settings(AppearanceCommit),
+    Settings(
+        Box<AppearanceCommit>,
+        Option<oneshot::Sender<Result<(), StoreError>>>,
+    ),
     Barrier(oneshot::Sender<()>),
 }
 enum Pending {
@@ -44,6 +47,38 @@ impl AppearanceUi {
             .await
             .map_err(|_| StoreError::Closed)?;
         receiver.await.map_err(|_| StoreError::Closed)
+    }
+    /// Serialize native window metadata through the same settings owner as themes.
+    pub async fn save_window(
+        &self,
+        placement: crate::store::settings::WindowPlacement,
+    ) -> Result<(), StoreError> {
+        let mut candidate = self.0.controller.borrow().displayed().clone();
+        candidate.window = Some(placement);
+        let ticket = self
+            .0
+            .controller
+            .borrow_mut()
+            .begin_settings_commit(candidate, true)
+            .map_err(|_| StoreError::InvalidSettings)?;
+        let (sender, receiver) = oneshot::channel();
+        if let Err(error) = self
+            .0
+            .sender
+            .try_send(Write::Settings(Box::new(ticket), Some(sender)))
+        {
+            if let Write::Settings(ticket, _) = error.into_inner() {
+                let _ = self
+                    .0
+                    .controller
+                    .borrow_mut()
+                    .complete_settings_commit(*ticket, Err(StoreError::Closed));
+            }
+            self.0.present();
+            return Err(StoreError::Closed);
+        }
+        self.0.present();
+        receiver.await.map_err(|_| StoreError::Closed)?
     }
     pub fn set_system_appearance(&self, system: SystemAppearance) {
         self.0.system.set(system);
@@ -81,14 +116,17 @@ impl State {
             .begin_settings_commit(candidate, allow);
         match ticket {
             Ok(ticket) => {
-                match self.sender.try_send(Write::Settings(ticket)) {
+                match self
+                    .sender
+                    .try_send(Write::Settings(Box::new(ticket), None))
+                {
                     Ok(()) => self.message("Saving appearance…"),
                     Err(error) => {
-                        if let Write::Settings(ticket) = error.into_inner() {
+                        if let Write::Settings(ticket, _) = error.into_inner() {
                             let _ = self
                                 .controller
                                 .borrow_mut()
-                                .complete_settings_commit(ticket, Err(StoreError::Closed));
+                                .complete_settings_commit(*ticket, Err(StoreError::Closed));
                         }
                         self.message("Appearance could not be saved. Try again.");
                     }
@@ -154,19 +192,22 @@ pub fn bind(
     slint::spawn_local(async move {
         while let Some(write) = receiver.recv().await {
             match write {
-                Write::Settings(ticket) => {
+                Write::Settings(ticket, reply) => {
                     let result = store.save_settings(ticket.settings().clone()).await;
                     if let Some(state) = weak.upgrade() {
                         let result = state
                             .controller
                             .borrow_mut()
-                            .complete_settings_commit(ticket, result);
+                            .complete_settings_commit(*ticket, result);
                         state.present();
                         state.message(if result.is_ok() {
                             "Appearance saved"
                         } else {
                             "Appearance could not be saved. Try selecting your theme again."
                         });
+                        if let Some(reply) = reply {
+                            let _ = reply.send(result);
+                        }
                     }
                 }
                 Write::Barrier(sender) => {
