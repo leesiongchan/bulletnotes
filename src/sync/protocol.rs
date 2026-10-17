@@ -81,6 +81,13 @@ pub(super) fn media_type(headers: &HeaderMap) -> Option<&str> {
         .next()
         .map(str::trim)
 }
+pub(super) fn media_is(headers: &HeaderMap, allowed: &[&str]) -> bool {
+    media_type(headers).is_some_and(|value| {
+        allowed
+            .iter()
+            .any(|allowed| value.eq_ignore_ascii_case(allowed))
+    })
+}
 pub(super) fn available_path(path: &PagePath) -> bool {
     !path.as_str().split('/').any(|part| part.starts_with('.'))
 }

@@ -91,10 +91,12 @@ impl LocalApplication {
         {
             let weak = window.as_weak();
             let native = native.clone();
+            let local = local.clone();
             tray.on_reopen(move || {
                 if let Some(window) = weak.upgrade() {
                     match window.show() {
                         Ok(()) => {
+                            local.set_active(true);
                             native.activate();
                             if let Ok(native) = native_window(window.window()) {
                                 native.makeKeyAndOrderFront(None);
@@ -142,6 +144,7 @@ impl LocalApplication {
                     } else {
                         local.dispatch(AppAction::NewNote);
                     }
+                    window.invoke_local_startup_ready();
                 }
             });
             let weak = window.as_weak();
@@ -168,6 +171,9 @@ impl LocalApplication {
     pub fn window(&self) -> &AppWindow {
         &self.window
     }
+    pub fn appearance(&self) -> &AppearanceUi {
+        &self._appearance
+    }
     pub fn local(&self) -> &LocalUi {
         &self.local
     }
@@ -176,6 +182,7 @@ impl LocalApplication {
     }
     pub fn show(&self) -> AppResult<()> {
         self.window.show()?;
+        self.local.set_active(true);
         self.native.activate();
         if let Ok(native) = native_window(self.window.window()) {
             native.makeKeyAndOrderFront(None);

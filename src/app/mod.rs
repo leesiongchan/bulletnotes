@@ -16,3 +16,5 @@ pub mod window_placement;
 pub mod connection;
 
 pub mod connection_ui;
+
+pub mod sync_ui;

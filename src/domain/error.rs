@@ -93,6 +93,8 @@ pub enum StoreError {
 /// Classified transport outcomes never embed tokens, note text, paths, or raw URLs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SyncError {
+    #[error("local synchronization state could not be saved")]
+    LocalStorage,
     #[error("authentication is required")]
     Authentication,
     #[error("the server denied access")]

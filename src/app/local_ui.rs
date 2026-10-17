@@ -7,8 +7,14 @@ use super::{
 };
 use crate::{
     AppWindow, PageRow,
-    domain::{connection::ConnectionId, error::StoreError, page::*, status::LocalSaveState},
-    store::{StoreHandle, search::SearchQuery},
+    domain::{
+        connection::ConnectionId,
+        error::StoreError,
+        page::*,
+        status::{LocalSaveState, SyncState, status_text},
+    },
+    store::{PageSyncFacts, StoreHandle, search::SearchQuery},
+    sync::worker::{SyncHandle, SyncSnapshot},
 };
 use slint::ComponentHandle;
 use std::{
@@ -58,12 +64,136 @@ struct State {
     appearance: AppearanceUi,
     store: StoreHandle,
     quitting: Cell<bool>,
+    changing_connection: Cell<bool>,
+    sync: RefCell<Option<SyncHandle>>,
+    sync_snapshot: RefCell<Option<SyncSnapshot>>,
+    sync_facts: RefCell<Option<(PageKey, LocalRevision, PageSyncFacts)>>,
+    remote_refreshing: Cell<bool>,
+    remote_refresh_needed: Cell<bool>,
+    sync_search_timer: slint::Timer,
 }
 #[derive(Clone)]
 pub struct LocalUi(Rc<State>);
 impl LocalUi {
     pub fn dispatch(&self, action: AppAction) {
         self.0.dispatch(action);
+    }
+    pub fn connection_id(&self) -> ConnectionId {
+        self.0.coordinator.borrow().connection().clone()
+    }
+    pub fn set_sync(&self, sync: Option<SyncHandle>) -> Option<SyncHandle> {
+        let previous = self.0.sync.replace(sync.clone());
+        self.0.sync_facts.borrow_mut().take();
+        self.0
+            .sync_snapshot
+            .replace(sync.as_ref().map(SyncHandle::snapshot));
+        self.0.render();
+        previous
+    }
+    pub fn receive_sync(&self, snapshot: SyncSnapshot) {
+        if snapshot.connection != *self.0.coordinator.borrow().connection() {
+            return;
+        }
+        let connection = snapshot.connection.clone();
+        self.0.receive(AppEvent::CatalogueProgress {
+            connection: connection.clone(),
+            indexed: snapshot.indexed,
+            total: snapshot.catalogue_total,
+            complete: snapshot.complete,
+        });
+        let state = match snapshot.error {
+            Some(crate::domain::error::SyncError::Authentication) => SyncState::Authentication,
+            Some(
+                crate::domain::error::SyncError::Network
+                | crate::domain::error::SyncError::UnknownMutationOutcome,
+            ) => SyncState::Offline,
+            Some(_) => SyncState::Failed,
+            None if !snapshot.writable => SyncState::ReadOnly,
+            None => SyncState::Synced,
+        };
+        self.0
+            .receive(AppEvent::SyncStateChanged { connection, state });
+        self.0.sync_snapshot.replace(Some(snapshot));
+        self.0.render();
+        self.0.refresh_remote();
+        if self.0.coordinator.borrow().view() == View::AllPages
+            && !self.0.sync_search_timer.running()
+        {
+            let weak = Rc::downgrade(&self.0);
+            self.0.sync_search_timer.start(
+                slint::TimerMode::SingleShot,
+                Duration::from_millis(100),
+                move || {
+                    if let Some(state) = weak.upgrade()
+                        && state.coordinator.borrow().view() == View::AllPages
+                    {
+                        state.issue_search();
+                    }
+                },
+            );
+        }
+    }
+    pub fn refresh_sync(&self) {
+        if let Some(sync) = self.0.sync.borrow().as_ref() {
+            sync.refresh();
+        }
+    }
+    pub fn set_active(&self, active: bool) {
+        if let Some(sync) = self.0.sync.borrow().as_ref() {
+            sync.set_active(active);
+        }
+    }
+    pub async fn change_connection(&self, connection: ConnectionId) -> Result<(), LocalUiError> {
+        if connection == self.connection_id() {
+            return self
+                .0
+                .appearance
+                .save_connection(connection)
+                .await
+                .map_err(|_| LocalUiError::SaveFailed);
+        }
+        self.0.changing_connection.set(true);
+        self.0.render();
+        let result =
+            async {
+                self.flush().await?;
+                self.0
+                    .appearance
+                    .save_connection(connection.clone())
+                    .await
+                    .map_err(|_| LocalUiError::SaveFailed)?;
+                let draft_connection = connection.clone();
+                if !self.0.coordinator.borrow_mut().change_connection(
+                    connection.clone(),
+                    move || PageKey {
+                        connection: draft_connection.clone(),
+                        path: new_note_path(&jiff::Zoned::now(), uuid::Uuid::new_v4()),
+                    },
+                ) {
+                    return Err(LocalUiError::SaveFailed);
+                }
+                self.0.rendered_key.borrow_mut().take();
+                self.0.rendered_revision.set(None);
+                self.0.rendered_search.set(None);
+                self.0.sync_facts.borrow_mut().take();
+                let last = self
+                    .0
+                    .store
+                    .last_cached_page(&connection)
+                    .await
+                    .map_err(|_| LocalUiError::LoadFailed)?;
+                // The connection is already replaced and durable; admit its initial open.
+                self.0.changing_connection.set(false);
+                self.0.dispatch(match last {
+                    Some(key) => AppAction::OpenPage(key),
+                    None => AppAction::NewNote,
+                });
+                Ok(())
+            }
+            .await;
+        self.0.changing_connection.set(false);
+        self.0.render();
+        result
     }
     pub fn current_key(&self) -> Option<PageKey> {
         self.0
@@ -157,6 +287,20 @@ impl State {
         if self.quitting.get() {
             return;
         }
+        if self.changing_connection.get()
+            && !matches!(
+                &action,
+                AppAction::Flush
+                    | AppAction::Tick(_)
+                    | AppAction::RequestHide
+                    | AppAction::RequestQuit
+            )
+        {
+            return;
+        }
+        if matches!(&action, AppAction::EditText(_)) {
+            self.sync_facts.borrow_mut().take();
+        }
         let tick = matches!(&action, AppAction::Tick(_));
         let mut app = self.coordinator.borrow_mut();
         let mut effects = if tick {
@@ -171,6 +315,21 @@ impl State {
         self.arm_save();
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
+        let uncached = match &event {
+            AppEvent::PageLoaded {
+                key,
+                result: Ok(None),
+                ..
+            } => Some(key.clone()),
+            _ => None,
+        };
+        let refresh = matches!(
+            &event,
+            AppEvent::LocalSaved(_) | AppEvent::PageLoaded { .. }
+        );
+        if refresh {
+            self.sync_facts.borrow_mut().take();
+        }
         if self.invalid_folder.get() && matches!(&event, AppEvent::SearchReady(..)) {
             return;
         }
@@ -181,6 +340,117 @@ impl State {
         self.execute(effects);
         self.render();
         self.arm_save();
+        if let Some(key) = uncached
+            && self.coordinator.borrow().selected_uncached() == Some(&key)
+            && let Some(sync) = self.sync.borrow().as_ref()
+        {
+            sync.request_page(key);
+        }
+        if refresh && self.sync_snapshot.borrow().is_some() {
+            self.refresh_remote();
+        }
+    }
+    fn refresh_remote(self: &Rc<Self>) {
+        self.remote_refresh_needed.set(true);
+        if self.remote_refreshing.replace(true) {
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        if slint::spawn_local(async move {
+            loop {
+                let Some(state) = weak.upgrade() else {
+                    break;
+                };
+                state.remote_refresh_needed.set(false);
+                let requested = state
+                    .coordinator
+                    .borrow()
+                    .editor()
+                    .map(|editor| (editor.key().clone(), editor.revision()));
+                if let Some((key, revision)) = requested {
+                    let result = state.store.load_sync_page(&key).await;
+                    let current = state.coordinator.borrow().editor().is_some_and(|editor| {
+                        editor.key() == &key && editor.revision() == revision
+                    });
+                    if current
+                        && let Ok(Some((page, facts))) = result
+                        && page.local_revision == revision
+                    {
+                        if let Some(id) = facts.conflict_id {
+                            state.receive(AppEvent::ConflictDetected {
+                                key: key.clone(),
+                                local_revision: revision,
+                                id,
+                            });
+                        }
+                        state.sync_facts.replace(Some((key, revision, facts)));
+                        state.receive(AppEvent::RemoteApplied(page));
+                    }
+                }
+                let selected = state.coordinator.borrow().selected_uncached().cloned();
+                if let Some(selected) = selected
+                    && !state.quitting.get()
+                {
+                    let cached = state
+                        .store
+                        .load_page(&selected)
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some();
+                    let still_selected =
+                        state.coordinator.borrow().selected_uncached() == Some(&selected);
+                    if cached && still_selected {
+                        state.dispatch(AppAction::OpenPage(selected));
+                    }
+                }
+                if !state.remote_refresh_needed.get() {
+                    state.remote_refreshing.set(false);
+                    break;
+                }
+            }
+        })
+        .is_err()
+        {
+            self.remote_refreshing.set(false);
+        }
+    }
+    fn sync_state(&self, editor: &super::editor::EditorSession) -> SyncState {
+        let snapshot = self.sync_snapshot.borrow();
+        let Some(snapshot) = snapshot.as_ref() else {
+            return SyncState::LocalOnly;
+        };
+        let facts = self.sync_facts.borrow();
+        let facts = facts
+            .as_ref()
+            .filter(|(key, revision, _)| key == editor.key() && *revision == editor.revision())
+            .map(|(_, _, facts)| facts);
+        if facts.is_some_and(|facts| facts.conflict)
+            || snapshot.page_errors.get(editor.key())
+                == Some(&crate::domain::error::SyncError::Conflict)
+        {
+            return SyncState::Conflict;
+        }
+        let error = snapshot
+            .error
+            .or_else(|| snapshot.page_errors.get(editor.key()).copied());
+        if let Some(error) = error {
+            return match error {
+                crate::domain::error::SyncError::Authentication => SyncState::Authentication,
+                crate::domain::error::SyncError::Permission => SyncState::ReadOnly,
+                crate::domain::error::SyncError::Network
+                | crate::domain::error::SyncError::UnknownMutationOutcome => SyncState::Offline,
+                _ => SyncState::Failed,
+            };
+        }
+        if !snapshot.writable || editor.permission() == Permission::ReadOnly {
+            return SyncState::ReadOnly;
+        }
+        if facts.is_none_or(|facts| facts.pending || facts.deleted) {
+            SyncState::Pending
+        } else {
+            SyncState::Synced
+        }
     }
     fn arm_save(self: &Rc<Self>) {
         self.timer.stop();
@@ -219,6 +489,9 @@ impl State {
                 AppEffect::QuitReady => self.quit(),
                 AppEffect::HideReady => {
                     if let Some(window) = self.window.upgrade() {
+                        if let Some(sync) = self.sync.borrow().as_ref() {
+                            sync.set_active(false);
+                        }
                         let _ = window.hide();
                     }
                 }
@@ -330,7 +603,10 @@ impl State {
         window.set_can_go_forward(app.can_go_forward());
         if let Some(editor) = app.editor() {
             let changed = self.rendered_key.borrow().as_ref() != Some(editor.key());
-            if changed || self.rendered_revision.get() != Some(editor.revision()) {
+            if changed
+                || self.rendered_revision.get() != Some(editor.revision())
+                || window.get_note_text().as_str() != editor.body()
+            {
                 if window.get_note_text().as_str() != editor.body() {
                     window.set_note_text(editor.body().into());
                 }
@@ -353,13 +629,16 @@ impl State {
                 }
             }
             window.set_note_read_only(
-                self.quitting.get() || editor.permission() == Permission::ReadOnly,
+                self.quitting.get()
+                    || self.changing_connection.get()
+                    || editor.permission() == Permission::ReadOnly,
             );
-            let status = app.notice().unwrap_or_else(|| match editor.save_state() {
-                LocalSaveState::Clean(_) => "Saved locally · not syncing",
-                LocalSaveState::Dirty(_) => "Unsaved changes",
-                LocalSaveState::Saving(_) => "Saving locally…",
-                LocalSaveState::Failed(_) => "Local save failed · ⌘S to retry",
+            let status = app.notice().unwrap_or_else(|| {
+                status_text(
+                    editor.save_state(),
+                    self.sync_state(editor),
+                    editor.matches_remote_base(),
+                )
             });
             window.set_status_text(status.into());
         } else {
@@ -405,10 +684,24 @@ impl State {
         } else if let Some(message) = app.notice() {
             window.set_index_status(message.into());
         } else if let Some(results) = app.search_results() {
+            let (indexed, total, complete) = app.catalogue_progress().unwrap_or((
+                results.indexed,
+                results.catalogue_total,
+                results.complete,
+            ));
             window.set_index_status(
                 format!(
-                    "{} local pages · {} of {} indexed · not syncing",
-                    results.total, results.indexed, results.catalogue_total
+                    "{} pages · {} of {} indexed{}",
+                    results.total,
+                    indexed,
+                    total,
+                    if self.sync_snapshot.borrow().is_none() {
+                        " · not syncing"
+                    } else if !complete {
+                        " · content search incomplete"
+                    } else {
+                        ""
+                    }
                 )
                 .into(),
             );
@@ -432,6 +725,10 @@ impl State {
                     .await
                     .map_err(|_| StoreError::Closed)?;
                 receiver.await.map_err(|_| StoreError::Closed)?;
+                let sync = state.sync.borrow_mut().take();
+                if let Some(sync) = sync {
+                    sync.shutdown().await.map_err(|_| StoreError::Closed)?;
+                }
                 state.store.shutdown().await
             }
             .await;
@@ -492,6 +789,13 @@ pub fn bind(
         appearance,
         store: store.clone(),
         quitting: Cell::new(false),
+        changing_connection: Cell::new(false),
+        sync: RefCell::new(None),
+        sync_snapshot: RefCell::new(None),
+        sync_facts: RefCell::new(None),
+        remote_refreshing: Cell::new(false),
+        remote_refresh_needed: Cell::new(false),
+        sync_search_timer: slint::Timer::default(),
     });
     {
         let weak = Rc::downgrade(&state);
@@ -513,10 +817,16 @@ pub fn bind(
                         key,
                         body,
                         revision,
-                    }) => Some(match store.save_local(key.clone(), body, revision).await {
-                        Ok(saved) => AppEvent::LocalSaved(saved),
-                        Err(error) => AppEvent::LocalSaveFailed(key, revision, error),
-                    }),
+                        baseline,
+                    }) => Some(
+                        match store
+                            .save_local_from_base(key.clone(), body, revision, *baseline)
+                            .await
+                        {
+                            Ok(saved) => AppEvent::LocalSaved(saved),
+                            Err(error) => AppEvent::LocalSaveFailed(key, revision, error),
+                        },
+                    ),
                     Work::Effect(AppEffect::SavePosition { key, position }) => {
                         let result = match now_ms() {
                             Ok(now) => store.save_position(&key, position, now).await,
@@ -597,6 +907,7 @@ pub fn bind(
     {
         let state = state.clone();
         window.on_browse_pages(move || {
+            state.dispatch(AppAction::CancelOpen);
             state.dispatch(AppAction::Navigate(View::AllPages));
             state.issue_search();
         });
@@ -622,12 +933,14 @@ pub fn bind(
     {
         let state = state.clone();
         window.on_query_changed(move |_| {
+            state.dispatch(AppAction::CancelOpen);
             state.issue_search();
         });
     }
     {
         let state = state.clone();
         window.on_folder_changed(move |_| {
+            state.dispatch(AppAction::CancelOpen);
             state.issue_search();
         });
     }

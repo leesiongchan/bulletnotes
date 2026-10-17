@@ -155,6 +155,7 @@ mod coordination {
                     key,
                     body,
                     revision,
+                    ..
                 } = effect
                 {
                     Some((key.clone(), body.clone(), *revision))

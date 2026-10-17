@@ -5,3 +5,13 @@ pub use client::SilverBulletClient;
 pub use protocol::SecretToken;
 
 pub mod probe;
+
+pub mod reconcile;
+
+pub mod worker;
+
+mod schedule;
+
+mod catalogue;
+
+pub(crate) use schedule::Retry;

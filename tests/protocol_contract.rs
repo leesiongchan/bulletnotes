@@ -279,3 +279,47 @@ async fn html_login_cannot_acknowledge_a_delete() {
     );
     assert_eq!(fixture.body().unwrap(), b"preserve this page");
 }
+
+#[tokio::test]
+async fn cached_reads_reuse_only_the_matching_validated_content_revision() {
+    let fixture = Fixture::start(Some(b"cached source")).await;
+    let client = client(&fixture);
+    let RemoteRead::Present(known) = client.read(&key("sample.md")).await.unwrap() else {
+        panic!("missing")
+    };
+    let unchanged = client.read_if_changed(&known).await.unwrap();
+    assert_eq!(unchanged, RemoteRead::Present(known.clone()));
+    assert_eq!(fixture.seen()[1].method, reqwest::Method::HEAD);
+    {
+        let mut data = fixture.data.lock().unwrap();
+        data.body = Some(b"new source".to_vec());
+        data.revision += 1;
+    }
+    let RemoteRead::Present(changed) = client.read_if_changed(&known).await.unwrap() else {
+        panic!("missing")
+    };
+    assert_eq!(changed.body, "new source");
+    fixture.fault(Fault::Status(304));
+    assert_eq!(
+        client.read_if_changed(&known).await.unwrap_err(),
+        SyncError::InvalidResponse
+    );
+    assert_eq!(
+        client.read(&key("sample.md")).await.unwrap_err(),
+        SyncError::InvalidResponse
+    );
+}
+
+#[tokio::test]
+async fn status_200_proxy_bodies_never_acknowledge_a_write() {
+    for fault in [Fault::HtmlCaps, Fault::FakeAck] {
+        let fixture = Fixture::start(None).await;
+        fixture.fault(fault);
+        let operation = mutation("sample.md", "preserve locally", WriteCondition::CreateOnly);
+        assert_eq!(
+            client(&fixture).put(&operation).await.unwrap_err(),
+            SyncError::UnknownMutationOutcome
+        );
+        assert!(fixture.body().is_none());
+    }
+}

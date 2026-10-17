@@ -19,6 +19,8 @@ pub enum EditorError {
 pub struct EditorSession {
     page: PageSnapshot,
     durable: Option<LocalRevision>,
+    durable_body: String,
+    sent_body: Option<String>,
     observed_position: Option<EditorPosition>,
     deadline: Option<Duration>,
     in_flight: Option<LocalRevision>,
@@ -28,6 +30,8 @@ impl EditorSession {
     pub fn restore(page: PageSnapshot) -> Self {
         let durable = Some(page.local_revision);
         Self {
+            durable_body: page.body.clone(),
+            sent_body: None,
             page,
             durable,
             observed_position: None,
@@ -59,6 +63,37 @@ impl EditorSession {
     }
     pub fn permission(&self) -> Permission {
         self.page.permission
+    }
+    pub(super) fn apply_remote_snapshot(&mut self, page: PageSnapshot) -> bool {
+        if self.dirty()
+            || self.writing()
+            || page.key != self.page.key
+            || page.local_revision != self.revision()
+        {
+            return false;
+        }
+        let changed = page.body != self.page.body;
+        if self
+            .observed_position
+            .is_some_and(|position| position.validate(&page.body).is_err())
+        {
+            self.observed_position = None;
+        }
+        self.durable_body = page.body.clone();
+        self.page = page;
+        changed
+    }
+    pub fn matches_remote_base(&self) -> bool {
+        self.page
+            .remote_base
+            .as_ref()
+            .is_some_and(|base| base.revision.is_some() && base.body == self.page.body)
+    }
+    pub fn baseline(&self) -> EditorBaseline {
+        EditorBaseline {
+            body: self.durable_body.clone(),
+            remote_base: self.page.remote_base.clone(),
+        }
     }
     pub fn observed_position(&self) -> Option<EditorPosition> {
         self.observed_position
@@ -117,6 +152,11 @@ impl EditorSession {
         }
     }
     pub(super) fn start_write(&mut self, revision: LocalRevision) {
+        self.sent_body = Some(if self.needs_create() {
+            String::new()
+        } else {
+            self.body().to_owned()
+        });
         self.in_flight = Some(revision);
         self.failed = false;
         self.deadline = None;
@@ -126,6 +166,9 @@ impl EditorSession {
             return false;
         }
         self.durable = Some(saved.local_revision);
+        if let Some(body) = self.sent_body.take() {
+            self.durable_body = body;
+        }
         self.in_flight = None;
         self.failed = false;
         true
@@ -135,6 +178,7 @@ impl EditorSession {
             return false;
         }
         self.in_flight = None;
+        self.sent_body = None;
         self.deadline = None;
         self.failed = true;
         true

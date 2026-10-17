@@ -106,13 +106,7 @@ async fn timed_out_probe_survives_restart_and_cleanup_is_exact_and_guarded() {
     let c = client(&f, None, Duration::from_secs(2));
     controller.cleanup_pending(&c).await.unwrap();
     assert!(f.body().is_none());
-    assert!(
-        store
-            .pending_probes(config().id())
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert_eq!(store.pending_probes(config().id()).await.unwrap(), pending);
     let deletes: Vec<_> = f
         .seen()
         .into_iter()
@@ -125,6 +119,60 @@ async fn timed_out_probe_survives_restart_and_cleanup_is_exact_and_guarded() {
             .uri
             .ends_with(pending[0].path.as_str().rsplit('/').next().unwrap())
     );
+    store.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn uncertain_create_keeps_its_cleanup_watch_even_when_initially_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let controller = ConnectionController::new(
+        store.clone(),
+        CredentialStore::new(Arc::new(Denied::default())),
+    );
+    let f = Fixture::start(None).await;
+    f.fault(Fault::DelayedCreate);
+    let c = client(&f, None, Duration::from_secs(2));
+    assert!(
+        controller
+            .connect_fixture(c.clone(), None, false)
+            .await
+            .unwrap()
+            .write_capability
+            .is_err()
+    );
+    let pending = store.pending_probes(config().id()).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    controller.cleanup_pending(&c).await.unwrap();
+    assert!(f.body().is_none());
+    assert_eq!(
+        store.pending_probes(config().id()).await.unwrap(),
+        pending,
+        "absence cannot retire a probe whose create might still arrive"
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(f.body().is_some());
+    f.fault(Fault::None);
+    controller.cleanup_pending(&c).await.unwrap();
+    assert!(f.body().is_none());
+    assert_eq!(store.pending_probes(config().id()).await.unwrap(), pending);
+    let connected = controller.connect_fixture(c, None, false).await.unwrap();
+    assert!(connected.write_capability.is_ok());
+    assert_eq!(
+        store.pending_probes(config().id()).await.unwrap(),
+        pending,
+        "reconnect reuses the historical owned key and retains its watch"
+    );
+    let mut paths: Vec<_> = f
+        .seen()
+        .into_iter()
+        .filter(|r| r.method == reqwest::Method::PUT)
+        .map(|r| r.uri)
+        .collect();
+    paths.sort();
+    paths.dedup();
+    assert_eq!(paths.len(), 1);
     store.shutdown().await.unwrap();
 }
 #[tokio::test]
@@ -317,4 +365,17 @@ async fn probe_journal_migration_preserves_existing_source_and_pending_writes() 
             .to_string_lossy()
             .contains("pre-migration-")
     }));
+}
+
+#[tokio::test]
+async fn denied_keychain_loads_do_not_repeat_os_prompts_during_network_retries() {
+    let denied = Arc::new(Denied::default());
+    let credentials = CredentialStore::new(denied.clone());
+    for _ in 0..3 {
+        assert!(matches!(
+            credentials.load(config().id()).await,
+            Err(CredentialError::Denied)
+        ));
+    }
+    assert_eq!(denied.0.lock().unwrap().len(), 1);
 }

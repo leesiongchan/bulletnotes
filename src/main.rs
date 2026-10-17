@@ -3,6 +3,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     use bulletnotes::{
         app::{
             connection::ConnectionController, connection_ui, native_app::LocalApplication, startup,
+            sync_ui,
         },
         domain::connection::ConnectionConfig,
         platform::application::{NativeApplication, database_path},
@@ -16,14 +17,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let startup = runtime.block_on(startup::open(&database_path()?, connection))?;
     let controller = ConnectionController::new(startup.store.clone(), CredentialStore::keychain());
     let connection = startup.connection.clone();
+    let store = startup.store.clone();
     let app = LocalApplication::new(startup, native)?;
-    let _connection_ui = connection_ui::bind(
+    let connection_ui = connection_ui::bind(
         app.window(),
         controller,
         &connection,
         runtime.handle().clone(),
     );
-    app.run()
+    let _sync_ui = sync_ui::bind(
+        app.window(),
+        app.local().clone(),
+        store,
+        runtime.handle().clone(),
+        &connection_ui,
+    )?;
+    use slint::ComponentHandle;
+    let weak = app.window().as_weak();
+    app.window().on_local_startup_ready(move || {
+        if let Some(window) = weak.upgrade() {
+            window.invoke_test_connection();
+        }
+    });
+    let result = app.run();
+    connection_ui.stop();
+    // Normal quit has already drained local storage and cancelled network work.
+    // OS credential/DNS jobs may be non-cancellable blocking tasks.
+    runtime.shutdown_timeout(std::time::Duration::from_millis(100));
+    result
 }
 #[cfg(target_os = "macos")]
 fn main() {

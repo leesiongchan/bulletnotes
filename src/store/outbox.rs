@@ -26,17 +26,25 @@ pub(super) fn queue_put(
     {
         return Ok(());
     }
-    let (condition, revision, state) = match &snapshot.remote_base {
+    let (condition, revision, mut state) = match &snapshot.remote_base {
         None => ("create", None, "pending"),
         Some(base) => match &base.revision {
             Some(revision) => ("match", Some(revision.0.as_str()), "pending"),
             None => ("match", None, "blocked"),
         },
     };
+    let conflict = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM conflicts WHERE connection=?1 AND path=?2)",
+        [snapshot.key.connection.as_str(), snapshot.key.path.as_str()],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if conflict {
+        state = "blocked";
+    }
     db.execute("INSERT INTO outbox(operation_id,page_id,local_revision,kind,body,condition_kind,condition_revision,state) VALUES(?1,?2,?3,'put',?4,?5,?6,?7)",rusqlite::params![OperationId::new().0.to_string(),page_id,snapshot.local_revision.0.to_string(),snapshot.body,condition,revision,state])?;
     Ok(())
 }
-fn read_operation(db: &Connection, id: &str) -> Result<PendingMutation, StoreError> {
+pub(super) fn read_operation(db: &Connection, id: &str) -> Result<PendingMutation, StoreError> {
     let (page_id,revision,kind,body,condition,etag)=db.query_row("SELECT page_id,local_revision,kind,body,condition_kind,condition_revision FROM outbox WHERE operation_id=?1",[id],|row|Ok((row.get::<_,i64>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,Option<String>>(3)?,row.get::<_,String>(4)?,row.get::<_,Option<String>>(5)?)))?;
     let kind = match kind.as_str() {
         "put" => MutationKind::Put(body.ok_or(StoreError::InvalidData)?),

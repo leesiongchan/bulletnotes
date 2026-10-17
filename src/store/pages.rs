@@ -111,7 +111,17 @@ pub(super) fn save(
     revision: LocalRevision,
 ) -> Result<SavedRevision, StoreError> {
     let tx = db.transaction()?;
-    let mut snapshot = load(&tx, &key)?.ok_or(StoreError::PageMissing)?;
+    let saved = save_transaction(&tx, key, body, revision)?;
+    tx.commit()?;
+    Ok(saved)
+}
+pub(super) fn save_transaction(
+    db: &Connection,
+    key: PageKey,
+    body: String,
+    revision: LocalRevision,
+) -> Result<SavedRevision, StoreError> {
+    let mut snapshot = load(db, &key)?.ok_or(StoreError::PageMissing)?;
     if snapshot.permission == Permission::ReadOnly {
         return Err(StoreError::ReadOnly);
     }
@@ -135,10 +145,9 @@ pub(super) fn save(
     snapshot.position.caret = clamp(snapshot.position.caret);
     snapshot.body = body;
     snapshot.local_revision = revision;
-    let page_id = id(&tx, &key)?;
-    tx.execute("UPDATE pages SET body=?1,title=?2,local_revision=?3,anchor=?4,caret=?5,modified_ms=?6 WHERE id=?7",rusqlite::params![snapshot.body,key.title_from(&snapshot.body),revision.0.to_string(),snapshot.position.anchor as i64,snapshot.position.caret as i64,now_ms()?,page_id])?;
-    super::outbox::queue_put(&tx, page_id, &snapshot)?;
-    tx.commit()?;
+    let page_id = id(db, &key)?;
+    db.execute("UPDATE pages SET body=?1,title=?2,local_revision=?3,anchor=?4,caret=?5,modified_ms=?6 WHERE id=?7",rusqlite::params![snapshot.body,key.title_from(&snapshot.body),revision.0.to_string(),snapshot.position.anchor as i64,snapshot.position.caret as i64,now_ms()?,page_id])?;
+    super::outbox::queue_put(db, page_id, &snapshot)?;
     Ok(SavedRevision {
         key,
         local_revision: revision,

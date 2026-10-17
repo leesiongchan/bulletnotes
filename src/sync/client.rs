@@ -116,13 +116,46 @@ impl SilverBulletClient {
             .await
             .map_err(|_| SyncError::Network)?;
         classify(response.status(), false)?;
-        if protocol::media_type(response.headers()) != Some("application/json") {
+        if !protocol::media_is(response.headers(), &["application/json"]) {
             return Err(SyncError::InvalidResponse);
         }
         protocol::catalogue(
             &read_bytes(response, MAX_CATALOGUE_BYTES).await?,
             &self.connection,
         )
+    }
+    /// Check current revision and permission without downloading an unchanged body.
+    pub async fn read_if_changed(&self, known: &RemoteFile) -> Result<RemoteRead, SyncError> {
+        let response = self
+            .client
+            .head(self.endpoint(Some(&known.key))?)
+            .send()
+            .await
+            .map_err(|_| SyncError::Network)?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(RemoteRead::Missing(known.key.clone()));
+        }
+        if response.status() == StatusCode::METHOD_NOT_ALLOWED {
+            return self.read(&known.key).await;
+        }
+        if response.status() == StatusCode::NOT_MODIFIED {
+            return Err(SyncError::InvalidResponse);
+        }
+        classify(response.status(), false)?;
+        if !protocol::media_is(
+            response.headers(),
+            &["text/markdown", "text/plain", "application/octet-stream"],
+        ) {
+            return Err(SyncError::InvalidResponse);
+        }
+        let revision = protocol::revision(response.headers());
+        if revision.is_some() && revision == known.revision {
+            let mut file = known.clone();
+            file.permission = protocol::permission(response.headers(), &revision);
+            file.modified_ms = protocol::modified(response.headers())?;
+            return Ok(RemoteRead::Present(file));
+        }
+        self.read(&known.key).await
     }
     pub async fn read(&self, key: &PageKey) -> Result<RemoteRead, SyncError> {
         let response = self
@@ -131,13 +164,16 @@ impl SilverBulletClient {
             .send()
             .await
             .map_err(|_| SyncError::Network)?;
+        if response.status() == StatusCode::NOT_MODIFIED {
+            return Err(SyncError::InvalidResponse);
+        }
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(RemoteRead::Missing(key.clone()));
         }
         classify(response.status(), false)?;
-        if !matches!(
-            protocol::media_type(response.headers()),
-            Some("text/markdown" | "text/plain" | "application/octet-stream")
+        if !protocol::media_is(
+            response.headers(),
+            &["text/markdown", "text/plain", "application/octet-stream"],
         ) {
             return Err(SyncError::InvalidResponse);
         }
@@ -158,9 +194,10 @@ impl SilverBulletClient {
         let MutationKind::Put(body) = &operation.kind else {
             return Err(SyncError::Incompatible);
         };
-        let response = self.mutate(Method::PUT, operation, Some(body)).await?;
-        let revision =
-            protocol::revision(response.headers()).ok_or(SyncError::UnknownMutationOutcome)?;
+        let revision = self
+            .mutate(Method::PUT, operation, Some(body))
+            .await?
+            .ok_or(SyncError::UnknownMutationOutcome)?;
         Ok(MutationAck {
             remote_revision: Some(revision),
         })
@@ -181,7 +218,7 @@ impl SilverBulletClient {
         method: Method,
         operation: &PendingMutation,
         body: Option<&str>,
-    ) -> Result<Response, SyncError> {
+    ) -> Result<Option<RemoteRevision>, SyncError> {
         let mut request = self
             .client
             .request(method, self.endpoint(Some(&operation.key))?);
@@ -202,10 +239,25 @@ impl SilverBulletClient {
             .await
             .map_err(|_| SyncError::UnknownMutationOutcome)?;
         classify(response.status(), true)?;
-        if matches!(protocol::media_type(response.headers()), Some("text/html")) {
+        if response.headers().contains_key(header::CONTENT_TYPE)
+            && !protocol::media_is(
+                response.headers(),
+                &["text/plain", "text/markdown", "application/octet-stream"],
+            )
+        {
             return Err(SyncError::UnknownMutationOutcome);
         }
-        Ok(response)
+        let revision = protocol::revision(response.headers());
+        let status = response.status();
+        let acknowledgement = read_bytes(response, 64)
+            .await
+            .map_err(|_| SyncError::UnknownMutationOutcome)?;
+        if acknowledgement != b"OK"
+            && !(status == StatusCode::NO_CONTENT && acknowledgement.is_empty())
+        {
+            return Err(SyncError::UnknownMutationOutcome);
+        }
+        Ok(revision)
     }
 }
 fn classify(status: StatusCode, mutation: bool) -> Result<(), SyncError> {

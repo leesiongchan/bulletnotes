@@ -55,3 +55,11 @@ required-features = ["protocol-validation"]
 [[test]]
 name = "connection_security"
 required-features = ["protocol-validation"]
+
+[[test]]
+name = "sync_lifecycle"
+required-features = ["protocol-validation"]
+
+[[example]]
+name = "sync_review"
+required-features = ["native-validation", "protocol-validation"]

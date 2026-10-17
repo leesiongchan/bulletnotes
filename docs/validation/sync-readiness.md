@@ -1,12 +1,16 @@
-# Why automatic sync is still outstanding
+# Historical sync-readiness audit
 
 Audited 2026-10-17 against feature-branch commit e473cb1 and `https://notes.harflix.lol`. Automatic synchronization remains required; it was not removed from scope. This audit distinguishes implementation status, observed deployed behavior, and remaining verification.
 
-## Execution cause
+## Implementation follow-up
+
+The audit below describes commit e473cb1, before the transport existed. Tasks 7–9 have since added the guarded HTTP adapter, connection verification, progressive full-space cache, and local-first automatic worker. See [protocol contract](protocol-contract.md), [connection security](connection-security.md), and [sync lifecycle](sync-lifecycle.md) for current evidence. Existing already-running local preview bundles are unchanged; they do not gain sync until replaced by a newly built app. Conflict review/Trash, remaining native observations, diagnostics/performance, and release packaging still have their own completion gates.
+
+## Execution cause (at the audited commit)
 
 The plan separated a local/UI milestone (Tasks 1–6) from remote synchronization (Tasks 7–10). Work stayed on native feasibility, theme UI, local saves, and the safe startup/quit prerequisite from Task 11. Unresolved editor selection capture and human native observations led to repeated local checkpoints. Neither depends on the HTTP transport or sync reconciliation algorithms. Treating those UI gates as reasons to stop independent remote work was an execution-sequencing mistake, not a demonstrated Slint or server limitation. The local preview's tests establish local behavior; they do not establish remote synchronization.
 
-The existing implementation has validated connection/page identities, remote revision types, durable local notes, pending mutation payloads, guarded-write conditions, acknowledgement handling, and crash recovery of leased operations. However, there is no `src/sync` module, HTTP transport dependency, protocol conformance target, background sync worker, or full remote catalogue downloader. `src/main.rs` passes a connection identity to local startup; that does not establish a network connection. LocalUi explicitly displays “Saved locally · not syncing.” The outbox is storage for planned remote changes; no transport consumes it yet. No app switch can enable the missing behavior.
+At the audited commit, the implementation had validated connection/page identities, remote revision types, durable local notes, pending mutation payloads, guarded-write conditions, acknowledgement handling, and crash recovery of leased operations. However, there is no `src/sync` module, HTTP transport dependency, protocol conformance target, background sync worker, or full remote catalogue downloader. `src/main.rs` passes a connection identity to local startup; that does not establish a network connection. LocalUi explicitly displays “Saved locally · not syncing.” The outbox is storage for planned remote changes; no transport consumes it yet. No app switch can enable the missing behavior.
 
 ## Read-only deployment evidence
 
@@ -48,7 +52,7 @@ All 13 recorded checks passed for the visible probe. This is evidence from one c
 
 Upstream now includes `HttpSpacePrimitives` in [server-common/src/space/http.rs](https://github.com/silverbulletmd/silverbullet/blob/main/server-common/src/space/http.rs). It is a blocking filesystem adapter used by SilverBullet, including conditional operations and preference for the dedicated content-revision header over proxy ETags. It is not a published stable client SDK: [server-common/Cargo.toml](https://github.com/silverbulletmd/silverbullet/blob/main/server-common/Cargo.toml) marks the crate internal-only and `publish = false`. Reusing it would couple this app to the upstream workspace and still require our durable worker/reconciliation integration. No dependency decision or framework fork is made in this audit. The planned small adapter over maintained reqwest remains a reasonable option, informed by these official semantics.
 
-## Next implementation work
+## Work identified by the audit
 
 1. Implement and fixture-test the typed HTTPS client: correct path encoding, raw bytes, dedicated content revisions/strong ETags, conditional mutations, classified errors, and redirects/auth privacy.
 2. Connect the complete Markdown catalogue and progressive cache to local page browsing and search, reporting incomplete/offline availability accurately.

@@ -39,6 +39,7 @@ export component ConnectionPanel inherits Rectangle {
     in-out property <string> token;
     in-out property <bool> remember: false;
     in property <bool> busy: false;
+    in property <bool> automatic-mode:false;
     in property <string> message;
     callback test-connection();
     callback return-to-note();
@@ -61,10 +62,10 @@ export component ConnectionPanel inherits Rectangle {
             ConnectionField { theme:root.theme; text <=> root.token; password:true; label:"SilverBullet bearer token"; placeholder:"Leave blank to use Keychain or public access"; enabled:!root.busy; }
             CheckBox { text:"Remember token in Keychain"; checked <=> root.remember; enabled:!root.busy; }
             Text {
-                text:"Testing uses one temporary page in Quick Notes/Bulletnotes Probe to check safe updates, then removes it. Your existing notes stay untouched.";
+                text:(root.automatic-mode ? "Connecting uses one temporary page" : "Testing uses one temporary page") + " in Quick Notes/Bulletnotes Probe to check safe updates, then removes it. Your existing notes stay untouched.";
                 wrap:word-wrap; color:root.theme.muted; font-size:11px;
             }
-            ChoiceButton { theme:root.theme; text:root.busy ? "Checking connection…" : "Test connection"; enabled:!root.busy; clicked => { root.test-connection(); } }
+            ChoiceButton { theme:root.theme; text:root.busy ? "Checking connection…" : (root.automatic-mode ? "Connect" : "Test connection"); enabled:!root.busy; clicked => { root.test-connection(); } }
             Text { text:root.message; wrap:word-wrap; color:root.theme.ink; font-size:12px; }
         }
     }

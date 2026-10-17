@@ -80,6 +80,37 @@ impl AppearanceUi {
         self.0.present();
         receiver.await.map_err(|_| StoreError::Closed)?
     }
+    pub async fn save_connection(
+        &self,
+        connection: crate::domain::connection::ConnectionId,
+    ) -> Result<(), StoreError> {
+        let mut candidate = self.0.controller.borrow().displayed().clone();
+        candidate.active_connection = Some(connection);
+        let ticket = self
+            .0
+            .controller
+            .borrow_mut()
+            .begin_settings_commit(candidate, true)
+            .map_err(|_| StoreError::InvalidSettings)?;
+        let (sender, receiver) = oneshot::channel();
+        if let Err(error) = self
+            .0
+            .sender
+            .try_send(Write::Settings(Box::new(ticket), Some(sender)))
+        {
+            if let Write::Settings(ticket, _) = error.into_inner() {
+                let _ = self
+                    .0
+                    .controller
+                    .borrow_mut()
+                    .complete_settings_commit(*ticket, Err(StoreError::Closed));
+            }
+            self.0.present();
+            return Err(StoreError::Closed);
+        }
+        self.0.present();
+        receiver.await.map_err(|_| StoreError::Closed)?
+    }
     pub fn set_system_appearance(&self, system: SystemAppearance) {
         self.0.system.set(system);
         self.0.controller.borrow_mut().set_system_appearance(system);

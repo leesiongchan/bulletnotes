@@ -3,7 +3,10 @@ use crate::{
     domain::{connection::ConnectionId, error::CredentialError},
     sync::SecretToken,
 };
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 /// Synchronous OS boundary. Implementations must never log or persist secrets elsewhere.
 pub trait CredentialBackend: Send + Sync {
@@ -12,39 +15,79 @@ pub trait CredentialBackend: Send + Sync {
     fn delete(&self, connection: &ConnectionId) -> Result<(), CredentialError>;
 }
 #[derive(Clone)]
-pub struct CredentialStore(Arc<dyn CredentialBackend>);
+pub struct CredentialStore(Arc<CredentialState>);
+struct CredentialState {
+    backend: Arc<dyn CredentialBackend>,
+    denied: Mutex<HashSet<ConnectionId>>,
+}
 impl CredentialStore {
     pub fn new(backend: Arc<dyn CredentialBackend>) -> Self {
-        Self(backend)
+        Self(Arc::new(CredentialState {
+            backend,
+            denied: Mutex::new(HashSet::new()),
+        }))
     }
     pub fn keychain() -> Self {
         Self::new(Arc::new(Keychain))
     }
     pub async fn load(&self, id: &ConnectionId) -> Result<Option<SecretToken>, CredentialError> {
-        let backend = self.0.clone();
-        let id = id.clone();
-        tokio::task::spawn_blocking(move || backend.load(&id))
+        if self
+            .0
+            .denied
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(id)
+        {
+            return Err(CredentialError::Denied);
+        }
+        let backend = self.0.backend.clone();
+        let account = id.clone();
+        let result = tokio::task::spawn_blocking(move || backend.load(&account))
             .await
-            .map_err(|_| CredentialError::Unavailable)?
+            .map_err(|_| CredentialError::Unavailable)?;
+        if matches!(&result, Err(CredentialError::Denied)) {
+            self.0
+                .denied
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(id.clone());
+        }
+        result
     }
     pub async fn save(
         &self,
         id: &ConnectionId,
         token: &SecretToken,
     ) -> Result<(), CredentialError> {
-        let backend = self.0.clone();
-        let id = id.clone();
+        let backend = self.0.backend.clone();
+        let account = id.clone();
         let token = token.clone();
-        tokio::task::spawn_blocking(move || backend.save(&id, &token))
+        let result = tokio::task::spawn_blocking(move || backend.save(&account, &token))
             .await
-            .map_err(|_| CredentialError::Unavailable)?
+            .map_err(|_| CredentialError::Unavailable)?;
+        if result.is_ok() {
+            self.0
+                .denied
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(id);
+        }
+        result
     }
     pub async fn delete(&self, id: &ConnectionId) -> Result<(), CredentialError> {
-        let backend = self.0.clone();
-        let id = id.clone();
-        tokio::task::spawn_blocking(move || backend.delete(&id))
+        let backend = self.0.backend.clone();
+        let account = id.clone();
+        let result = tokio::task::spawn_blocking(move || backend.delete(&account))
             .await
-            .map_err(|_| CredentialError::Unavailable)?
+            .map_err(|_| CredentialError::Unavailable)?;
+        if result.is_ok() {
+            self.0
+                .denied
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(id);
+        }
+        result
     }
 }
 struct Keychain;

@@ -59,6 +59,8 @@ export component AppWindow inherits Window {
     public function close-find() { root.find-visible = false; editor.focus-editor(); }
     public function select-find-match(anchor:int, caret:int) { editor.select-match(anchor,caret); }
     callback native-window-ready();
+    callback local-startup-ready();
+    in property <bool> sync-available:false;
     callback request-quit();
     callback request-hide();
     callback browse-pages();
@@ -302,7 +304,7 @@ export component AppWindow inherits Window {
                 visible:root.active-view == "connection";
                 theme:root.theme; server-url <=> root.connection-url;
                 token <=> root.connection-token; remember <=> root.connection-remember;
-                busy:root.connection-busy; message:root.connection-message;
+                busy:root.connection-busy; message:root.connection-message; automatic-mode:root.sync-available;
                 test-connection => { root.test-connection(); }
                 return-to-note => { root.return-to-note(); }
             }
@@ -335,7 +337,7 @@ export component AppWindow inherits Window {
 export component LocalTray inherits SystemTrayIcon {
     icon: @image-url("../assets/native-preview-tray.svg");
     title: "BN";
-    tooltip: "Bulletnotes · local notes";
+    tooltip: "Bulletnotes";
     callback reopen();
     callback quit();
     Menu {

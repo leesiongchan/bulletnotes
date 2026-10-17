@@ -192,3 +192,29 @@ pub struct RemoteMetadata {
     pub permission: Permission,
     pub revision: Option<RemoteRevision>,
 }
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ConflictRecord {
+    pub id: Uuid,
+    pub key: PageKey,
+    pub base: Option<RemoteFile>,
+    pub local: PageSnapshot,
+    pub remote: RemoteRead,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReconcileDecision {
+    Unchanged,
+    InstallRemote(RemoteFile),
+    KeepPending,
+    Conflict(Box<ConflictRecord>),
+    RetainDeletedSnapshot,
+}
+
+/// What the editor last committed, plus the remote base from which it edited.
+/// The committed body distinguishes an acknowledged local write from a remote
+/// replacement that arrived before the editor could commit its next change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EditorBaseline {
+    pub body: String,
+    pub remote_base: Option<RemoteFile>,
+}

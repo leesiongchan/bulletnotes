@@ -17,6 +17,7 @@ pub struct SearchRequest {
 }
 pub enum AppAction {
     EditText(String),
+    CancelOpen,
     Navigate(View),
     OpenPage(PageKey),
     NewNote,
@@ -29,6 +30,22 @@ pub enum AppAction {
     Tick(Duration),
 }
 pub enum AppEvent {
+    RemoteApplied(PageSnapshot),
+    CatalogueProgress {
+        connection: ConnectionId,
+        indexed: usize,
+        total: usize,
+        complete: bool,
+    },
+    SyncStateChanged {
+        connection: ConnectionId,
+        state: crate::domain::status::SyncState,
+    },
+    ConflictDetected {
+        key: PageKey,
+        local_revision: LocalRevision,
+        id: uuid::Uuid,
+    },
     MetadataFailed(PageKey),
     LocalSaved(SavedRevision),
     LocalSaveFailed(PageKey, LocalRevision, StoreError),
@@ -45,6 +62,7 @@ pub enum AppEffect {
         key: PageKey,
         body: String,
         revision: LocalRevision,
+        baseline: Box<EditorBaseline>,
     },
     LoadPage {
         request_id: u64,
@@ -84,6 +102,11 @@ pub struct Coordinator {
     results: Option<SearchResults>,
     notice: Option<&'static str>,
     make_draft: Box<dyn FnMut() -> PageKey>,
+    selected_uncached: Option<PageKey>,
+    catalogue_progress: Option<(usize, usize, bool)>,
+    remote_state: crate::domain::status::SyncState,
+    active_conflict: Option<(PageKey, LocalRevision, uuid::Uuid)>,
+    search_folder: Option<PagePath>,
 }
 impl Coordinator {
     pub fn new(connection: ConnectionId, make_draft: impl FnMut() -> PageKey + 'static) -> Self {
@@ -101,6 +124,11 @@ impl Coordinator {
             results: None,
             notice: None,
             make_draft: Box::new(make_draft),
+            selected_uncached: None,
+            catalogue_progress: None,
+            remote_state: Default::default(),
+            active_conflict: None,
+            search_folder: None,
         }
     }
     pub fn editor(&self) -> Option<&EditorSession> {
@@ -121,6 +149,68 @@ impl Coordinator {
     pub fn loading(&self) -> bool {
         self.pending_load.is_some()
     }
+    pub fn selected_uncached(&self) -> Option<&PageKey> {
+        self.selected_uncached.as_ref()
+    }
+    pub fn catalogue_progress(&self) -> Option<(usize, usize, bool)> {
+        self.catalogue_progress
+    }
+    pub fn active_conflict(&self) -> Option<uuid::Uuid> {
+        self.active_conflict
+            .as_ref()
+            .filter(|(key, revision, _)| {
+                self.editor
+                    .as_ref()
+                    .is_some_and(|editor| editor.key() == key && editor.revision() >= *revision)
+            })
+            .map(|(_, _, id)| *id)
+    }
+    fn uncached_notice(&mut self) {
+        if self.selected_uncached.is_some() {
+            self.notice = Some(
+                if matches!(
+                    self.remote_state,
+                    crate::domain::status::SyncState::LocalOnly
+                        | crate::domain::status::SyncState::Offline
+                        | crate::domain::status::SyncState::Authentication
+                ) {
+                    "Page is not cached. Connect to download it; your current note is still here."
+                } else {
+                    "Downloading this page. Your current note is still here."
+                },
+            );
+        }
+    }
+    pub fn change_connection(
+        &mut self,
+        connection: ConnectionId,
+        make_draft: impl FnMut() -> PageKey + 'static,
+    ) -> bool {
+        if self
+            .editor
+            .as_ref()
+            .is_some_and(|editor| editor.dirty() || editor.writing())
+        {
+            return false;
+        }
+        self.connection = connection;
+        self.editor = None;
+        self.navigation = NavigationState::default();
+        self.pending_load = None;
+        self.pending_transition = None;
+        self.latest_search = None;
+        self.completed_search = None;
+        self.flush_target = None;
+        self.results = None;
+        self.notice = None;
+        self.make_draft = Box::new(make_draft);
+        self.selected_uncached = None;
+        self.catalogue_progress = None;
+        self.remote_state = Default::default();
+        self.active_conflict = None;
+        self.search_folder = None;
+        true
+    }
     pub fn connection(&self) -> &ConnectionId {
         &self.connection
     }
@@ -133,6 +223,13 @@ impl Coordinator {
     pub fn dispatch(&mut self, action: AppAction) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match action {
+            AppAction::CancelOpen => {
+                self.pending_load = None;
+                self.pending_transition = None;
+                if self.selected_uncached.take().is_some() {
+                    self.notice = None;
+                }
+            }
             AppAction::EditText(text) => {
                 if let Some(editor) = &mut self.editor {
                     match editor.edit(text, self.now) {
@@ -140,6 +237,7 @@ impl Coordinator {
                             self.pending_load = None;
                             self.pending_transition = None;
                             self.notice = None;
+                            self.selected_uncached = None;
                         }
                         Ok(false) => {}
                         Err(_) => self.notice = Some("This page cannot be edited."),
@@ -157,10 +255,16 @@ impl Coordinator {
                 }
             }
             AppAction::Navigate(view) => {
+                self.pending_load = None;
+                self.pending_transition = None;
+                if view != View::AllPages && self.selected_uncached.take().is_some() {
+                    self.notice = None;
+                }
                 self.navigation.set_view(view);
                 self.flush(&mut effects);
             }
             AppAction::OpenPage(key) => {
+                self.selected_uncached = None;
                 if key.connection == self.connection {
                     if self.pending_load.is_none()
                         && self
@@ -175,7 +279,10 @@ impl Coordinator {
                     }
                 }
             }
-            AppAction::NewNote => self.transition(Transition::New, &mut effects),
+            AppAction::NewNote => {
+                self.selected_uncached = None;
+                self.transition(Transition::New, &mut effects);
+            }
             AppAction::StepHistory(step) => {
                 let mut history = self.navigation.clone();
                 let key = if step < 0 {
@@ -193,9 +300,14 @@ impl Coordinator {
                 if request.query.connection == self.connection
                     && self.latest_search.is_none_or(|id| request.id > id)
                 {
+                    let same_query = self.navigation.search_query == request.query.text
+                        && self.search_folder == request.query.folder;
                     self.latest_search = Some(request.id);
-                    self.completed_search = None;
-                    self.results = None;
+                    if !same_query {
+                        self.completed_search = None;
+                        self.results = None;
+                    }
+                    self.search_folder = request.query.folder.clone();
                     self.navigation.search_query = request.query.text.clone();
                     effects.push(AppEffect::Search(request));
                 }
@@ -227,6 +339,36 @@ impl Coordinator {
     pub fn receive(&mut self, event: AppEvent) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match event {
+            AppEvent::CatalogueProgress {
+                connection,
+                indexed,
+                total,
+                complete,
+            } => {
+                if connection == self.connection {
+                    self.catalogue_progress = Some((indexed, total, complete));
+                }
+            }
+            AppEvent::SyncStateChanged { connection, state } => {
+                if connection == self.connection {
+                    self.remote_state = state;
+                    self.uncached_notice();
+                }
+            }
+            AppEvent::ConflictDetected {
+                key,
+                local_revision,
+                id,
+            } => {
+                if key.connection == self.connection {
+                    self.active_conflict = Some((key, local_revision, id));
+                }
+            }
+            AppEvent::RemoteApplied(page) => {
+                if let Some(editor) = &mut self.editor {
+                    editor.apply_remote_snapshot(page);
+                }
+            }
             AppEvent::MetadataFailed(key) => {
                 if self
                     .editor
@@ -324,9 +466,14 @@ impl Coordinator {
                         self.notice = None;
                         effects.push(AppEffect::RecordVisit(key));
                     }
+                    Ok(None) => {
+                        self.selected_uncached = Some(key);
+                        self.uncached_notice();
+                    }
                     _ => {
-                        self.notice =
-                            Some("Page is unavailable locally. Your current note is still here.")
+                        self.notice = Some(
+                            "Page could not be opened locally. Your current note is still here.",
+                        );
                     }
                 }
             }
@@ -368,11 +515,13 @@ impl Coordinator {
             let revision = editor.revision();
             let body = editor.body().to_owned();
             let key = editor.key().clone();
+            let baseline = Box::new(editor.baseline());
             editor.start_write(revision);
             effects.push(AppEffect::SaveLocal {
                 key,
                 body,
                 revision,
+                baseline,
             });
         }
     }

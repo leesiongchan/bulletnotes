@@ -105,10 +105,19 @@ impl ConnectionController {
                 cleanup_pending: true,
             });
         }
-        let key = probe::new_probe_key(client.connection_id().clone());
-        self.store.register_probe(&key).await?;
+        // A failed attempt may still create its page after an absence read.
+        // Reuse its identity and retain the durable watch even after success.
+        let historical = self.store.pending_probes(client.connection_id()).await?;
+        let watched = !historical.is_empty();
+        let key = historical
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| probe::new_probe_key(client.connection_id().clone()));
+        if !watched {
+            self.store.register_probe(&key).await?;
+        }
         let write_capability = probe::verify_write_guards(&client, key.clone()).await;
-        if write_capability.is_ok() {
+        if write_capability.is_ok() && !watched {
             self.store.forget_probe(&key).await?;
         }
         Ok(ConnectionOutcome {
@@ -126,14 +135,15 @@ impl ConnectionController {
     async fn cleanup_pending_inner(&self, client: &SilverBulletClient) -> Result<(), AppError> {
         for key in self.store.pending_probes(client.connection_id()).await? {
             probe::cleanup_probe(client, &key).await?;
-            self.store.forget_probe(&key).await?;
+            // Confirmed absence is not proof that an uncertain request cannot
+            // arrive later. Verified workers recheck these exact owned keys.
         }
         Ok(())
     }
 }
 
 /// Validated form input. Debug redacts the optional credential through SecretToken.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ConnectionInput {
     pub config: ConnectionConfig,
     pub token: Option<SecretToken>,

@@ -127,7 +127,16 @@ pub async fn verify_write_guards(
         RemoteRead::Present(file)
             if file.body == source(id, 'B')
                 && file.revision.as_ref() == Some(&b)
-                && file.permission == Permission::ReadWrite => {}
+                && file.permission == Permission::ReadWrite =>
+        {
+            match client.read_if_changed(&file).await? {
+                RemoteRead::Present(cached)
+                    if cached.body == file.body
+                        && cached.revision == file.revision
+                        && cached.permission == Permission::ReadWrite => {}
+                _ => return Err(SyncError::Incompatible),
+            }
+        }
         _ => return Err(SyncError::Incompatible),
     }
     let mut delete = operation(&key, String::new(), WriteCondition::Match(b));
@@ -150,8 +159,8 @@ pub async fn verify_write_guards(
         ],
     })
 }
-/// The caller retains the journal entry unless absence is confirmed. Replacement
-/// content is left intact even when it occupies an old generated probe path.
+/// Checks present absence, without retiring a historical uncertainty watch.
+/// Replacement content at an old generated probe path is always left intact.
 pub async fn cleanup_probe(client: &SilverBulletClient, key: &PageKey) -> Result<(), SyncError> {
     let id = probe_id(key)?;
     match client.read(key).await? {
