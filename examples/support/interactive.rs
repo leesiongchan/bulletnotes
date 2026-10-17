@@ -1,6 +1,6 @@
 //! Disposable interactive native gate. No note persistence or HTTP client.
 use crate::chrome::{self, ChromeMonitor};
-use bulletnotes::{AppWindow, NativePreviewTray};
+use bulletnotes::{NativePreviewTray, NativePreviewWindow as AppWindow};
 use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code, HotKey, Modifiers},

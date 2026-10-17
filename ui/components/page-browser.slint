@@ -1,0 +1,256 @@
+import { ScrollView, ListView } from "std-widgets.slint";
+import { UiTheme, PageRow } from "../types.slint";
+import { ActionButton } from "action-button.slint";
+component ResultRow inherits FocusScope {
+    in property <UiTheme> theme;
+    in property <PageRow> data;
+    in property <bool> selected;
+    callback opened();
+    callback step(int);
+    height: 82px;
+    accessible-role: button;
+    accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
+    accessible-action-default => { root.opened(); }
+    changed selected => { if (root.selected) { root.focus(); } }
+    init => { if (root.selected) { root.focus(); } }
+    key-pressed(event) => {
+        if (event.text == Key.Return) { root.opened(); return accept; }
+        if (event.text == Key.DownArrow) { root.step(1); return accept; }
+        if (event.text == Key.UpArrow) { root.step(-1); return accept; }
+        return reject;
+    }
+    Rectangle {
+        x: 8px;
+        y: 2px;
+        width: parent.width - 16px;
+        height: parent.height - 4px;
+        border-radius: 7px;
+        background: root.selected || touch.has-hover ? root.theme.selection : transparent;
+        border-width: root.has-focus ? 1px : 0px;
+        border-color: root.theme.accent;
+        Text {
+            x: 12px;
+            y: 10px;
+            width: parent.width - 100px;
+            height: 16px;
+            text: root.data.title;
+            color: root.theme.ink;
+            font-size: 12px;
+            font-weight: 550;
+            overflow: elide;
+        }
+
+        Text {
+            x: parent.width - 88px;
+            y: 11px;
+            width: 76px;
+            height: 14px;
+            text: root.data.availability;
+            color: root.theme.muted;
+            font-size: 9px;
+            horizontal-alignment: right;
+            overflow: elide;
+        }
+
+        Text {
+            x: 12px;
+            y: 31px;
+            width: parent.width - 24px;
+            height: 13px;
+            text: root.data.path;
+            color: root.theme.muted;
+            font-size: 10px;
+            overflow: elide;
+        }
+
+        Text {
+            x: 12px;
+            y: 50px;
+            width: parent.width - 24px;
+            height: 15px;
+            text: root.data.excerpt;
+            color: root.theme.muted;
+            font-size: 11px;
+            overflow: elide;
+        }
+
+        touch := TouchArea {
+            clicked => { root.focus(); root.opened(); }
+        }
+    }
+}
+
+export component PageBrowser inherits Rectangle {
+    in property <UiTheme> theme;
+    in property <[PageRow]> results;
+    in-out property <string> query;
+    in-out property <string> folder;
+    in-out property <int> selected-index:-1;
+    in property <string> index-status;
+    callback query-changed(string);
+    callback folder-changed(string);
+    callback open-page(string);
+    callback return-to-note();
+    public function focus-query() { query-input.focus(); }
+    background: root.theme.paper;
+    function move-selection(step: int) {
+        if (root.results.length > 0) {
+            root.selected-index = max(0,min(root.results.length - 1,root.selected-index + step));
+            if (root.selected-index * 82px < -list.content-y) { list.content-y = -root.selected-index * 82px; }
+            else if ((root.selected-index + 1) * 82px > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * 82px); }
+        }
+    }
+    Text {
+        x: 24px;
+        y: 14px;
+        text: "All pages";
+        font-size: 17px;
+        font-weight: 550;
+        color: root.theme.ink;
+    }
+
+    ActionButton {
+        x: parent.width - 44px;
+        y: 9px;
+        theme: root.theme;
+        icon: @image-url("../../assets/icons/close.svg");
+        label: "Return to note";
+        clicked => { root.return-to-note(); }
+    }
+
+    Rectangle {
+        x: 24px;
+        y: 52px;
+        width: parent.width - 48px;
+        height: 34px;
+        border-radius: 6px;
+        background: root.theme.surface;
+        border-width: 1px;
+        border-color: query-input.has-focus ? root.theme.accent : root.theme.line;
+        Image {
+            x: 10px;
+            y: 10px;
+            width: 14px;
+            height: 14px;
+            source: @image-url("../../assets/icons/search.svg");
+            colorize: root.theme.muted;
+        }
+
+        query-input := TextInput {
+            x: 33px;
+            y: 0px;
+            width: parent.width - 42px;
+            height: parent.height;
+            vertical-alignment: center;
+            text <=> root.query;
+            single-line: true;
+            color: root.theme.ink;
+            font-size: 12px;
+            selection-background-color: root.theme.selection;
+            selection-foreground-color: root.theme.ink;
+            accessible-label: "Search every page";
+            edited => { root.selected-index = -1; root.query-changed(self.text); }
+            key-pressed(event) => {
+                if (event.text == Key.DownArrow) { root.move-selection(1); return accept; }
+                if (event.text == Key.Return && root.results.length > 0) { root.open-page(root.results[min(root.results.length - 1,max(0,root.selected-index))].key); return accept; }
+                return reject;
+            }
+        }
+
+        Text {
+            x: 33px;
+            y: 0px;
+            width: parent.width - 42px;
+            height: parent.height;
+            vertical-alignment: center;
+            text: "Search titles, paths and note text";
+            font-size: 12px;
+            color: root.theme.muted;
+            visible: root.query == "";
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        x: 24px;
+        y: 94px;
+        width: parent.width - 48px;
+        height: 30px;
+        border-radius: 6px;
+        background: root.theme.surface;
+        border-width: 1px;
+        border-color: folder-input.has-focus ? root.theme.accent : root.theme.line;
+        Text {
+            x: 10px;
+            width: 48px;
+            height: parent.height;
+            text: "Folder";
+            vertical-alignment: center;
+            font-size: 11px;
+            color: root.theme.muted;
+        }
+
+        folder-input := TextInput {
+            x: 62px;
+            width: parent.width - 72px;
+            height: parent.height;
+            vertical-alignment: center;
+            single-line: true;
+            text <=> root.folder;
+            font-size: 11px;
+            color: root.theme.ink;
+            selection-background-color: root.theme.selection;
+            selection-foreground-color: root.theme.ink;
+            accessible-label: "Filter by folder, empty for all folders";
+            edited => { root.selected-index = -1; root.folder-changed(self.text); }
+        }
+
+        Text {
+            x: 62px;
+            width: parent.width - 72px;
+            height: parent.height;
+            vertical-alignment: center;
+            text: "All folders";
+            font-size: 11px;
+            color: root.theme.muted;
+            visible: root.folder == "";
+            accessible-role: none;
+        }
+    }
+
+    list := ListView {
+        x: 8px;
+        y: 136px;
+        width: parent.width - 16px;
+        height: parent.height - 170px;
+        for item[index] in root.results: ResultRow {
+            width: parent.width;
+            theme: root.theme;
+            data: item;
+            selected: root.selected-index == index;
+            opened => { root.open-page(item.key); }
+            step(amount) => { root.move-selection(amount); }
+        }
+    }
+
+    Text {
+        x: 24px;
+        y: 148px;
+        width: parent.width - 48px;
+        text: "No matching pages";
+        visible: root.results.length == 0;
+        color: root.theme.muted;
+        font-size: 12px;
+    }
+
+    Text {
+        x: 24px;
+        y: parent.height - 25px;
+        width: parent.width - 48px;
+        height: 16px;
+        text: root.index-status;
+        color: root.theme.muted;
+        font-size: 10px;
+        overflow: elide;
+    }
+}

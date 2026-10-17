@@ -1,0 +1,135 @@
+import { ScrollView } from "std-widgets.slint";
+import { UiTheme } from "../types.slint";
+export component NoteEditor inherits Rectangle {
+    in property <UiTheme> theme;
+    in-out property <string> text;
+    in property <float> font-size-px:15;
+    in property <string> paper-style:"plain";
+    in property <bool> read-only:false;
+    out property <float> scroll-y:-scroll.content-y / 1px;
+    out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
+    callback edited(string);
+    callback key-pressed(KeyEvent) -> EventResult;
+    public function focus-editor() { input.focus(); }
+    public function restore-selection(anchor: int, caret: int, y: float) { input.set-selection-offsets(anchor,caret); scroll.content-y = -max(0,y) * 1px; }
+    background: root.theme.paper;
+    clip: true;
+    measure-one := Text {
+        visible: false;
+        text: "Ag";
+        font-family: "Menlo";
+        font-size: root.font-size-px * 1px;
+        line-height-factor: 1.5;
+        wrap: no-wrap;
+    }
+
+    measure-two := Text {
+        visible: false;
+        text: "Ag\nAg";
+        font-family: "Menlo";
+        font-size: root.font-size-px * 1px;
+        line-height-factor: 1.5;
+        wrap: no-wrap;
+    }
+
+    private property <length> decoration-step:root.paper-style == "ruled" ? root.line-height : 18px;
+    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? 14px : 0px)) / root.decoration-step);
+    private property <int> rows:ceil(root.height / root.decoration-step) + 2;
+    private property <int> columns:ceil(root.width / 18px) + 1;
+    for row in root.rows: Rectangle {
+        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? 14px : 0px) - 3px;
+        height: root.paper-style == "dots" ? 2px : 1px;
+        width: parent.width;
+        visible: root.paper-style != "plain";
+        accessible-role: none;
+        background: root.paper-style == "ruled" || root.paper-style == "grid" ? root.theme.pattern : transparent;
+        for col in root.columns: Rectangle {
+            visible: root.paper-style == "dots";
+            x: col * 18px + 8px;
+            width: 1.5px;
+            height: 1.5px;
+            border-radius: 1px;
+            background: root.theme.pattern;
+            accessible-role: none;
+        }
+    }
+    for col in root.columns: Rectangle {
+        visible: root.paper-style == "grid";
+        x: col * 18px + 8px;
+        width: 1px;
+        height: parent.height;
+        background: root.theme.pattern;
+        accessible-role: none;
+    }
+    context := ContextMenuArea {
+        Menu {
+            MenuItem {
+                title: "Undo";
+                enabled: !root.read-only;
+                activated => { input.undo(); }
+            }
+
+            MenuItem {
+                title: "Redo";
+                enabled: !root.read-only;
+                activated => { input.redo(); }
+            }
+
+            MenuItem {
+                title: "Cut";
+                enabled: !root.read-only;
+                activated => { input.cut(); }
+            }
+
+            MenuItem {
+                title: "Copy";
+                enabled: !root.text.is-empty;
+                activated => { input.copy(); }
+            }
+
+            MenuItem {
+                title: "Paste";
+                enabled: !root.read-only;
+                activated => { input.paste(); }
+            }
+
+            MenuItem {
+                title: "Select All";
+                enabled: !root.text.is-empty;
+                activated => { input.select-all(); }
+            }
+        }
+
+        scroll := ScrollView {
+            width: parent.width;
+            height: parent.height;
+            content-width: self.visible-width;
+            content-height: max(self.visible-height,input.preferred-height + 36px);
+            input := TextInput {
+                x: 26px;
+                y: 14px;
+                width: max(1px,scroll.visible-width - 52px);
+                height: max(scroll.visible-height - 28px,self.preferred-height);
+                text <=> root.text;
+                single-line: false;
+                wrap: word-wrap;
+                read-only: root.read-only;
+                font-family: "Menlo";
+                font-size: root.font-size-px * 1px;
+                line-height-factor: 1.5;
+                color: root.theme.ink;
+                selection-background-color: root.theme.selection;
+                selection-foreground-color: root.theme.ink;
+                input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
+                page-height: scroll.visible-height;
+                accessible-label: "Markdown note";
+                edited => { root.edited(self.text); }
+                key-pressed(event) => { root.key-pressed(event) }
+                cursor-position-changed(pos) => {
+                    if (pos.y + self.y + scroll.content-y < 0px) { scroll.content-y = min(0px,-pos.y - self.y); }
+                    else if (pos.y + self.y + scroll.content-y > scroll.visible-height - root.line-height) { scroll.content-y = min(0px,scroll.visible-height - pos.y - self.y - root.line-height); }
+                }
+            }
+        }
+    }
+}

@@ -11,6 +11,7 @@ native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor"
 probe-skia = ["slint/renderer-skia"]
 
 [dependencies]
+tempfile = "=3.27.0"
 tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
 rusqlite = { version = "=0.40.2", features = ["bundled", "backup"] }
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -22,6 +23,7 @@ url = "=2.5.8"
 slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+rfd = { version = "=0.17.2", default-features = false }
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }
@@ -34,7 +36,6 @@ slint-build = "=1.18.1"
 
 [dev-dependencies]
 png = "=0.18.1"
-tempfile = "=3.27.0"
 
 [lints.clippy]
 all = "warn"

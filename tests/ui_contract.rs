@@ -138,3 +138,107 @@ fn stale_failure_does_not_cancel_a_newer_preview_of_the_same_palette() {
     assert_eq!(appearance.resolved().unwrap().id, ThemeId("matcha".into()));
     assert_eq!(appearance.committed(), &AppSettings::default());
 }
+
+#[test]
+#[ignore = "opens the generated-text native UI fixture; build example ui_review first"]
+fn native_palette_and_view_changes_preserve_source() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let output = std::process::Command::new(executable)
+        .arg("--contract")
+        .env("SLINT_BACKEND", "winit-femtovg")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("native_ui_contract_passed: true"));
+}
+
+#[test]
+#[ignore = "opens generated-text native fixture; build ui_review first"]
+fn native_appearance_actions_persist_and_roll_back_on_failure() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let output = std::process::Command::new(executable)
+        .arg("--appearance-contract")
+        .env("SLINT_BACKEND", "winit-femtovg")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("native_appearance_contract_passed: true"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+#[ignore = "captures the generated native review window; build ui_review first"]
+fn maximum_text_size_keeps_native_navigation_visible() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("large-text.png");
+    for attempt in 0..3 {
+        let output = std::process::Command::new(&executable)
+            .args(["--ruled", "--font", "24", "--capture"])
+            .arg(&path)
+            .env("SLINT_BACKEND", "winit-femtovg")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let decoder =
+            png::Decoder::new(std::io::BufReader::new(std::fs::File::open(&path).unwrap()));
+        let mut reader = decoder.read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let frame = reader.next_frame(&mut pixels).unwrap();
+        let channels = match frame.color_type {
+            png::ColorType::Rgb => 3,
+            png::ColorType::Rgba => 4,
+            other => panic!("unsupported capture format: {other:?}"),
+        };
+        let expected = [243, 240, 231]; // Paper footer surface, distinct from the editor's paper.
+        let y = frame.height as usize - 30;
+        let mut surface_pixels = 0;
+        for x in 40..frame.width as usize - 40 {
+            let offset = (y * frame.width as usize + x) * channels;
+            if pixels[offset..offset + 3]
+                .iter()
+                .zip(expected)
+                .all(|(actual, expected)| actual.abs_diff(expected) <= 2)
+            {
+                surface_pixels += 1;
+            }
+        }
+        assert!(
+            surface_pixels > frame.width as usize / 2,
+            "editor obscures navigation surface on capture {attempt}: {surface_pixels}"
+        );
+    }
+}

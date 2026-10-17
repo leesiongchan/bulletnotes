@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(all(target_os = "macos", feature = "native-validation")))]
         return Err("--material requires macOS and --features native-validation".into());
     }
-    let window = bulletnotes::AppWindow::new()?;
+    let window = bulletnotes::NativePreviewWindow::new()?;
     window.set_frameless_probe(std::env::args().any(|arg| arg == "--frameless"));
     window.set_styled_preview(slint::StyledText::from_markdown(
         "A **styled title** and [a link](https://example.invalid)",

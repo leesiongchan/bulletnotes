@@ -1,0 +1,72 @@
+import { UiTheme } from "../types.slint";
+export component ActionButton inherits FocusScope {
+    in property <UiTheme> theme;
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> selected:false;
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    key-pressed(event) => {
+        if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; }
+        return reject;
+    }
+    Rectangle {
+        border-radius: 5px;
+        background: root.selected || touch.has-hover ? root.theme.selection : transparent;
+        border-width: root.has-focus ? 1px : 0px;
+        border-color: root.theme.accent;
+        Image {
+            source: root.icon;
+            colorize: root.enabled ? root.theme.ink : root.theme.muted;
+            opacity: root.enabled ? 1 : 0.45;
+            width: 16px;
+            height: 16px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+
+        touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { root.focus(); root.clicked(); }
+        }
+    }
+}
+
+export component ChoiceButton inherits FocusScope {
+    in property <UiTheme> theme;
+    in property <string> text;
+    in property <string> label: root.text;
+    in property <bool> selected:false;
+    callback clicked();
+    min-height: 28px;
+    preferred-height: 28px;
+    min-width: 32px;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
+    Rectangle {
+        border-radius: 5px;
+        background: root.selected ? root.theme.selection : (touch.has-hover ? root.theme.selection : transparent);
+        border-width: root.has-focus ? 1px : 0px;
+        border-color: root.theme.accent;
+        Text {
+            text: root.text;
+            color: root.selected ? root.theme.ink : root.theme.muted;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+
+        touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { root.focus(); root.clicked(); }
+        }
+    }
+}

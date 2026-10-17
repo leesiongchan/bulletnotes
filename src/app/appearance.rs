@@ -37,6 +37,9 @@ impl AppearanceController {
             preview_id: uuid::Uuid::new_v4(),
         })
     }
+    pub fn displayed(&self) -> &AppSettings {
+        &self.displayed
+    }
     pub fn committed(&self) -> &AppSettings {
         &self.committed
     }

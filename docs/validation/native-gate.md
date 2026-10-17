@@ -1,6 +1,6 @@
 # Native editor fidelity gate
 
-Date: 2026-10-17. **Gate not passed; Tasks 2–13 have not started.**
+Date: 2026-10-17. **Gate not passed. Domain, theme, and durable-store tasks are complete; native UI work is provisional while input/accessibility observations remain open.**
 
 This is a disposable native feasibility harness, not the application or a production release. The initial design required editable title/link accents together with native editing. The supported Slint input path did not meet that inline-style requirement. The user has now selected revision A: supported plain-text Slint editing with inline heading/link colors deferred. Full themes remain required. Remaining native editing, materials, activation, and accessibility observations are still incomplete.
 
@@ -202,3 +202,8 @@ Evidence on explicit Rust 1.99.1 / macOS 27.0.1 arm64: resize configuration regr
 The standard all-feature suite passed 46 tests with 7 ignored (six native cases plus the child-only storage fixture), default all-target check and all-target/all-feature Clippy passed, and formatting/diff checks passed. The separate Preview 2 development .app was ad-hoc signed, verified, opened, and a targeted human resize/hover retry requested. No physical-gesture success or native-gate completion is inferred from configuration alone.
 
 Human retry result: the user answered “Both resizing and hover/drag work” to the targeted Preview 2 edge/corner resizing and full top-strip hover/reveal/drag check. These native frame interactions are now observed passed on this Mac. The other editing, IME, VoiceOver, and focus/full-screen rows remain untested; the overall gate is not complete.
+
+
+## Native themed views checkpoint
+
+Provisional Note, All pages, and Appearance views now build against supported Slint primitives. The generated-content capture matrix, actual callback/SQLite failure check, and unresolved rendering/startup observations are recorded in [visual-matrix.md](visual-matrix.md). The supported selection getter boundary and pending scope decision are recorded in [selection-api.md](selection-api.md). These checks do not complete the human IME, VoiceOver, undo/selection, or activation/focus rows.

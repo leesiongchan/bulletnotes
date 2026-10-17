@@ -5,7 +5,7 @@ mod chrome;
 #[path = "support/interactive.rs"]
 mod interactive;
 
-use bulletnotes::AppWindow;
+use bulletnotes::NativePreviewWindow as AppWindow;
 use slint::ComponentHandle;
 use std::{
     cell::Cell,

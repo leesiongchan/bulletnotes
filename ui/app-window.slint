@@ -1,83 +1,285 @@
-import { TextEdit, VerticalBox, HorizontalBox, Button, Palette } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
+import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
+import { ActionButton } from "components/action-button.slint";
+import { NoteEditor } from "components/note-editor.slint";
+import { PageBrowser } from "components/page-browser.slint";
+import { AppearancePanel } from "components/appearance-panel.slint";
+export { UiTheme, PageRow, ThemeOption, ThemePair }
+export {
+    NativePreviewWindow,
+    NativePreviewTray,
+} from "probes/native-preview.slint";
+export { NativeMaterialWindow } from "probes/native-material.slint";
 
-// Solid-paper native validation harness. No local persistence or server connection.
 export component AppWindow inherits Window {
-    title: "Bulletnotes Native Preview 2";
-    init => { Palette.color-scheme = ColorScheme.light; }
+    title: "Bulletnotes";
     preferred-width: 505px;
     preferred-height: 552px;
     min-width: 400px;
     min-height: 440px;
     background: transparent;
-    in property <bool> frameless-probe: true;
-    in-out property <bool> probe-pinned: false;
-    no-frame: root.frameless-probe;
-    resize-border-width: 0px; // AppKit owns edge resizing in the macOS preview.
-    always-on-top: root.probe-pinned;
-    in-out property <string> source <=> editor.text;
-    in property <styled-text> styled-preview;
-    in property <string> probe-status: "Temporary text · nothing saved or synced";
-    in property <bool> chrome-revealed: false;
-    callback toggle-activation();
-    callback request-hide();
-    callback request-quit();
-    public function focus-editor() { editor.focus(); }
-
-    Rectangle {
-        background: #fcfaf4;
-        border-radius: root.frameless-probe ? 14px : 0px;
-        border-width: 1px;
-        border-color: #d5d8cc;
-        clip: true;
-        // The full top strip is a permanent drag target; revealing controls changes no geometry.
-        header := Rectangle {
-            x:0px;y:0px;width:parent.width;height:36px;
-            background:root.chrome-revealed ? #f3f0e7 : transparent;
-            WindowMoveArea {}
-            Text {
-                x:96px;width:parent.width - 260px;height:parent.height;
-                text:"Bulletnotes";color:#686e60;font-size:11px;vertical-alignment:center;
-                visible:root.chrome-revealed;
-            }
-            HorizontalBox {
-                x:parent.width - self.width - 8px;y:5px;height:26px;
-                padding:0px;spacing:4px;visible:root.chrome-revealed;
-                Button { text:root.probe-pinned ? "Unpin" : "Pin";accessible-label:"Pin note above other windows";clicked=>{ root.probe-pinned=!root.probe-pinned; } }
-                Button { text:"Hide";accessible-label:"Hide native preview";clicked=>{ root.request-hide(); } }
-                Button { text:"Quit";accessible-label:"Quit native preview";clicked=>{ root.request-quit(); } }
-            }
-        }
-        VerticalBox {
-            y:40px;height:parent.height - 40px;
-            padding:20px;spacing:12px;
-            Text { text: "NATIVE EDITING CHECK · UNSAVED PREVIEW"; color: #54614d; font-size: 10px; }
-            editor := TextEdit {
-                text: "# A little space to think\n\nThis is a temporary native preview.\n\nTry selecting text, undo/redo, multiline paste, and your input method.\n\n👩🏽‍💻 日本語 café\n\nText typed here is not saved or synced.";
-                font-family: "Menlo";
-                font-size: 15px;
-                wrap: word-wrap;
-                accessible-label: "Temporary Markdown note";
-            }
-            Text { text: root.probe-status; color: #54614d; font-size: 10px; wrap: word-wrap; }
-        }
-    }
-}
-
-export component NativePreviewTray inherits SystemTrayIcon {
-    icon: @image-url("../assets/native-preview-tray.svg");
-    title: "BN 2";
-    tooltip: "Bulletnotes Native Preview 2";
-    callback reopen();
-    callback retry-hotkey();
+    no-frame: true;
+    resize-border-width: 0px;
+    always-on-top: root.is-pinned;
+    in property <UiTheme> theme;
+    in-out property <string> active-view:"note";
+    in property <string> current-path;
+    in-out property <string> note-text;
+    in property <string> status-text;
+    in-out property <bool> is-pinned:false;
+    in property <bool> chrome-revealed:false;
+    in property <bool> note-read-only:false;
+    in-out property <float> font-size-px:15;
+    in-out property <string> paper-style:"plain";
+    in-out property <string> appearance-mode:"system";
+    in property <string> selected-theme-id;
+    in property <[PageRow]> page-results;
+    in property <[ThemePair]> theme-options;
+    in-out property <string> search-query;
+    in-out property <string> search-folder;
+    in property <string> index-status;
+    in property <string> note-counter;
+    in property <bool> can-go-back:false;
+    in property <bool> can-go-forward:false;
+    in property <string> appearance-message;
+    in property <bool> low-contrast-warning:false;
+    out property <float> editor-scroll-y:editor.scroll-y;
+    out property <length> editor-line-height:editor.line-height;
+    out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0);
+    callback browse-pages();
+    callback open-page(string);
+    callback new-note();
+    callback show-appearance();
+    callback return-to-note();
+    callback note-edited(string);
+    callback history-step(int);
+    callback appearance-changed();
+    callback theme-selected(string);
+    callback import-theme();
+    callback export-theme();
+    callback query-changed(string);
+    callback folder-changed(string);
     callback toggle-pin();
-    callback quit();
-    Menu {
-        MenuItem { title: "Show native preview"; activated => { root.reopen(); } }
-        MenuItem { title: "Enable Option+A"; activated => { root.retry-hotkey(); } }
-        MenuItem { title: "Pin / unpin note"; activated => { root.toggle-pin(); } }
-        MenuSeparator {}
-        MenuItem { title: "Quit native preview"; activated => { root.quit(); } }
+    callback apply-low-contrast();
+    callback cancel-theme-import();
+    public function focus-editor() { editor.focus-editor(); }
+    public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
+    function shortcut(event: KeyEvent) -> EventResult {
+        if (event.modifiers.meta) {
+            if (event.text == "k" || event.text == "K") { root.browse-pages(); return accept; }
+            if (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
+            if (event.text == ",") { root.show-appearance(); return accept; }
+            if (event.text == "[") { root.history-step(-1); return accept; }
+            if (event.text == "]") { root.history-step(1); return accept; }
+        }
+        if (event.text == Key.Escape && root.active-view != "note") {
+            if (root.low-contrast-warning) { root.cancel-theme-import(); } else { root.return-to-note(); }
+            return accept;
+        }
+        return reject;
+    }
+    init => { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    changed theme => { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    changed active-view => {
+        if (root.active-view == "pages") { pages.focus-query(); }
+        else if (root.active-view == "appearance") { appearance.focus-panel(); }
+        else if (root.active-view == "note") { editor.focus-editor(); }
+    }
+    Rectangle {
+        background: root.theme.paper;
+        border-radius: 14px;
+        clip: true;
+        keys := FocusScope {
+            key-pressed(event) => { root.shortcut(event) }
+            header := Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: 36px;
+                background: root.chrome-revealed ? root.theme.surface : transparent;
+                WindowMoveArea { }
+
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: "Bulletnotes";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    visible: root.chrome-revealed;
+                }
+
+                ActionButton {
+                    x: parent.width - 40px;
+                    y: 4px;
+                    theme: root.theme;
+                    icon: @image-url("../assets/icons/pin.svg");
+                    label: root.is-pinned ? "Unpin note" : "Pin note above other windows";
+                    selected: root.is-pinned;
+                    visible: root.chrome-revealed;
+                    clicked => { root.toggle-pin(); }
+                }
+            }
+            // Retain the editor instance while other views are shown, preserving its native editing state.
+            note-view := Rectangle {
+                y: 36px;
+                height: parent.height - 36px;
+                width: parent.width;
+                visible: root.active-view != "pages" && root.active-view != "appearance" && root.active-view != "connection" && root.active-view != "recovery";
+                Text {
+                    x: 26px;
+                    y: 10px;
+                    width: parent.width - 52px;
+                    height: 14px;
+                    text: root.current-path == "" ? "Quick note" : root.current-path;
+                    color: root.theme.muted;
+                    font-size: 10px;
+                    overflow: elide;
+                }
+
+                editor := NoteEditor {
+                    y: 32px;
+                    width: parent.width;
+                    height: parent.height - 72px;
+                    theme: root.theme;
+                    text <=> root.note-text;
+                    font-size-px: root.font-size-px;
+                    paper-style: root.paper-style;
+                    read-only: root.note-read-only;
+                    edited(text) => { root.note-edited(text); }
+                    key-pressed(event) => { root.shortcut(event) }
+                }
+
+                Rectangle {
+                    y: parent.height - 40px;
+                    height: 40px;
+                    width: parent.width;
+                    background: root.theme.surface;
+                    HorizontalLayout {
+                        y: 6px;
+                        width: parent.width;
+                        height: 28px;
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 2px;
+                        ActionButton {
+                            theme: root.theme;
+                            icon: @image-url("../assets/icons/search.svg");
+                            label: "Browse all pages, Command K";
+                            clicked => { root.browse-pages(); }
+                        }
+
+                        ActionButton {
+                            theme: root.theme;
+                            icon: @image-url("../assets/icons/appearance.svg");
+                            label: "Appearance, Command comma";
+                            clicked => { root.show-appearance(); }
+                        }
+
+                        ActionButton {
+                            theme: root.theme;
+                            icon: @image-url("../assets/icons/plus.svg");
+                            label: "New quick note, Command N";
+                            clicked => { root.new-note(); }
+                        }
+
+                        Text {
+                            text: root.status-text;
+                            color: root.theme.muted;
+                            font-size: 9px;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: root.note-counter;
+                            color: root.theme.muted;
+                            font-size: 9px;
+                            vertical-alignment: center;
+                        }
+
+                        ActionButton {
+                            theme: root.theme;
+                            icon: @image-url("../assets/icons/left.svg");
+                            label: "Previous visited note";
+                            enabled: root.can-go-back;
+                            clicked => { root.history-step(-1); }
+                        }
+
+                        ActionButton {
+                            theme: root.theme;
+                            icon: @image-url("../assets/icons/right.svg");
+                            label: "Next visited note";
+                            enabled: root.can-go-forward;
+                            clicked => { root.history-step(1); }
+                        }
+                    }
+                }
+            }
+
+            pages := PageBrowser {
+                y: 36px;
+                height: parent.height - 36px;
+                width: parent.width;
+                visible: root.active-view == "pages";
+                theme: root.theme;
+                results: root.page-results;
+                query <=> root.search-query;
+                folder <=> root.search-folder;
+                folder-changed(folder) => { root.folder-changed(folder); }
+                index-status: root.index-status;
+                query-changed(query) => { root.query-changed(query); }
+                open-page(key) => { root.open-page(key); }
+                return-to-note => { root.return-to-note(); }
+            }
+
+            appearance := AppearancePanel {
+                y: 36px;
+                height: parent.height - 36px;
+                width: parent.width;
+                visible: root.active-view == "appearance";
+                theme: root.theme;
+                theme-pairs: root.theme-options;
+                selected-theme: root.selected-theme-id;
+                mode <=> root.appearance-mode;
+                paper-style <=> root.paper-style;
+                font-size-px <=> root.font-size-px;
+                message: root.appearance-message;
+                low-contrast-warning: root.low-contrast-warning;
+                changed => { root.appearance-changed(); }
+                theme-selected(id) => { root.theme-selected(id); }
+                import-theme => { root.import-theme(); }
+                export-theme => { root.export-theme(); }
+                return-to-note => { root.return-to-note(); }
+                apply-low-contrast => { root.apply-low-contrast(); }
+                cancel-theme-import => { root.cancel-theme-import(); }
+            }
+
+            auxiliary := Rectangle {
+                y: 36px;
+                height: parent.height - 36px;
+                width: parent.width;
+                visible: root.active-view == "connection" || root.active-view == "recovery";
+                Text {
+                    x: 24px;
+                    y: 14px;
+                    text: root.active-view == "connection" ? "Connection" : "Recovery";
+                    font-size: 17px;
+                    color: root.theme.ink;
+                }
+
+                ActionButton {
+                    x: parent.width - 44px;
+                    y: 9px;
+                    theme: root.theme;
+                    icon: @image-url("../assets/icons/close.svg");
+                    label: "Return to note";
+                    clicked => { root.return-to-note(); }
+                }
+            }
+        }
     }
 }
-
-export { NativeMaterialWindow } from "probes/native-material.slint";

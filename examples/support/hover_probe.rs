@@ -1,5 +1,5 @@
 //! Synthetic NSEvents are queued only to this throwaway process, never globally.
-use bulletnotes::AppWindow;
+use bulletnotes::NativePreviewWindow as AppWindow;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType};
 use objc2_foundation::{NSPoint, NSProcessInfo};

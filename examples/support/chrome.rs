@@ -1,13 +1,24 @@
 //! Disposable public-AppKit frame/hover experiment; retains Slint's content view.
 use block2::RcBlock;
-use bulletnotes::AppWindow;
+pub trait ChromeWindow: slint::ComponentHandle {
+    fn reveal_chrome(&self, revealed: bool);
+}
+impl ChromeWindow for bulletnotes::AppWindow {
+    fn reveal_chrome(&self, revealed: bool) {
+        self.set_chrome_revealed(revealed);
+    }
+}
+impl ChromeWindow for bulletnotes::NativePreviewWindow {
+    fn reveal_chrome(&self, revealed: bool) {
+        self.set_chrome_revealed(revealed);
+    }
+}
 use objc2::{MainThreadMarker, rc::Retained, runtime::AnyObject};
 use objc2_app_kit::{
     NSEvent, NSEventMask, NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
     NSWindowTitleVisibility,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use slint::ComponentHandle;
 use std::ptr::NonNull;
 type ProbeResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -56,8 +67,8 @@ pub struct ChromeMonitor {
     token: Retained<AnyObject>,
 }
 impl ChromeMonitor {
-    pub fn install(
-        window: &AppWindow,
+    pub fn install<W: ChromeWindow + 'static>(
+        window: &W,
         observer: Option<Box<dyn Fn(bool, isize)>>,
     ) -> ProbeResult<Self> {
         configure(window.window())?;
@@ -77,7 +88,7 @@ impl ChromeMonitor {
                     && point.y >= frame.size.height - 36.0
                     && point.y <= frame.size.height;
                 if let Some(window) = weak.upgrade() {
-                    window.set_chrome_revealed(hover);
+                    window.reveal_chrome(hover);
                     show_buttons(&native, hover);
                     if let Some(observer) = &observer {
                         observer(hover, event_ref.eventNumber());

@@ -1,0 +1,83 @@
+import { TextEdit, VerticalBox, HorizontalBox, Button, Palette } from "std-widgets.slint";
+
+// Solid-paper native validation harness. No local persistence or server connection.
+export component NativePreviewWindow inherits Window {
+    title: "Bulletnotes Native Preview 2";
+    init => { Palette.color-scheme = ColorScheme.light; }
+    preferred-width: 505px;
+    preferred-height: 552px;
+    min-width: 400px;
+    min-height: 440px;
+    background: transparent;
+    in property <bool> frameless-probe: true;
+    in-out property <bool> probe-pinned: false;
+    no-frame: root.frameless-probe;
+    resize-border-width: 0px; // AppKit owns edge resizing in the macOS preview.
+    always-on-top: root.probe-pinned;
+    in-out property <string> source <=> editor.text;
+    in property <styled-text> styled-preview;
+    in property <string> probe-status: "Temporary text · nothing saved or synced";
+    in property <bool> chrome-revealed: false;
+    callback toggle-activation();
+    callback request-hide();
+    callback request-quit();
+    public function focus-editor() { editor.focus(); }
+
+    Rectangle {
+        background: #fcfaf4;
+        border-radius: root.frameless-probe ? 14px : 0px;
+        border-width: 1px;
+        border-color: #d5d8cc;
+        clip: true;
+        // The full top strip is a permanent drag target; revealing controls changes no geometry.
+        header := Rectangle {
+            x:0px;y:0px;width:parent.width;height:36px;
+            background:root.chrome-revealed ? #f3f0e7 : transparent;
+            WindowMoveArea {}
+            Text {
+                x:96px;width:parent.width - 260px;height:parent.height;
+                text:"Bulletnotes";color:#686e60;font-size:11px;vertical-alignment:center;
+                visible:root.chrome-revealed;
+            }
+            HorizontalBox {
+                x:parent.width - self.width - 8px;y:5px;height:26px;
+                padding:0px;spacing:4px;visible:root.chrome-revealed;
+                Button { text:root.probe-pinned ? "Unpin" : "Pin";accessible-label:"Pin note above other windows";clicked=>{ root.probe-pinned=!root.probe-pinned; } }
+                Button { text:"Hide";accessible-label:"Hide native preview";clicked=>{ root.request-hide(); } }
+                Button { text:"Quit";accessible-label:"Quit native preview";clicked=>{ root.request-quit(); } }
+            }
+        }
+        VerticalBox {
+            y:40px;height:parent.height - 40px;
+            padding:20px;spacing:12px;
+            Text { text: "NATIVE EDITING CHECK · UNSAVED PREVIEW"; color: #54614d; font-size: 10px; }
+            editor := TextEdit {
+                text: "# A little space to think\n\nThis is a temporary native preview.\n\nTry selecting text, undo/redo, multiline paste, and your input method.\n\n👩🏽‍💻 日本語 café\n\nText typed here is not saved or synced.";
+                font-family: "Menlo";
+                font-size: 15px;
+                wrap: word-wrap;
+                accessible-label: "Temporary Markdown note";
+            }
+            Text { text: root.probe-status; color: #54614d; font-size: 10px; wrap: word-wrap; }
+        }
+    }
+}
+
+export component NativePreviewTray inherits SystemTrayIcon {
+    icon: @image-url("../../assets/native-preview-tray.svg");
+    title: "BN 2";
+    tooltip: "Bulletnotes Native Preview 2";
+    callback reopen();
+    callback retry-hotkey();
+    callback toggle-pin();
+    callback quit();
+    Menu {
+        MenuItem { title: "Show native preview"; activated => { root.reopen(); } }
+        MenuItem { title: "Enable Option+A"; activated => { root.retry-hotkey(); } }
+        MenuItem { title: "Pin / unpin note"; activated => { root.toggle-pin(); } }
+        MenuSeparator {}
+        MenuItem { title: "Quit native preview"; activated => { root.quit(); } }
+    }
+}
+
+
