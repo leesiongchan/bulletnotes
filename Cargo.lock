@@ -554,6 +554,8 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "png",
  "raw-window-handle",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
  "tempfile",

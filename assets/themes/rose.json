@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Rose",
+  "dark": false,
+  "paper": "#F7EDE8",
+  "surface": "#EFDFD9",
+  "ink": "#59403D",
+  "muted": "#765D59",
+  "accent": "#934F56",
+  "line": "#887C78",
+  "selection": "#EED5D2"
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Paper",
+  "dark": false,
+  "paper": "#FCFAF4",
+  "surface": "#F3F0E7",
+  "ink": "#353B32",
+  "muted": "#686E60",
+  "accent": "#54705C",
+  "line": "#888880",
+  "selection": "#E5ECDE"
+}

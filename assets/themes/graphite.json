@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Graphite",
+  "dark": true,
+  "paper": "#222526",
+  "surface": "#2B2E2E",
+  "ink": "#E3E4DC",
+  "muted": "#A1A69B",
+  "accent": "#B8CD9C",
+  "line": "#757A77",
+  "selection": "#384239"
+}

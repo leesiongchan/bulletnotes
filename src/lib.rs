@@ -3,3 +3,4 @@ slint::include_modules!();
 pub mod app;
 pub mod domain;
 pub mod platform;
+pub mod theme;

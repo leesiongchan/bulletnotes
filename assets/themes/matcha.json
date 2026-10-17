@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Matcha",
+  "dark": false,
+  "paper": "#EDF1E5",
+  "surface": "#E1E8D6",
+  "ink": "#35442D",
+  "muted": "#5E6953",
+  "accent": "#4D6B3C",
+  "line": "#7C8375",
+  "selection": "#D8E3CB"
+}
