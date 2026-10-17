@@ -2,7 +2,7 @@
 
 Date: 2026-10-17. **Gate not passed; Tasks 2–13 have not started.**
 
-This is a disposable native feasibility harness, not the application or a production release. The approved design requires editable title/link accents, source preservation, normal macOS editing, and native background materials together. The current supported Slint input path does not meet the inline-style requirement. No fallback editor has been selected.
+This is a disposable native feasibility harness, not the application or a production release. The initial design required editable title/link accents together with native editing. The supported Slint input path did not meet that inline-style requirement. The user has now selected revision A: supported plain-text Slint editing with inline heading/link colors deferred. Full themes remain required. Remaining native editing, materials, activation, and accessibility observations are still incomplete.
 
 ## Environment
 
@@ -20,7 +20,7 @@ This is a disposable native feasibility harness, not the application or a produc
 | Native build/window | Both explicitly selected renderers open the same compiled `.slint` window; public AppKit handle available after event-loop startup | Passed smoke check |
 | Source-byte set/get roundtrip | Child native process receives frontmatter, CRLF, tab, café, 👩🏽‍💻, and 日本語 through stdin; editor-bound source is returned through stdout after event-loop startup; bytes compare exactly | Passed, set/get only |
 | Styled display text | Separate StyledText renders bold text and a colored link | Passed display demonstration; not editable |
-| Editable per-range title/link accents | TextInput rejects styled-text and has no text-format property; plain editor in captured native window has uniform text color | Failed approved visual target |
+| Editable per-range title/link accents | TextInput rejects styled-text and has no text-format property; plain editor in captured native window has uniform text color | Initial target failed; user-approved revision A defers this feature |
 | Real IME composition, undo/redo, clipboard, selection, wrapped caret/scroll | No interactive native editing observation recorded | Unobserved |
 | Native material behind opaque glyphs | No material adapter implemented or tested | Unobserved |
 | Global shortcut, pinning, full-screen activation/previous-app focus | Not exercised | Unobserved |
@@ -87,16 +87,16 @@ Public raw handles may be unavailable until the native event loop has started; i
 - Final explicitly FemtoVG native test run: **1 passed, 1 failed**, as detailed above. This is not a green acceptance suite.
 - No note contents were fetched and no server writes were attempted during this implementation checkpoint.
 
-## Decision needed
+## Decision recorded: A selected
 
-The approved plan's Task 1 says to stop if editable accents cannot satisfy the design using supported APIs. Do not start downstream tasks on a silent approximation.
+The initial native gate stopped for the unsupported inline-style requirement. The user subsequently selected A explicitly. This is an approved scope revision; it does not establish the remaining native behavior as passing.
 
-Two concrete revisions are available for review:
+The alternatives presented were:
 
 1. Keep the Slint plain Markdown editor, full app themes, and accented interface controls; defer inline title/link accents. This preserves the chosen Rust/Slint architecture with the smallest scope change. Remaining native input/material/lifecycle checks still apply.
 2. Retain editable inline accents as a requirement and authorize investigation of an AppKit NSTextView adapter. Slint would continue to own the surrounding interface; editor integration would become a new platform boundary and require a revised plan and validation. This has not been proven here.
 
-No revision is presumed approved. Native feasibility remains incomplete.
+Revision A is approved; alternative 2 is not. Native feasibility remains incomplete pending the other observations. Frameless window feasibility is being checked separately in response to the user’s next question.
 
 ## Official references
 
@@ -104,3 +104,26 @@ No revision is presumed approved. Native feasibility remains incomplete.
 - [Slint 1.18.1 compiler element declarations](https://github.com/slint-ui/slint/blob/v1.18.1/internal/compiler/builtin_elements.rs): TextInput value/color and internal offset/preedit annotations.
 - [Slint 1.18.1 text implementation](https://github.com/slint-ui/slint/blob/v1.18.1/internal/core/items/text.rs): separate input and styled display types.
 - [Slint 1.18.1 styled-text API](https://github.com/slint-ui/slint/blob/v1.18.1/internal/core/styled_text.rs).
+
+## Frameless-window investigation
+
+The user asked whether an Antinote-style “windowless” experience is possible. A disposable `--frameless` variant now uses Slint's documented `no-frame`, `resize-border-width`, and `WindowMoveArea`. The ordinary harness remains framed unless the example receives this flag.
+
+On macOS 27.0.1 / arm64 with explicitly selected winit-femtovg, the variant opened and exited normally. Public AppKit inspection returned:
+
+```text
+has_native_titlebar: false
+can_become_key_window: true
+```
+
+This confirms native frameless creation and AppKit's keyboard-focus eligibility. It does not establish actual typing, IME, drag/resize gestures, focus restoration, or full-screen behavior. The current capture is square; rounded corners, shadows, background materials, and final controls remain to be designed/validated. This is a throwaway feasibility variant, not final application chrome.
+
+![Native frameless probe](assets/native-frameless-femtovg.png)
+
+```sh
+SLINT_BACKEND=winit-femtovg cargo run --example native_window_probe --locked -- --frameless --auto-close
+```
+
+Slint documents [frameless windows and resize borders](https://docs.slint.dev/latest/docs/slint/reference/window/window/) and [WindowMoveArea on winit/macOS](https://docs.slint.dev/latest/docs/slint/reference/window/windowmovearea/). A separate [SystemTrayIcon](https://docs.slint.dev/latest/docs/slint/reference/window/systemtrayicon/) can provide the macOS menu-bar entry. Apple's [accessory activation policy](https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory) supports an app absent from the Dock while retaining programmatic/window activation; this policy has not been exercised by the probe. It is distinct from removing visible window chrome. Native [NSVisualEffectView](https://developer.apple.com/documentation/appkit/nsvisualeffectview) is the candidate background-material API, still unverified with the chosen renderer.
+
+The question about keeping Dock access versus menu-bar-only mode is pending. No final lifecycle policy has been selected on the user's behalf.

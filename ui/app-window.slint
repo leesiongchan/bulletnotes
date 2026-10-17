@@ -8,12 +8,24 @@ export component AppWindow inherits Window {
     min-width: 400px;
     min-height: 440px;
     background: #fcfaf4;
+    // Native validation variant only; the final chrome design is still under review.
+    in property <bool> frameless-probe: false;
+    no-frame: root.frameless-probe;
+    resize-border-width: root.frameless-probe ? 6px : 0px;
     in-out property <string> source <=> editor.text;
     in property <styled-text> styled-preview;
     VerticalBox {
         padding: 24px;
         spacing: 16px;
-        Text { text: "NATIVE EDITOR VALIDATION"; color: #54705c; font-size: 11px; }
+        WindowMoveArea {
+            height: 28px;
+            Text {
+                text: root.frameless-probe ? "BULLETNOTES · FRAMELESS PROBE" : "NATIVE EDITOR VALIDATION";
+                color: #54705c;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+        }
         editor := TextEdit {
             text: "# A little space to think\n\nDraft a note, follow [[a link]], keep the source.\n\n👩🏽‍💻 日本語 café";
             font-family: "Menlo";

@@ -3,6 +3,7 @@ use std::{cell::Cell, rc::Rc, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = bulletnotes::AppWindow::new()?;
+    window.set_frameless_probe(std::env::args().any(|arg| arg == "--frameless"));
     window.set_styled_preview(slint::StyledText::from_markdown(
         "A **styled title** and [a link](https://example.invalid)",
     )?);

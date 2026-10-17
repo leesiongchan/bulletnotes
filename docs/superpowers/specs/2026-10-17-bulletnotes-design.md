@@ -2,7 +2,7 @@
 
 Date: 2026-10-17
 
-Status: UI/UX and written specification approved in conversation on 2026-10-17. Implementation planning is authorized; implementation requires review of the plan and selection of an execution method.
+Status: UI/UX, written specification, and implementation plan approved in conversation on 2026-10-17; user selected native inline execution. After the native styling probe, the user approved revision A: keep the supported Slint plain-text editor and full theme support; defer inline heading/link colors.
 
 ## Intent and agreed decisions
 
@@ -79,7 +79,7 @@ Markdown text is the stored document. Editing must preserve frontmatter, links, 
 
 Use a monospace system font initially, with adjustable size from 11 to 24 logical pixels and a 15-pixel default. Preserve macOS selection, clipboard operations, undo/redo, keyboard movement, input-method composition, and screen-reader behavior. Plain-text paste must retain textual indentation and line breaks, since the space may contain code and structured Markdown. Rendering accents must not alter document bytes or caret offsets.
 
-The preview's accented title and links are visual targets. Editable inline styling requires an early native validation gate: Slint's documented multiline input and styled-text display facilities do not themselves establish that the approved editing experience works. Prove correct selection, composition, undo, scrolling, and link accents together before selecting a custom editing technique. A native limitation requires a documented design revision reviewed by the user; it must not become an undisclosed loss of fidelity or a webview substitution.
+The user approved revision A after the native probe: use Slint's supported plain-text Markdown editor and defer inline heading/link colors. Full application theme support and accented interface controls remain required. The interactive reference's inline title/link styling is a deferred visual target. The native gate must still verify source preservation, selection, composition, undo, scrolling, and accessibility. No custom renderer, private Slint input API, webview, or AppKit editor is authorized by this revision.
 
 All pages searches names, full paths, and downloaded text. Results show a title, path, excerpt, and modification indicator. With an empty query, show recently visited pages first, followed by the remaining catalogue sorted by path. Folder filtering is available within the search view. Results are virtualized and keyboard navigable.
 
@@ -229,3 +229,9 @@ The following sources were consulted on 2026-10-17. The proposed client architec
 - [Antinote translucent mode](https://antinote.io/user-manual/translucent-mode)
 - [W3C text contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 - [W3C non-text contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)
+
+## Accepted implementation revision A
+
+On 2026-10-17, after reviewing the native styling limitation and the two proposed alternatives, the user selected A. The first release uses the supported Slint plain-text Markdown editor. Inline heading/link colors are deferred; full themes and accented interface controls remain in scope. This removes only inline syntax styling from the native acceptance criteria. Remaining native input, materials, activation, and accessibility evidence must still be collected.
+
+The user's subsequent question about an Antinote-style “windowless” experience is under investigation. The current title-bar paragraph above describes the earlier approved reference; a new chrome/lifecycle choice has not yet been selected.
