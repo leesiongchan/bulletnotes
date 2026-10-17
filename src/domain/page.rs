@@ -5,7 +5,10 @@ use super::{
 };
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(try_from = "String", into = "String")]
 pub struct PagePath(String);
 impl PagePath {
     pub fn parse(input: &str) -> Result<Self, PathError> {
@@ -31,7 +34,9 @@ impl PagePath {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct PageKey {
     pub connection: ConnectionId,
     pub path: PagePath,
@@ -54,7 +59,19 @@ impl PageKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct LocalRevision(pub u64);
 impl LocalRevision {
     pub fn next(self) -> Result<Self, RevisionError> {
@@ -64,9 +81,9 @@ impl LocalRevision {
             .ok_or(RevisionError::Exhausted)
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RemoteRevision(pub String);
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct OperationId(pub Uuid);
 impl OperationId {
     pub fn new() -> Self {
@@ -78,7 +95,7 @@ impl Default for OperationId {
         Self::new()
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct TrashId(pub Uuid);
 impl TrashId {
     pub fn new() -> Self {
@@ -98,4 +115,71 @@ pub fn new_note_path(now: &jiff::Zoned, id: Uuid) -> PagePath {
         now.strftime("%Y-%m-%d"),
         now.strftime("%H%M%S")
     ))
+}
+
+impl TryFrom<String> for PagePath {
+    type Error = PathError;
+    fn try_from(input: String) -> Result<Self, Self::Error> {
+        Self::parse(&input)
+    }
+}
+impl From<PagePath> for String {
+    fn from(path: PagePath) -> Self {
+        path.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Permission {
+    ReadOnly,
+    ReadWrite,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RemoteFile {
+    pub key: PageKey,
+    pub body: String,
+    pub revision: Option<RemoteRevision>,
+    pub modified_ms: Option<u64>,
+    pub permission: Permission,
+}
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PageSnapshot {
+    pub key: PageKey,
+    pub body: String,
+    pub local_revision: LocalRevision,
+    pub remote_base: Option<RemoteFile>,
+    pub position: crate::app::model::EditorPosition,
+    pub permission: Permission,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SavedRevision {
+    pub key: PageKey,
+    pub local_revision: LocalRevision,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MutationKind {
+    Put(String),
+    Delete,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WriteCondition {
+    CreateOnly,
+    Match(RemoteRevision),
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PendingMutation {
+    pub id: OperationId,
+    pub key: PageKey,
+    pub local_revision: LocalRevision,
+    pub kind: MutationKind,
+    pub condition: WriteCondition,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MutationAck {
+    pub remote_revision: Option<RemoteRevision>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RemoteRead {
+    Present(RemoteFile),
+    Missing(PageKey),
 }

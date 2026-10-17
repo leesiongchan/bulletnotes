@@ -2,7 +2,10 @@
 use super::error::ConnectionError;
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(try_from = "String", into = "String")]
 pub struct ConnectionId(String);
 impl ConnectionId {
     pub fn as_str(&self) -> &str {
@@ -43,5 +46,17 @@ impl ConnectionConfig {
     }
     pub fn base_url(&self) -> &Url {
         &self.base
+    }
+}
+
+impl TryFrom<String> for ConnectionId {
+    type Error = ConnectionError;
+    fn try_from(input: String) -> Result<Self, Self::Error> {
+        Ok(ConnectionConfig::parse(&input)?.id)
+    }
+}
+impl From<ConnectionId> for String {
+    fn from(id: ConnectionId) -> Self {
+        id.0
     }
 }

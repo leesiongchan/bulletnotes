@@ -55,3 +55,37 @@ pub enum RevisionError {
     #[error("local revision counter is exhausted")]
     Exhausted,
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum StoreError {
+    #[error("Bulletnotes is already using this local store")]
+    AlreadyRunning,
+    #[error("local store worker is unavailable")]
+    Closed,
+    #[error("local database operation failed")]
+    Database(#[from] rusqlite::Error),
+    #[error("local file operation failed")]
+    Io(#[from] std::io::Error),
+    #[error("local database is corrupt; preserve it for recovery")]
+    CorruptDatabase,
+    #[error("local database requires a newer app version")]
+    UnsupportedSchema,
+    #[error("database migration failed; original data was preserved")]
+    MigrationFailed,
+    #[error("local database durability configuration could not be verified")]
+    Durability,
+    #[error("page is unavailable locally")]
+    PageMissing,
+    #[error("page is read only")]
+    ReadOnly,
+    #[error("a newer local revision is already saved")]
+    StaleRevision,
+    #[error("operation is unavailable or already acknowledged")]
+    UnknownOperation,
+    #[error("stored data failed validation")]
+    InvalidData,
+    #[error("appearance or application settings failed validation")]
+    InvalidSettings,
+    #[error("search bounds are invalid")]
+    InvalidQuery,
+}

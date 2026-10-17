@@ -11,7 +11,7 @@ pub enum View {
 }
 
 /// Anchor/caret are UTF-8 byte boundaries, not glyph or UTF-16 indices.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EditorPosition {
     pub anchor: usize,
     pub caret: usize,
