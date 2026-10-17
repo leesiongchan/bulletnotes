@@ -7,10 +7,12 @@ publish = false
 
 [features]
 default = []
+protocol-validation = []
 native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor", "objc2-app-kit/NSGraphics", "dep:global-hotkey", "objc2-app-kit/NSApplication", "objc2-app-kit/NSWorkspace", "objc2-app-kit/NSRunningApplication", "objc2-app-kit/NSButton", "objc2-app-kit/NSControl", "objc2-app-kit/NSEvent", "objc2-app-kit/NSGraphicsContext", "objc2-foundation/NSGeometry", "objc2-app-kit/block2"]
 probe-skia = ["slint/renderer-skia"]
 
 [dependencies]
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "http2", "json", "stream"] }
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
 rusqlite = { version = "=0.40.2", features = ["bundled", "backup"] }
@@ -35,7 +37,12 @@ global-hotkey = { version = "=0.9.0", optional = true }
 slint-build = "=1.18.1"
 
 [dev-dependencies]
+axum = { version = "=0.8.9", default-features = false, features = ["tokio", "http1", "json"] }
 png = "=0.18.1"
 
 [lints.clippy]
 all = "warn"
+
+[[test]]
+name = "protocol_contract"
+required-features = ["protocol-validation"]

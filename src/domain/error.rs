@@ -89,3 +89,26 @@ pub enum StoreError {
     #[error("search bounds are invalid")]
     InvalidQuery,
 }
+
+/// Classified transport outcomes never embed tokens, note text, paths, or raw URLs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SyncError {
+    #[error("authentication is required")]
+    Authentication,
+    #[error("the server denied access")]
+    Permission,
+    #[error("the remote page changed")]
+    Conflict,
+    #[error("the remote page is missing")]
+    Missing,
+    #[error("the server or operation is incompatible")]
+    Incompatible,
+    #[error("the server returned invalid data")]
+    InvalidResponse,
+    #[error("the network request failed")]
+    Network,
+    #[error("the write outcome is unknown; read back before retrying")]
+    UnknownMutationOutcome,
+    #[error("the response exceeds available client resources; remote data is unchanged")]
+    ResponseTooLarge,
+}

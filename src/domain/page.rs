@@ -183,3 +183,12 @@ pub enum RemoteRead {
     Present(RemoteFile),
     Missing(PageKey),
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteMetadata {
+    pub key: PageKey,
+    pub modified_ms: Option<u64>,
+    pub content_length: Option<u64>,
+    pub permission: Permission,
+    pub revision: Option<RemoteRevision>,
+}
