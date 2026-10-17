@@ -1,4 +1,10 @@
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/chrome.rs"]
+mod chrome;
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/hover_probe.rs"]
+mod hover_probe;
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
 #[path = "support/material.rs"]
 mod material;
 
@@ -21,9 +27,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let weak = window.as_weak();
     let failed = Rc::new(Cell::new(false));
     let probe_failed = failed.clone();
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    let chrome_monitor = Rc::new(std::cell::RefCell::new(None));
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    let chrome_owner = chrome_monitor.clone();
     slint::Timer::single_shot(Duration::from_millis(300), move || {
         #[cfg(target_os = "macos")]
         if let Some(window) = weak.upgrade() {
+            #[cfg(feature = "native-validation")]
+            if std::env::args().any(|arg| arg == "--chrome-probe") {
+                let observer = std::env::args()
+                    .any(|arg| arg == "--hover-probe")
+                    .then(|| hover_probe::observer(&window));
+                match chrome::ChromeMonitor::install(&window, observer) {
+                    Ok(monitor) => {
+                        *chrome_owner.borrow_mut() = Some(monitor);
+                    }
+                    Err(error) => {
+                        eprintln!("{error}");
+                        probe_failed.set(true);
+                    }
+                }
+            }
             match bulletnotes::platform::macos::probe_window(window.window()) {
                 Ok(report) => println!("{report:#?}"),
                 Err(error) => {
@@ -34,6 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
+    if std::env::args().any(|arg| arg == "--chrome-probe")
+        && !std::env::args().any(|arg| matches!(arg.as_str(), "--hover-probe" | "--pin-probe"))
+    {
+        slint::Timer::single_shot(Duration::from_millis(600), || {
+            let _ = slint::quit_event_loop();
+        });
+    }
     if std::env::args().any(|arg| arg == "--pin-probe") {
         #[cfg(target_os = "macos")]
         {
@@ -74,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         }
     }
-    if std::env::args().any(|arg| arg == "--auto-close") {
+    if std::env::args().any(|arg| matches!(arg.as_str(), "--auto-close" | "--chrome-probe")) {
         slint::Timer::single_shot(Duration::from_secs(15), || {
             if let Err(error) = slint::quit_event_loop() {
                 eprintln!("event loop: {error}");

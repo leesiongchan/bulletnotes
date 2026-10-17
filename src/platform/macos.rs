@@ -1,7 +1,7 @@
 //! Read-only validation through Slint's supported handle and public AppKit APIs.
 use crate::domain::error::PlatformError;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSView, NSWindowStyleMask};
+use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};
 use objc2_foundation::NSProcessInfo;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -22,6 +22,12 @@ pub struct NativeProbeReport {
     pub can_become_key_window: bool,
     pub native_window_level: isize,
     pub window_alpha: f64,
+    pub native_resizable: bool,
+    pub fullsize_content: bool,
+    pub title_hidden: bool,
+    pub transparent_titlebar: bool,
+    pub resizing: Observation,
+    pub dragging: Observation,
     pub material_composition: Observation,
     pub focus_restoration: Observation,
     pub pinning: Observation,
@@ -39,6 +45,8 @@ impl NativeProbeReport {
     /// Inline accents and native blur are excluded by user-approved revisions A and B.
     pub fn passed(&self) -> bool {
         [
+            self.resizing,
+            self.dragging,
             self.focus_restoration,
             self.pinning,
             self.activation,
@@ -77,6 +85,16 @@ pub fn probe_window(window: &slint::Window) -> Result<NativeProbeReport, Platfor
         can_become_key_window: native_window.canBecomeKeyWindow(),
         native_window_level: native_window.level(),
         window_alpha: native_window.alphaValue(),
+        native_resizable: native_window
+            .styleMask()
+            .contains(NSWindowStyleMask::Resizable),
+        fullsize_content: native_window
+            .styleMask()
+            .contains(NSWindowStyleMask::FullSizeContentView),
+        title_hidden: native_window.titleVisibility() == NSWindowTitleVisibility::Hidden,
+        transparent_titlebar: native_window.titlebarAppearsTransparent(),
+        resizing: Observation::Unobserved,
+        dragging: Observation::Unobserved,
         material_composition: Observation::Unobserved,
         focus_restoration: Observation::Unobserved,
         pinning: Observation::Unobserved,
@@ -103,6 +121,12 @@ mod tests {
             can_become_key_window: true,
             native_window_level: 0,
             window_alpha: 1.0,
+            native_resizable: true,
+            fullsize_content: true,
+            title_hidden: true,
+            transparent_titlebar: true,
+            resizing: Observation::Passed,
+            dragging: Observation::Passed,
             material_composition: Observation::Passed,
             focus_restoration: Observation::Passed,
             pinning: Observation::Passed,
@@ -139,6 +163,18 @@ mod tests {
     fn unobserved_composition_still_blocks_native_gate() {
         let mut report = otherwise_verified_report();
         report.composition = Observation::Unobserved;
+        assert!(!report.passed());
+    }
+    #[test]
+    fn observed_resize_failure_blocks_native_gate() {
+        let mut report = otherwise_verified_report();
+        report.resizing = Observation::Failed;
+        assert!(!report.passed());
+    }
+    #[test]
+    fn unobserved_dragging_blocks_native_gate() {
+        let mut report = otherwise_verified_report();
+        report.dragging = Observation::Unobserved;
         assert!(!report.passed());
     }
 }

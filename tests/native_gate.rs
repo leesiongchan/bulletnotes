@@ -154,7 +154,12 @@ fn pinning_changes_native_level_and_restores_it() {
         .unwrap()
         .join("examples/native_window_probe");
     let output = Command::new(executable)
-        .args(["--frameless", "--pin-probe", "--auto-close"])
+        .args([
+            "--frameless",
+            "--chrome-probe",
+            "--pin-probe",
+            "--auto-close",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -176,5 +181,69 @@ fn pinning_changes_native_level_and_restores_it() {
         "pin did not raise native level: {levels:?}"
     );
     assert_eq!(levels[2], levels[0], "unpin did not restore native level");
-    assert!(report.contains("has_native_titlebar: false"), "{report}");
+    assert!(report.contains("title_hidden: true"), "{report}");
+    assert!(report.contains("fullsize_content: true"), "{report}");
+}
+
+#[test]
+#[ignore = "opens a native window; build native_window_probe first"]
+fn native_frame_supports_resize_with_hidden_title_and_fullsize_content() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/native_window_probe");
+    let output = Command::new(executable)
+        .args(["--frameless", "--chrome-probe"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = String::from_utf8(output.stdout).unwrap();
+    for field in [
+        "native_resizable: true",
+        "fullsize_content: true",
+        "title_hidden: true",
+        "transparent_titlebar: true",
+    ] {
+        assert!(report.contains(field), "missing {field}: {report}");
+    }
+}
+
+#[test]
+#[ignore = "posts synthetic hover events to the probe's own native window only"]
+fn hover_bar_reveals_and_hides_without_recreating_editor() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/native_window_probe");
+    let output = Command::new(executable)
+        .args(["--frameless", "--chrome-probe", "--hover-probe"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = String::from_utf8(output.stdout).unwrap();
+    for observation in [
+        "hover_initial: false",
+        "hover_revealed: true",
+        "hover_returned: false",
+        "editor_preserved: true",
+    ] {
+        assert!(
+            report.contains(observation),
+            "missing {observation}: {report}"
+        );
+    }
 }

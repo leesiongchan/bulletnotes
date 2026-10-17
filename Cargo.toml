@@ -7,7 +7,7 @@ publish = false
 
 [features]
 default = []
-native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor", "objc2-app-kit/NSGraphics", "dep:global-hotkey", "objc2-app-kit/NSApplication", "objc2-app-kit/NSWorkspace", "objc2-app-kit/NSRunningApplication"]
+native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor", "objc2-app-kit/NSGraphics", "dep:global-hotkey", "objc2-app-kit/NSApplication", "objc2-app-kit/NSWorkspace", "objc2-app-kit/NSRunningApplication", "objc2-app-kit/NSButton", "objc2-app-kit/NSControl", "objc2-app-kit/NSEvent", "objc2-app-kit/NSGraphicsContext", "objc2-foundation/NSGeometry", "objc2-app-kit/block2", "dep:block2"]
 probe-skia = ["slint/renderer-skia"]
 
 [dependencies]
@@ -26,6 +26,7 @@ objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }
 raw-window-handle = "=0.6.2"
+block2 = { version = "=0.6.2", optional = true }
 global-hotkey = { version = "=0.9.0", optional = true }
 
 [build-dependencies]

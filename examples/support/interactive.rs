@@ -1,4 +1,5 @@
 //! Disposable interactive native gate. No note persistence or HTTP client.
+use crate::chrome::{self, ChromeMonitor};
 use bulletnotes::{AppWindow, NativePreviewTray};
 use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
@@ -71,6 +72,11 @@ impl FocusState {
             if let Some(window) = weak.upgrade() {
                 match native_window(window.window()) {
                     Ok(native) => {
+                        if let Err(error) = chrome::configure(window.window()) {
+                            window.set_probe_status(
+                                format!("Native frame unavailable: {error}").into(),
+                            );
+                        }
                         NSApplication::sharedApplication(mtm).activate();
                         native.makeKeyAndOrderFront(None);
                         window.invoke_focus_editor();
@@ -86,6 +92,7 @@ impl FocusState {
 
     fn hide(&mut self, window: &AppWindow) -> ProbeResult<()> {
         let was_active = self.current.isActive();
+        window.set_chrome_revealed(false);
         window.hide()?;
         if was_active
             && let Some(previous) = self.previous.as_ref().filter(|app| !app.isTerminated())
@@ -199,23 +206,35 @@ pub fn run() -> ProbeResult<()> {
     tray.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
-    let _hotkey = match HotkeyGuard::register(&window) {
-        Ok(guard) => {
-            window.set_probe_status(
-                "Temporary text · Option+A toggles · BN test menu reopens".into(),
-            );
-            println!("preview_hotkey_registered: true");
-            Some(guard)
+    let hotkey = Rc::new(RefCell::new(register_hotkey(&window)));
+    let owner = hotkey.clone();
+    let weak = window.as_weak();
+    tray.on_retry_hotkey(move || {
+        if let Some(window) = weak.upgrade()
+            && owner.borrow().is_none()
+        {
+            *owner.borrow_mut() = register_hotkey(&window);
         }
-        Err(error) => {
-            eprintln!("preview hotkey unavailable: {error}");
-            window.set_probe_status(
-                "Option+A unavailable; use the BN test menu. Temporary text is not saved.".into(),
-            );
-            println!("preview_hotkey_registered: false");
-            None
+    });
+    let weak = window.as_weak();
+    tray.on_toggle_pin(move || {
+        if let Some(window) = weak.upgrade() {
+            window.set_probe_pinned(!window.get_probe_pinned());
         }
-    };
+    });
+    let chrome_monitor = Rc::new(RefCell::new(None));
+    let owner = chrome_monitor.clone();
+    let weak = window.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(180), move || {
+        if let Some(window) = weak.upgrade() {
+            match ChromeMonitor::install(&window, None) {
+                Ok(monitor) => *owner.borrow_mut() = Some(monitor),
+                Err(error) => {
+                    window.set_probe_status(format!("Native hover unavailable: {error}").into())
+                }
+            }
+        }
+    });
     // Keep tray, component and hotkey owner alive throughout the main-thread event loop.
     tray.show()?;
     focus.borrow_mut().show(&window)?;
@@ -225,5 +244,22 @@ pub fn run() -> ProbeResult<()> {
         });
     }
     slint::run_event_loop()?;
+    drop(chrome_monitor);
     Ok(())
+}
+
+fn register_hotkey(window: &AppWindow) -> Option<HotkeyGuard> {
+    match HotkeyGuard::register(window) {
+        Ok(guard) => {
+            window.set_probe_status("Temporary text · Option+A toggles · BN 2 menu reopens".into());
+            println!("preview_hotkey_registered: true");
+            Some(guard)
+        }
+        Err(error) => {
+            eprintln!("preview hotkey unavailable: {error}");
+            window.set_probe_status("Option+A busy. Quit the old preview, then BN 2 → Enable Option+A. Text is temporary.".into());
+            println!("preview_hotkey_registered: false");
+            None
+        }
+    }
 }

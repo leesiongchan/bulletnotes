@@ -187,3 +187,16 @@ With approved revisions A and B, the native preview uses opaque themed paper, a 
 The development bundle was ad-hoc signed and verified, then opened for manual observations. It is not a notarized production artifact. Its temporary text is neither persisted nor sent to SilverBullet. Typing/undo/selection, real IME composition, VoiceOver, caret/focus restoration, and full-screen activation remain pending human observations; the native gate is still incomplete. Instructions: [native-checklist.md](native-checklist.md).
 
 Verification on explicit Rust 1.99.1: standard all-feature library/binary/test/example suite passed (4 policy tests; 4 native tests ignored), formatting and diff checks passed, and all-target/all-feature Clippy passed. After the UI change, the native Unicode/CRLF source-byte roundtrip was rerun and passed (1/1). The deferred material regression and incomplete aggregate remain explicitly excluded from a success claim.
+
+
+## Preview 2: resize failure and hover bar
+
+The user's real-desktop check reported resizing failing and the drag area too small. Those are observed failures in Preview 1; other manual rows remain untested. The requested behavior is a full-width top strip whose bar appears on hover.
+
+Root cause: Slint 1.18.1's resize-border-width path calls winit's drag_resize_window and ignores its error. The macOS implementation in pinned winit 0.30.13 returns NotSupported. A resizable style bit alone was insufficient. See [winit's platform limitation](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html#method.drag_resize_window).
+
+Preview 2 instead uses public AppKit window configuration: Titled + Resizable + FullSizeContentView, hidden title text, and transparent titlebar. This provides the native frame while retaining the frameless appearance. Slint's content view and ownership remain intact. A local application event monitor reveals the full-width 36-pixel bar and standard window buttons near the top; it returns incoming events unchanged and is removed on teardown. It does not install a global mouse monitor. Window movement remains through WindowMoveArea / AppKit. Native blur stays deferred.
+
+Evidence on explicit Rust 1.99.1 / macOS 27.0.1 arm64: resize configuration regression RED then GREEN, policy tests RED (4 pass / 2 fail) then GREEN (6 pass), native pin/unpin test GREEN with the new frame, interactive startup/shutdown exit 0. Hover regression GREEN after identifying two test-fixture issues: delayed snapshots raced real mouse movement, and AppKit exposed only the low 16 bits of synthetic mouse event numbers. The corrected test observes identifiable owned-window events at delivery, verifies reveal→hide and exact text preservation, and exits on completion. Synthetic hover is not proof of physical resize gestures, IME, or VoiceOver.
+
+The standard all-feature suite passed 46 tests with 7 ignored (six native cases plus the child-only storage fixture), default all-target check and all-target/all-feature Clippy passed, and formatting/diff checks passed. The separate Preview 2 development .app was ad-hoc signed, verified, opened, and a targeted human resize/hover retry requested. No physical-gesture success or native-gate completion is inferred from configuration alone.

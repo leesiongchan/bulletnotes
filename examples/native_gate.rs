@@ -1,4 +1,7 @@
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/chrome.rs"]
+mod chrome;
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
 #[path = "support/interactive.rs"]
 mod interactive;
 
