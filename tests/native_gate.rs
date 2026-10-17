@@ -142,3 +142,39 @@ fn native_material_keeps_ink_opaque_over_translucent_paper() {
         assert!(value > 100, "missing native evidence for {field}: {report}");
     }
 }
+
+#[test]
+#[ignore = "opens a native window; build native_window_probe first"]
+fn pinning_changes_native_level_and_restores_it() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/native_window_probe");
+    let output = Command::new(executable)
+        .args(["--frameless", "--pin-probe", "--auto-close"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = String::from_utf8(output.stdout).unwrap();
+    let levels: Vec<isize> = report
+        .lines()
+        .find_map(|line| line.strip_prefix("pin_levels: "))
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|part| part.parse().ok())
+        .collect();
+    assert_eq!(levels.len(), 3, "missing native pin observations: {report}");
+    assert!(
+        levels[1] > levels[0],
+        "pin did not raise native level: {levels:?}"
+    );
+    assert_eq!(levels[2], levels[0], "unpin did not restore native level");
+    assert!(report.contains("has_native_titlebar: false"), "{report}");
+}

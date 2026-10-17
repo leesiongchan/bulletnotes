@@ -1,3 +1,7 @@
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/interactive.rs"]
+mod interactive;
+
 use bulletnotes::AppWindow;
 use slint::ComponentHandle;
 use std::{
@@ -8,6 +12,15 @@ use std::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bundled_preview = std::env::current_exe()?
+        .file_name()
+        .is_some_and(|name| name == "bulletnotes-native-preview");
+    if bundled_preview || std::env::args().any(|arg| arg == "--interactive") {
+        #[cfg(all(target_os = "macos", feature = "native-validation"))]
+        return interactive::run();
+        #[cfg(not(all(target_os = "macos", feature = "native-validation")))]
+        return Err("interactive preview requires macOS and --features native-validation".into());
+    }
     let window = AppWindow::new()?;
     window.set_styled_preview(slint::StyledText::from_markdown(
         "A **styled title** and [a link](https://example.invalid)",
@@ -31,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     } else {
         eprintln!(
-            "UNVERIFIED: composition, undo/redo, selection, wrapped scrolling, editable accents, materials, activation, full-screen focus, VoiceOver"
+            "UNVERIFIED: composition, undo/redo, selection, wrapped scrolling, activation, full-screen focus, VoiceOver. DEFERRED: inline colors and native blur."
         );
         if std::env::args().any(|arg| arg == "--acceptance") {
             let weak = window.as_weak();

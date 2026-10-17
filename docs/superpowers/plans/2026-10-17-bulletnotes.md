@@ -19,7 +19,7 @@
 - Theme files are data-only UTF-8 JSON, limited to 32 KiB; names contain 1–32 Unicode scalar values after trimming; colors are opaque `#RRGGBB` strings.
 - Independent light/dark theme assignments; plain, dotted, ruled, and grid paper; editor size 11–24 logical pixels, default 15.
 - Built-in normal-text contrast is at least 4.5:1; essential control/focus contrast is at least 3:1. Preserve a user-accessible valid palette.
-- Native background translucency targets macOS 15+; macOS 14 and Reduce Transparency use solid backgrounds. Text and controls remain opaque.
+- User-approved revision B defers native blur/translucency. Use solid themed paper on every supported macOS version; text and controls stay opaque. No first-release translucency preference.
 - Coalesce local edits for at most 250 ms; acknowledge Saved locally only after durable commit. Debounce remote writes for 750 ms after local commits.
 - At most one mutation is in flight per page; stable operation IDs and note paths survive retries and restarts.
 - Poll the catalogue approximately every 30 seconds active and every 60 seconds hidden; refresh on activation/reconnect; pause when offline.
@@ -112,15 +112,17 @@ Use module-level private helpers until an interface below needs to cross a modul
 
 **Interfaces:** Produce the compiled Slint `AppWindow`; `platform::macos::probe_window(window: &slint::Window) -> Result<NativeProbeReport, PlatformError>`. Define `NativeProbeReport` with named pass/fail observations for material composition, focus restoration, pinning, activation, and OS version. This report is validation data, not a production capability claim.
 
-- [ ] **1. Establish a failing acceptance case.** Create the smallest compilable Rust/Slint harness, using the researched pins. In `tests/native_gate.rs`, add `text_input_roundtrips_unicode_and_crlf` asserting that `"---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n"` survives set/get byte-for-byte. Define native observation rows for composition, undo/redo, selection, wrapped scrolling, plain Markdown rendering (inline accents deferred by revision A), translucent background with opaque glyphs, global activation, and full-screen focus restoration; unobserved rows start failed.
+- [ ] **1. Establish a failing acceptance case.** Create the smallest compilable Rust/Slint harness, using the researched pins. In `tests/native_gate.rs`, add `text_input_roundtrips_unicode_and_crlf` asserting that `"---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n"` survives set/get byte-for-byte. Define native observation rows for composition, undo/redo, selection, wrapped scrolling, plain Markdown rendering (inline accents deferred by revision A), opaque solid paper and glyphs (native blur deferred by revision B), global activation, and full-screen focus restoration; unobserved rows start failed.
   Required assertion after the native child process returns its observed text:
   ```rust
   assert_eq!(roundtripped.as_bytes(), original.as_bytes());
   ```
 - [ ] **2. Verify the gate is red.** Run `cargo test --test native_gate -- --ignored --nocapture` and `cargo run --example native_gate`; inspect the native window and the acceptance matrix. Record actual failures; a harness that merely opens is insufficient.
 - [ ] **3. Probe using public APIs.** Use the documented multiline plain-text input selected by user-approved revision A. Retain the styled-text probes as historical evidence; do not build a styled input overlay. Verify source/caret geometry and macOS input behavior. Compare `cargo run --example native_window_probe` with `cargo run --features probe-skia --example native_window_probe`. Implement the narrow platform probe, matching 505×552 and 400×440 dimensions. Keep disposable experiments in the examples; do not make an unproven editor a core dependency.
-- [ ] **4. Decide from native evidence.** Record OS/toolchain/backend, screenshots, supported APIs, and observed outcomes. Verify actual IME and VoiceOver behavior on macOS rather than treating synthetic keystrokes as equivalent. Inline accents are explicitly deferred by user-approved revision A. If plain-text editing correctness, opaque text over native material, or required activation behavior cannot satisfy the revised spec through supported APIs, stop here with the concrete failure and request a design revision. No later task proceeds on an unapproved fallback.
+- [ ] **4. Decide from native evidence.** Record OS/toolchain/backend, screenshots, supported APIs, and observed outcomes. Verify actual IME and VoiceOver behavior on macOS rather than treating synthetic keystrokes as equivalent. Inline accents and native blur are explicitly deferred by user-approved revisions A and B. If plain-text editing correctness, solid frameless rendering, or required activation behavior cannot satisfy the revised spec through supported APIs, stop here with the concrete failure and request a design revision. No later task proceeds on an unapproved fallback.
 - [ ] **5. Verify and commit the successful harness.** Run `cargo test --test native_gate -- --ignored`, `cargo check --all-targets --locked`, and `cargo fmt --check`; retain the renderer/editor choice and remove unused probe dependencies. Commit with `feat: establish validated native Slint foundation` only after the gate has evidence.
+
+Execution scheduling clarification: keep Task 1 open while human IME/accessibility/lifecycle observations are pending. Independent domain and theme work (Tasks 2–3) may proceed after the approved scope revisions A/B; this does not waive native integration or release acceptance.
 
 ### Task 2: page identities, revision types, and deterministic navigation
 
@@ -325,7 +327,7 @@ Use module-level private helpers until an interface below needs to cross a modul
 
 Coverage maps the spec's window/editor/search/theme sections to Tasks 1–6, store/sync/security/status sections to Tasks 4 and 7–10, and native/release requirements to Tasks 11–13. Every Review Focus item has named tests in its owning tasks. Runtime/library names in this plan are proposed interfaces to create, not claims that those files or functions already exist.
 
-Task 1 is a genuine feasibility boundary. The user approved deferral of inline heading/link colors in revision A. A webview, AppKit editor, custom renderer, reduced plain-text editing correctness, or omission of native materials remains unapproved. Record and review any required architectural change before proceeding. Missing release credentials or access to an OS/hardware test matrix is an external prerequisite, not an excuse to mark that evidence passed.
+Task 1 is a genuine feasibility boundary. The user approved deferral of inline heading/link colors in revision A. A webview, AppKit editor, custom renderer, or reduced plain-text editing correctness remains unapproved. Native materials are deferred by user-approved revision B. Record and review any required architectural change before proceeding. Missing release credentials or access to an OS/hardware test matrix is an external prerequisite, not an excuse to mark that evidence passed.
 
 After plan review, use the user's chosen execution method. Native execution is recommended because this is a single app whose tasks share revision/persistence contracts and the first native gate may revise later details. Subagent-driven execution is also available, with a fresh implementer/reviewer per task and a higher context cost. Whichever method is selected, make task commits and perform a final independent review before claiming the production release is complete.
 

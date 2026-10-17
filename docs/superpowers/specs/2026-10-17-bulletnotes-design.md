@@ -23,7 +23,7 @@ The first production release includes:
 - Automatic local persistence and bidirectional background synchronization.
 - Offline access to downloaded pages and offline creation/editing.
 - Keyboard navigation, a configurable global activation shortcut, a menu-bar entry, and pin-above-other-windows behavior.
-- Four built-in palettes, custom Bulletnotes theme import/export, independent light/dark preferences, paper styles, text sizing, and a translucency preference.
+- Four built-in palettes, custom Bulletnotes theme import/export, independent light/dark preferences, paper styles, and text sizing. Native blur/translucency is deferred by user-approved revision B; the first release uses solid paper.
 - Recovery and actionable feedback for conflicts, authentication problems, connection failures, and local save failures.
 - macOS packaging, release verification, and documented support boundaries.
 
@@ -126,7 +126,7 @@ Built-in palettes must provide at least 4.5:1 contrast for normal text, includin
 
 Every icon action has an accessible name, keyboard access, and a visible focus indication. Test VoiceOver reading and editing. Honor system Reduce Motion and Reduce Transparency settings. Paper decoration is ignored by accessibility tools.
 
-Translucency affects the window background material; text and controls remain fully opaque. Validate native material composition through the supported macOS integration layer. The browser mockup's whole-window opacity is not the native implementation. Solid mode is always available, including when the OS requests reduced transparency. The target translucent experience applies to macOS 15 and newer; macOS 14 uses solid mode with an explanation beside the unavailable preference. On supported systems, native translucency is a fidelity requirement to validate before release; an unsupported renderer/backend combination requires an explicit design revision.
+The user approved revision B after the native material experiments: the first release uses solid themed paper on every supported macOS version. Do not expose a working-looking translucency switch or lower whole-window opacity. Native blur/translucency is deferred, and its experiments remain explicitly developmental. Any future implementation must keep text/controls opaque and honor system Reduce Transparency.
 
 ## Architecture and ownership
 
@@ -191,7 +191,7 @@ Use structured, local diagnostics for save failures, queue transitions, retry cl
 
 ## Native validation and release requirements
 
-The first native validation must cover the approved note appearance, editing correctness, theme changes across views, global activation, pinning, and native translucency. Browser verification cannot satisfy these requirements. Select a stable supported Slint backend based on those results and document the decision. Keep platform-specific bindings isolated; do not introduce a custom renderer or an AppKit editor without reviewing that architectural change.
+The first native validation must cover the approved note appearance, editing correctness, theme changes across views, global activation and pinning. Inline heading/link colors and native translucency are explicitly deferred by revisions A and B. Browser verification cannot satisfy these requirements. Select a stable supported Slint backend based on those results and document the decision. Keep platform-specific bindings isolated; do not introduce a custom renderer or an AppKit editor without reviewing that architectural change.
 
 Target macOS 14 and newer on Apple Silicon and Intel. Validate material availability on each supported OS version, including the solid accessibility fallback. Production distribution uses a signed and notarized `.app`; signing credentials and Apple account access are external release prerequisites. Do not label an unsigned development build as the production release. Automatic update delivery is deferred; document manual upgrades and preservation of local data.
 
@@ -235,3 +235,7 @@ The following sources were consulted on 2026-10-17. The proposed client architec
 On 2026-10-17, after reviewing the native styling limitation and the two proposed alternatives, the user selected A. The first release uses the supported Slint plain-text Markdown editor. Inline heading/link colors are deferred; full themes and accented interface controls remain in scope. This removes only inline syntax styling from the native acceptance criteria. Remaining native input, materials, activation, and accessibility evidence must still be collected.
 
 The user requested an Antinote-style “windowless” experience and accepted continuing after the native frameless feasibility result. Use a frameless floating note; retain Dock access as a stated working assumption because the optional menu-bar-only preference has not been answered. Custom chrome must remain keyboard accessible, and resizing/dragging, rounded corners, shadows, materials and focus still require native validation.
+
+## Accepted implementation revision B
+
+On 2026-10-17 the user approved deferring native blur for the first release (“ok” in reply to the explicit deferral question). Continue with solid, frameless themed paper and full theme support. This removes material composition from the first-release native gate; input correctness, accessibility, activation/focus, pinning, source preservation and production verification remain required. No custom renderer, private view hierarchy, or revised window host is authorized or necessary for this solid-paper scope.

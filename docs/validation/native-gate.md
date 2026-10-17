@@ -174,3 +174,16 @@ After that decision, finish the remaining native input/lifecycle observations, t
 ### Checkpoint verification with the pinned compiler
 
 `rustup run 1.99.1 cargo fmt --check` and `rustup run 1.99.1 cargo clippy --all-targets --all-features --locked -- -D warnings` passed. The standard all-feature lib/bin/test/example suite passed 3 policy tests and skipped 3 explicitly ignored native tests. The separately executed compositor regression failed as described above; the overall native gate is not green. The Unicode/CRLF child-process roundtrip was rebuilt and rerun with Rust 1.99.1 rather than relying on the earlier 1.98.0 result.
+
+## Decision recorded: native blur deferred (revision B)
+
+The user approved solid themed paper for the first release after reviewing the material failure. Native blur is no longer a first-release acceptance requirement; its ignored experimental regression remains as failure evidence for future work. Full themes, frameless UI, input correctness, accessibility and activation/focus requirements remain. Do not present an experimental material probe as production functionality.
+
+
+## Interactive solid-paper checkpoint
+
+With approved revisions A and B, the native preview uses opaque themed paper, a frameless draggable/resizable window, Pin/Unpin, and a temporary text editor. A public-AppKit native level test observed the level rise when pinned and return to its prior value after unpinning (1/1 passed). A three-second interactive smoke run registered Option+A and exited successfully, releasing the shortcut. The preview has a “BN test” menu for reopening and quitting.
+
+The development bundle was ad-hoc signed and verified, then opened for manual observations. It is not a notarized production artifact. Its temporary text is neither persisted nor sent to SilverBullet. Typing/undo/selection, real IME composition, VoiceOver, caret/focus restoration, and full-screen activation remain pending human observations; the native gate is still incomplete. Instructions: [native-checklist.md](native-checklist.md).
+
+Verification on explicit Rust 1.99.1: standard all-feature library/binary/test/example suite passed (4 policy tests; 4 native tests ignored), formatting and diff checks passed, and all-target/all-feature Clippy passed. After the UI change, the native Unicode/CRLF source-byte roundtrip was rerun and passed (1/1). The deferred material regression and incomplete aggregate remain explicitly excluded from a success claim.

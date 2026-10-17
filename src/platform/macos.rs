@@ -20,6 +20,8 @@ pub struct NativeProbeReport {
     pub window_number: isize,
     pub has_native_titlebar: bool,
     pub can_become_key_window: bool,
+    pub native_window_level: isize,
+    pub window_alpha: f64,
     pub material_composition: Observation,
     pub focus_restoration: Observation,
     pub pinning: Observation,
@@ -34,10 +36,9 @@ pub struct NativeProbeReport {
 
 impl NativeProbeReport {
     /// Every required behavior needs affirmative evidence; opening a window is insufficient.
-    /// Inline accents are excluded by the user-approved revision A.
+    /// Inline accents and native blur are excluded by user-approved revisions A and B.
     pub fn passed(&self) -> bool {
         [
-            self.material_composition,
             self.focus_restoration,
             self.pinning,
             self.activation,
@@ -74,6 +75,8 @@ pub fn probe_window(window: &slint::Window) -> Result<NativeProbeReport, Platfor
             .styleMask()
             .contains(NSWindowStyleMask::Titled),
         can_become_key_window: native_window.canBecomeKeyWindow(),
+        native_window_level: native_window.level(),
+        window_alpha: native_window.alphaValue(),
         material_composition: Observation::Unobserved,
         focus_restoration: Observation::Unobserved,
         pinning: Observation::Unobserved,
@@ -98,6 +101,8 @@ mod tests {
             window_number: 0,
             has_native_titlebar: true,
             can_become_key_window: true,
+            native_window_level: 0,
+            window_alpha: 1.0,
             material_composition: Observation::Passed,
             focus_restoration: Observation::Passed,
             pinning: Observation::Passed,
@@ -117,9 +122,16 @@ mod tests {
     }
 
     #[test]
-    fn unobserved_materials_still_block_native_gate() {
+    fn approved_material_deferral_does_not_block_verified_native_gate() {
         let mut report = otherwise_verified_report();
-        report.material_composition = Observation::Unobserved;
+        report.material_composition = Observation::Failed;
+        assert!(report.passed());
+    }
+
+    #[test]
+    fn unobserved_voiceover_still_blocks_native_gate() {
+        let mut report = otherwise_verified_report();
+        report.voiceover = Observation::Unobserved;
         assert!(!report.passed());
     }
 
