@@ -1,0 +1,26 @@
+[package]
+name = "bulletnotes"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+publish = false
+
+[features]
+default = []
+native-validation = []
+probe-skia = ["slint/renderer-skia"]
+
+[dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }
+raw-window-handle = "=0.6.2"
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[lints.clippy]
+all = "warn"

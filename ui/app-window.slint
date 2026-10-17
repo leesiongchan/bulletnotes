@@ -1,0 +1,33 @@
+import { TextEdit, VerticalBox, Palette } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "Bulletnotes — native validation";
+    init => { Palette.color-scheme = ColorScheme.light; }
+    preferred-width: 505px;
+    preferred-height: 552px;
+    min-width: 400px;
+    min-height: 440px;
+    background: #fcfaf4;
+    in-out property <string> source <=> editor.text;
+    in property <styled-text> styled-preview;
+    VerticalBox {
+        padding: 24px;
+        spacing: 16px;
+        Text { text: "NATIVE EDITOR VALIDATION"; color: #54705c; font-size: 11px; }
+        editor := TextEdit {
+            text: "# A little space to think\n\nDraft a note, follow [[a link]], keep the source.\n\n👩🏽‍💻 日本語 café";
+            font-family: "Menlo";
+            font-size: 15px;
+            wrap: word-wrap;
+        }
+        Text { text: "Plain-text input above · styled display below"; color: #646b5b; font-size: 11px; }
+        StyledText {
+            height: 62px;
+            text: root.styled-preview;
+            default-font-family: "Menlo";
+            default-font-size: 15px;
+            default-color: #353b32;
+            link-color: #54705c;
+        }
+    }
+}

@@ -1,0 +1,8 @@
+// Disposable compiler probe: can the native input consume per-range styles?
+export component StyledInputProbe inherits Window {
+    in property <styled-text> styled-source;
+    TextInput {
+        text: root.styled-source;
+        single-line: false;
+    }
+}
