@@ -11,6 +11,10 @@ native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor"
 probe-skia = ["slint/renderer-skia"]
 
 [dependencies]
+thiserror = "=2.0.21"
+uuid = { version = "=1.28.0", features = ["v4"] }
+jiff = "=0.2.38"
+url = "=2.5.8"
 slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

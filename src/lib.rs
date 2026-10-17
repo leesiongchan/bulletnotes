@@ -1,5 +1,5 @@
-//! Native feasibility harness for the approved Bulletnotes design.
+//! Bulletnotes native application and UI-independent core.
 slint::include_modules!();
-#[cfg(target_os = "macos")]
+pub mod app;
 pub mod domain;
 pub mod platform;
