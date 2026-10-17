@@ -9,3 +9,5 @@ See the [approved design](docs/superpowers/specs/2026-10-17-bulletnotes-design.m
 On an interactive macOS host, `cargo run --example native_window_probe -- --auto-close` opens the comparison window. The evidence document lists the source-preservation test, intentionally failing acceptance gate, renderer selectors, and isolated compiler probes.
 
 Add `--frameless` to the native window example to view the disposable title-bar-free variant. It is a feasibility probe, not the finished Antinote-style chrome.
+
+The disposable native-material probe currently fails actual compositor acceptance on both tested renderers (the effect covers the note). `--material` requires `--features native-validation`; always use `--auto-close` for this known-failing diagnostic. It is excluded from the normal app path. Use `rustup run 1.99.1 cargo ...` when the session sets a different `RUSTUP_TOOLCHAIN` override.

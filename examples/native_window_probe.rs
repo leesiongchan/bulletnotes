@@ -1,7 +1,17 @@
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/material.rs"]
+mod material;
+
 use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--material") {
+        #[cfg(all(target_os = "macos", feature = "native-validation"))]
+        return material::run(std::env::args().any(|arg| arg == "--auto-close"));
+        #[cfg(not(all(target_os = "macos", feature = "native-validation")))]
+        return Err("--material requires macOS and --features native-validation".into());
+    }
     let window = bulletnotes::AppWindow::new()?;
     window.set_frameless_probe(std::env::args().any(|arg| arg == "--frameless"));
     window.set_styled_preview(slint::StyledText::from_markdown(

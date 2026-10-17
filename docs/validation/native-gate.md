@@ -7,7 +7,7 @@ This is a disposable native feasibility harness, not the application or a produc
 ## Environment
 
 - macOS 27.0.1, build 26A434; arm64 host.
-- Rust 1.99.1 (`58cf8f9c3`, 2026-10-13), edition 2024; exact compiler pinned.
+- Rust 1.99.1 (`58cf8f9c3`, 2026-10-13) is pinned and installed. **Correction:** the original captures and checks ran on Rust/Cargo 1.98.0 because this agent session sets `RUSTUP_TOOLCHAIN=1.98.0`, overriding the file. New checks explicitly use `rustup run 1.99.1 cargo`; results below identify the actual compiler.
 - Slint and slint-build 1.18.1; exact direct dependencies and resolved Cargo.lock.
 - Winit backend, explicitly selected FemtoVG/OpenGL and Skia renderers.
 - Deployment target 14.0 is configured; macOS 14/15 and Intel execution are untested.
@@ -127,3 +127,50 @@ SLINT_BACKEND=winit-femtovg cargo run --example native_window_probe --locked -- 
 Slint documents [frameless windows and resize borders](https://docs.slint.dev/latest/docs/slint/reference/window/window/) and [WindowMoveArea on winit/macOS](https://docs.slint.dev/latest/docs/slint/reference/window/windowmovearea/). A separate [SystemTrayIcon](https://docs.slint.dev/latest/docs/slint/reference/window/systemtrayicon/) can provide the macOS menu-bar entry. Apple's [accessory activation policy](https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory) supports an app absent from the Dock while retaining programmatic/window activation; this policy has not been exercised by the probe. It is distinct from removing visible window chrome. Native [NSVisualEffectView](https://developer.apple.com/documentation/appkit/nsvisualeffectview) is the candidate background-material API, still unverified with the chosen renderer.
 
 The question about keeping Dock access versus menu-bar-only mode is pending. No final lifecycle policy has been selected on the user's behalf.
+
+## Material-composition investigation (in progress)
+
+The `native-validation` feature now exposes a disposable `--material` window with a transparent Slint root, alpha-tinted paper, and opaque TextInput ink. A public NSVisualEffectView is added below the existing native view's subviews. Winit's contentView identity is preserved. Replacing contentView in the initial experiment caused a native abort on focus loss because Winit assumes its own content-view class; that approach was rejected. The retained effect view is removed on teardown, and prior window background/opacity are restored.
+
+A native child-process test initially failed because the adapter did not exist. On Rust 1.98.0, the corrected adapter passed the renderer-pixel check: native effect attached, whole-window alpha 1.0, more than 100 translucent-paper pixels and more than 100 fully opaque ink pixels. This establishes the Slint render-buffer alpha boundary, not the complete visual effect or accessibility/lifecycle correctness. The pinned 1.99.1 rebuild succeeded. The render-buffer check also passed there, but the stronger native-composite check failed on both renderers: the effect view covers the note. This is a failed composition candidate, not a successful native-material implementation.
+
+Reference pattern: [upstream window-vibrancy native implementation](https://github.com/tauri-apps/window-vibrancy/blob/dev/src/macos/vibrancy.rs). No additional vibrancy library, private AppKit API, or renderer fork was introduced.
+
+### Native composite outcome: failed on both tested renderers
+
+Commands actually run with Rust/Cargo 1.99.1:
+
+```sh
+rustup run 1.99.1 cargo build --features native-validation,probe-skia --example native_window_probe --locked
+SLINT_BACKEND=winit-femtovg rustup run 1.99.1 cargo test --features native-validation --test native_gate native_material_keeps_ink_opaque_over_translucent_paper --locked -- --ignored --nocapture
+SLINT_BACKEND=winit-skia rustup run 1.99.1 cargo test --features native-validation,probe-skia --test native_gate native_material_keeps_ink_opaque_over_translucent_paper --locked -- --ignored --nocapture
+```
+
+Both strengthened native tests failed with `native material obscures paper: 0 light pixels`. The test captures only the app window and requires both paper and glyph pixels in its interior; a successful offscreen alpha readback alone cannot pass it. Temporary screenshots are isolated through tempfile; png 0.18.1 decodes the actual captured pixels. These are test-only dependencies. The existing tempfile pin was introduced earlier than Task 4 for this native acceptance check.
+
+A separate diagnostic disabled Slint render-buffer readback and waited two additional seconds before capturing the exact on-screen window rectangle. A temporary public-CoreGraphics helper checked the window ID against the child PID and returned only its bounds. These captures also show the effect covering the editor. This rules out the tested readback path, first-frame delay, and window-only screenshot behavior as explanations for the failed candidate. The helper lives in `/tmp`; no private API or new production bridge was introduced.
+
+| Approach | Outcome |
+| --- | --- |
+| Replace native contentView with an effect container | Rejected: Winit assumes its own contentView class and aborts on focus loss |
+| Preserve contentView; add effect below its subviews, FemtoVG | Effect appears, note is covered |
+| Same hierarchy with stable Skia | Effect appears, note is covered |
+
+![FemtoVG: actual app region, note covered](assets/native-material-femtovg-screen-region.png)
+
+![Skia: actual app region, note covered](assets/native-material-skia-screen-region.png)
+
+This does not prove that every public native-hosting arrangement is impossible. It establishes that these tested approaches do not satisfy the approved gate. The adapter remains in an explicitly selected disposable example behind `native-validation`; the normal framed/frameless solid harness is unaffected. No native-material technique has been selected for production.
+
+### Next decision
+
+The user-approved A revision deferred inline heading/link colors only. Native blur remains a requirement. Task 1 therefore remains incomplete and downstream tasks have not begun.
+
+- Recommended smaller revision: retain Rust/Slint, frameless notes and full themes; use solid paper for the first release and defer native blur.
+- If native blur is essential now: review a revised macOS window-hosting design and its validation before continuing. No private view hierarchy, custom renderer, or backend fork is presumed approved.
+
+After that decision, finish the remaining native input/lifecycle observations, then proceed to page models, theme support, durable local notes, and guarded automatic sync in the existing plan. Actual IME and VoiceOver checks cannot be represented by synthetic key events or policy-unit tests.
+
+### Checkpoint verification with the pinned compiler
+
+`rustup run 1.99.1 cargo fmt --check` and `rustup run 1.99.1 cargo clippy --all-targets --all-features --locked -- -D warnings` passed. The standard all-feature lib/bin/test/example suite passed 3 policy tests and skipped 3 explicitly ignored native tests. The separately executed compositor regression failed as described above; the overall native gate is not green. The Unicode/CRLF child-process roundtrip was rebuilt and rerun with Rust 1.99.1 rather than relying on the earlier 1.98.0 result.

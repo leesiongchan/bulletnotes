@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Target macOS 14 and newer on Apple Silicon and Intel.
-- Default window content is approximately 505 by 552 logical pixels; minimum is 400 by 440.
+- Default window content is approximately 505 by 552 logical pixels; minimum is 400 by 440. Use the requested frameless floating-note direction; retain Dock access as a stated working default until the optional menu-bar-only preference is answered.
 - Only one of Note, All pages, or Appearance is visible in the main window. Preserve text, selection, scroll, and search query during navigation.
 - Ship Paper, Graphite, Matcha, and Rose, using Bulletnotes theme format version 1 only. Antinote theme import is deferred.
 - Theme files are data-only UTF-8 JSON, limited to 32 KiB; names contain 1–32 Unicode scalar values after trimming; colors are opaque `#RRGGBB` strings.

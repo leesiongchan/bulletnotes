@@ -52,7 +52,7 @@ The standalone [interactive design reference](assets/bulletnotes-focus-first.htm
 
 The default content size is approximately 505 by 552 logical pixels, matching the approved preview. The window is resizable, with a 400 by 440 logical-pixel minimum. Controls remain reachable through scrolling and layout changes at the minimum size.
 
-The note body receives most of the window. A quiet path label identifies the current SilverBullet page. The bottom bar provides search, Appearance, a new-note action, save/sync status, and previous/next navigation. The title bar retains macOS window controls and provides pinning. The preview's external view tabs and sync-state selector are review controls, not application chrome.
+The note body receives most of the window. A quiet path label identifies the current SilverBullet page. The bottom bar provides search, Appearance, a new-note action, save/sync status, and previous/next navigation. The window uses the frameless floating-note direction requested by the user. A small non-editor drag region and accessible in-content controls provide moving, hiding, and pinning without a conventional title bar. Dock access is retained as the working default; menu-bar-only mode is optional and has not been selected. The preview's external view tabs and sync-state selector are review controls, not application chrome.
 
 Only one of Note, All pages, or Appearance is visible in the main window. Transitions preserve the current note, selection, scroll position, and browsing query. Opening search moves focus to its field. Escape returns to the previous note and restores the editing position. Opening a result switches to that page; it does not create a second document window.
 
@@ -234,4 +234,4 @@ The following sources were consulted on 2026-10-17. The proposed client architec
 
 On 2026-10-17, after reviewing the native styling limitation and the two proposed alternatives, the user selected A. The first release uses the supported Slint plain-text Markdown editor. Inline heading/link colors are deferred; full themes and accented interface controls remain in scope. This removes only inline syntax styling from the native acceptance criteria. Remaining native input, materials, activation, and accessibility evidence must still be collected.
 
-The user's subsequent question about an Antinote-style “windowless” experience is under investigation. The current title-bar paragraph above describes the earlier approved reference; a new chrome/lifecycle choice has not yet been selected.
+The user requested an Antinote-style “windowless” experience and accepted continuing after the native frameless feasibility result. Use a frameless floating note; retain Dock access as a stated working assumption because the optional menu-bar-only preference has not been answered. Custom chrome must remain keyboard accessible, and resizing/dragging, rounded corners, shadows, materials and focus still require native validation.
