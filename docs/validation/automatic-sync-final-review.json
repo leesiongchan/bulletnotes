@@ -1,0 +1,108 @@
+{
+  "date": "2026-10-18",
+  "reviewed_code_revision": "0f5a34646452703501da56a5f53d08b955dd6d3f",
+  "branch": "feat/automatic-sync",
+  "whole_branch_review": {
+    "base": "063b9356fed8b6a5bafae6d4a4d641b7b1d3a6f0",
+    "head": "44ded26681cc2d7cb9c35217f7a3c24f29626619",
+    "result": "Two Important findings; corrected and scoped-reviewed subsequently."
+  },
+  "correction_reviews": [
+    {
+      "head": "6fb0bf7ddcb37cbf748b68db9d7c25ffd50faa81",
+      "result": "Four original findings addressed; new denied-readback GET403 backoff gap identified."
+    },
+    {
+      "head": "0f5a34646452703501da56a5f53d08b955dd6d3f",
+      "result": "GET403 finding addressed; no new Critical/Important breakage; approved for development packaging."
+    }
+  ],
+  "blocking_findings_remaining": 0,
+  "retained_minor": "Slint static/palette convergence diagnostic: attribution unknown, no equivalent baseline or demonstrated product failure; explicitly retained without suppression.",
+  "final_checks": {
+    "scripts/check.sh": {
+      "exit": 0,
+      "formatting": "passed",
+      "strict_all_feature_clippy": "passed",
+      "passed": 289,
+      "failed": 0,
+      "ignored": 24,
+      "test_binaries": 49
+    },
+    "rust_1_92_all_targets_locked": {
+      "exit": 0,
+      "warnings": 0,
+      "seconds": 6.59
+    },
+    "git_diff_check": {
+      "exit": 0
+    }
+  },
+  "compiled_source_files_sha256": {
+    "src/sync/worker.rs": "acd709afb0803a2cf9619aeb4475f5a45788c153d66b24652b346fc26a53430e",
+    "tests/automatic_sync.rs": "8bfd27462f2a2c7f9669c16040eba991ef349784a48e863155b99afc536849c0",
+    "tests/support/space_fixture.rs": "89361406a548cf247784beeb34b390fcb1241352d1f85e33550a7c035bf796e0",
+    "tests/editor_reconciliation.rs": "ba284100e8bb6975f90a4f8e05aba1bdba5addf64436a6734706e421f32e9255",
+    "examples/support/sync_acceptance.rs": "a6a786017a5add7a9aaa163d573f6f4a55c03bbeef598bbb42338a4bbbab5efc",
+    "build.rs": "5ee2aeee7acd333435a68bc502f5d3bcf31ac25b474655bd4a8eda8a3622498e",
+    "benches/support/merge_distribution.rs": "ef7f001bf08efd5ed058c4ea01534a7ff8f884a3ee6f39c6e2774af1e832f6f3",
+    "tests/build_metadata.rs": "ada9b3394a9b7fcaf87eaa317377b999c1f5b77174b9a5c40a1d102ce24bd5b0"
+  },
+  "development_package": {
+    "artifact": "target/packages/automatic-sync-0f5a346/Bulletnotes-0.1.0-arm64-development.app",
+    "kind": "development",
+    "architecture": "arm64",
+    "minimum_macos": "14.0",
+    "signature": "verified",
+    "launch": "passed (generated UI; no store, credentials, or network)",
+    "graphics_api": "Metal",
+    "source_revision": "0f5a34646452703501da56a5f53d08b955dd6d3f",
+    "source_dirty": true,
+    "cargo_lock_sha256": "8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b",
+    "binary_sha256": "e798d9a88005acf3a106cb88aaedfd08073caab4503192b689bc2886bf3e0e5a",
+    "archive_sha256": "b26bedbd0e27afdc6302d107b7d585b1726f1480616b50223f55fce31d5afcf8",
+    "archive": "target/packages/automatic-sync-0f5a346/Bulletnotes-0.1.0-arm64-development.zip",
+    "source_dirty_reason": "Only the preserved untracked .DS_Store was present when the bundle was built."
+  },
+  "remaining_release_gates": [
+    "Physical IME/VoiceOver/live directional-selection and gestures/Spaces fidelity",
+    "Older supported hardware/macOS combinations",
+    "Native frame/typing latency under a deliberately stalled shared executor",
+    "Existing 1 MiB native-open performance target",
+    "Direct unrelayed deployed-native routing",
+    "Clean install/upgrade, Developer ID signing, notarization and distribution"
+  ],
+  "scope": {
+    "normal_database_or_keychain_used": false,
+    "installed_application_replaced": false,
+    "merged_or_pushed": false,
+    "published": false,
+    "live_owned_paths_cleanup": "Both live runs confirmed three guarded absences; fresh native loopback also confirmed three guarded absences."
+  },
+  "rulings_in_order": [
+    "Engine byte/token admission limits apply to actual three-way merging; equal/one-sided fast paths may bypass the engine within existing protocol limits — otherwise a large one-sided local edit would wrongly become server-wins fallback — if wrong, large fast-path source copies could cost memory/latency, so retain bounded existing protocol limits and test the path.",
+    "Task 3 may add save_local_from_base_outcome while retaining the existing save_local_from_base wrapper until Task 5 migrates callers to LocalSaveOutcome — intermediate tasks must compile without prematurely implementing editor behavior — if wrong, a temporary wrapper increases API surface and must be removed once all callers migrate.",
+    "Recovery job state changes (acknowledgement, unknown marking, relocation and readback completion) must carry the expected OperationId as well as event/ordinal — event/ordinal survives relocation, so an old attempt must never complete a newer destination's job — if wrong, this adds parameters and attempt-history checks but does not change product behavior. Claim may return the current operation atomically; subsequent mutations must use that captured identity.",
+    "Use one retained SQLite monotonic generation clock for page source and recovery-draft generations, assigning fresh values on insert and relevant source updates — per-row defaults/counters permit ABA after same-path deletion/recreation, including an identical reinserted draft — if wrong, the extra counter write adds latency; measure within the existing single-owner transaction and keep position/recency changes excluded. Existing migrated rows may start0 because no old runtime token survives migration. Checked i64 exhaustion must fail safely.",
+    "Persist a typed automatic-recovery cause (Overlap, NoCommonBase, BudgetFallback, AuthoredDraft) as event metadata, outside the observation fingerprint — the spec requires a local reason and equal observations must reuse identity even if resource availability changes — if wrong, the extra enum may require extension for a newly supported cause; source remains unchanged and no current runtime rows are deployed.",
+    "Execute the already-approved floating-chrome implementation after Task5 and before Task6 final acceptance/whole-branch review — one final review must cover both original user requests, and running it before UI would require redundant broad validation — if wrong, a UI regression may delay the combined acceptance boundary; sync task reviews still remain ordered and separate. This refines the earlier 'after sync' scheduling note, without changing feature scope.",
+    "Task4 may add a new additive migration and narrowly scoped retired-delete watch store module plus explicit-trash hook — existing outbox states and page-cascade lifetime cannot encode retired destructive evidence and independent repair authority safely — if wrong, this adds persistence/API surface; keep ordinary create-only repair on the existing outbox and do not generalize recovery upload jobs. Preserve immutable evidence across restart; later explicit user trash must atomically supersede old repair authority. See unknown-delete-watch-audit.md.",
+    "A retired DELETE watch is passive safety monitoring, distinct from an outstanding write; report content sync against the latest acknowledged/read-back canonical/recovery obligations, while retaining the unresolved old-request evidence — no finite readback can prove old HTTP terminality, and treating a permanently unknowable retired request as an active write would strand status forever — if wrong, content may transiently disappear before a delayed-delete watch repairs it. Never claim request cancellation/terminality, and any materialized, denied or unknown repair remains pending/failed and durable. No silent expiry of watch authority; explicit later user deletion can supersede it.",
+    "True clean two-sided merges also retain base/local/remote/chosen in local kept history, without creating synced recovery uploads — Task3's preservation wording is unqualified and automatic source replacement should be reversible; identity/one-sided fast paths retain existing behavior — if wrong, retained snapshots increase local storage use. Repeated unchanged observations must not duplicate them.",
+    "After recovery destination relocation, retired create-only attempts are passive readback watches; only the current immutable first-create attempt fences ordinary destination edits, and exact acknowledgement of the current copy settles that event/ordinal's preservation obligation — old HTTP terminality can be permanently unknowable, but the required source is durably preserved by the acknowledged replacement, and create-only late work cannot overwrite an occupied edited page — if wrong, a delayed old attempt may still create an extra recovery page at an emptied old destination. Retain immutable attempt history/discovery and never claim its request terminality; current blocked/unknown jobs and any real pending writes remain pending. Task4 must update Task2's conservative all-attempt status/fence queries and test post-relocation edits and replacement acknowledgement with old watch retained.",
+    "Distinguish definitive guard-rejected DELETE responses from transport-uncertain DELETEs with persisted finite terminal evidence before readback/restart — a rejected request cannot execute later, so granting it indefinite resurrection authority would undo legitimate future external deletions — if wrong, the extra evidence transition/schema field adds complexity; keep it narrow and do not classify transport/proxy5xx failures as terminal. Both paths preserve/reconcile edits without retrying old destructive intent; only genuinely uncertain delayed work authorizes repair.",
+    "Task5 may add a narrow typed editor-rebase preparation/checked commit and typed recovery provenance, preserving displayed baseline B, original input U, durable canonical S and genuine HTTP base H separately — Task3's HTTP-shaped remote is installed as server base, so fabricating it from dirty canonical S corrupts validator/source meaning; stale-save-only can omit independent pending S edits — if wrong, the extra API/metadata increases integration cost. Reuse existing merge executor, history, immutable upload and CAS helpers; no second merge engine, fabricated authored revision, false HTTP observation, or non-atomic recovery registration. See editor-rebase-store-audit.md.",
+    "Task5 may add focused migration007 and a durable editor-handoff journal/module — ordinary stale saves must acknowledge exact U before merge/draft gates, while retaining canonical S and B/H evidence so restart can merge S-only pending changes — if wrong, extra replay/coalescing state increases complexity. Keep pending handoff unsynced, restore latest accepted U to the editor before replay even offline/unknown, retain genuine H separately, and preserve branch baseline/displacedS across subsequent U2 saves. New user trash/restore must invalidate stale installation; reuse existing checked merge/preservation pipeline.",
+    "Permit a fixture-only local pointer-event filter scoped to the owned generated NSWindow, distinguishing tagged synthetic events and passing all other windows/non-pointer events — traced real pointer moves from the active desktop repeatedly canceled scripted hover while key stayed true; requiring mouse inactivity would interrupt the user — if wrong, fixture filtering may hide interactions with physical input, so leave physical gestures as manual gates and keep product ChromeMonitor unchanged with scoped cleanup.",
+    "Permit a cfg(test)-only pub(crate) StoreHandle getter returning its actual shared MergeExecutor clone for the existing private stalled-merge unit test — separate executors only establish CPU/storage coexistence, not the real store-slot fallback/preservation boundary — if wrong, the extra test seam couples the unit test to store construction; keep it absent from production/public API, use existing private finite merge_with stall, and do not claim native typing/frame latency from storage acknowledgements.",
+    "Retain the unattributed Slint static/palette convergence diagnostic as an explicit minor investigation, with no suppression or speculative product correction — accepted floating/native routes and captures show no demonstrated failure and equivalent baseline attribution is unavailable — if wrong, an initialization/layout performance defect may remain undetected until focused baseline/change-tracker investigation.",
+    "Accept the final review's semantic-prose limit: automatic policy guarantees deterministic selection and exact preservation, not inferred author intent — contradictory meaning has no verifiable universal resolution — if wrong, chosen prose may require manual review of the preserved alternative.",
+    "Keep physical IME/VoiceOver/directional-selection/gestures/Spaces/older-hardware checks as open release gates — source review and synthetic owned input do not establish those capabilities — if wrong, physical/native fidelity defects remain undiscovered before release testing.",
+    "Keep native frame/typing latency under a deliberately stalled shared executor unverified, separately from measured SQLite acknowledgements — storage timings do not demonstrate frame/input behavior — if wrong, a CPU-stall interaction could remain unmeasured despite durable-save progress.",
+    "Label deployed acceptance as controlled exact-path relay evidence, with direct unrelayed native routing unverified — this was required to exclude unrelated page bodies and the normal app store — if wrong, a direct-routing-specific integration failure remains untested.",
+    "Build only the authorized ad-hoc development bundle after clean review; leave Developer ID/notarization/clean-install/upgrade/distribution gates open — no signing identity, upload, app replacement or real Keychain use was authorized — if wrong, development verification will not predict distribution/upgrade behavior.",
+    "Treat license/advisory checks as dated generated evidence rather than new legal or vulnerability certification — unchanged lock SHA reuses the approved audit and verified license texts — if wrong, later/unlisted advisories or attribution defects require a new audit.",
+    "Extend the final correction with the narrowly required denied-GET readback backoff fix and scoped recheck — fresh re-review proved a new load-bearing hot loop introduced by permission readmission, and the higher-priority instruction to complete authorized work forbids packaging a known broken path merely to satisfy the skill's one-wave stop rule — if wrong, this adds implementation/verification time and another focused review; preserve all original addressed verdicts and limit changes to the new GET-403 edge."
+  ],
+  "record_only_followup": "This record and its Markdown link were written after artifact verification; no compiled source changed after the reviewed code revision."
+}

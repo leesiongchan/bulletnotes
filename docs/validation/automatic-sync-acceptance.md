@@ -123,8 +123,10 @@ for final review rather than suppressed or declared preexisting.
 Physical gestures/Spaces, older supported Apple Silicon/macOS versions, exact
 live selection/IME/VoiceOver, native typing/frame latency under deliberate shared
 executor stall, the existing 1 MiB native-open target, clean install/upgrade,
-Developer ID signing/notarization and distribution remain unverified. Controller
-owns the fresh whole-branch review and subsequent development package.
+Developer ID signing/notarization and distribution remain unverified. The final
+source review and ad-hoc development bundle verification are complete; the
+[final record](automatic-sync-final-review.json) binds the reviewed source, test
+results, artifact hashes, remaining gates and ordered implementation rulings.
 
 
 ## Final automated checks
@@ -216,7 +218,8 @@ The static/palette Slint convergence diagnostic remains an explicit investigatio
 attribution unknown, no equivalent baseline and no demonstrated product failure.
 The accepted floating contract is unchanged. No diagnostic was suppressed or
 speculative UI fix made. Existing physical/native-fidelity and distribution gates
-remain open; the controller owns scoped re-review and subsequent packaging.
+remain open. Subsequent scoped review and development packaging passed, as
+recorded in [the final record](automatic-sync-final-review.json).
 
 ## Denied readback follow-up
 
@@ -242,4 +245,7 @@ One new Rust 1.92.0 `cargo check --all-targets --locked` passed without warnings
 hashes and evidence; `final_review_correction` explicitly retains the preceding
 `6fb0bf7` hashes and 288-test evidence as historical. The lock hash and notices are
 unchanged. No native, live-server or browser run was repeated for this error path.
-The controller owns its scoped recheck before packaging.
+Scoped recheck approved this correction at source `0f5a346`; the ARM64/macOS14
+ad-hoc bundle passed signature and isolated Metal-launch verification. The
+[final record](automatic-sync-final-review.json) contains the exact artifact and
+source hashes. No installed application was replaced, and no merge or push ran.
