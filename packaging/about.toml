@@ -1,6 +1,6 @@
-# Runtime dependencies for both supported macOS targets; no project license is assigned.
+# Runtime dependencies for the Apple Silicon macOS target; no project license is assigned.
 accepted = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0", "BSL-1.0", "Apache-2.0 WITH LLVM-exception", "CC0-1.0", "OFL-1.1", "LicenseRef-Slint-Royalty-free-2.0"]
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+targets = ["aarch64-apple-darwin"]
 ignore-build-dependencies = true
 ignore-dev-dependencies = true
 private = { ignore = true }

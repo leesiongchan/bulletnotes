@@ -10,7 +10,7 @@ This is a disposable native feasibility harness, not the application or a produc
 - Rust 1.99.1 (`58cf8f9c3`, 2026-10-13) is pinned and installed. **Correction:** the original captures and checks ran on Rust/Cargo 1.98.0 because this agent session sets `RUSTUP_TOOLCHAIN=1.98.0`, overriding the file. New checks explicitly use `rustup run 1.99.1 cargo`; results below identify the actual compiler.
 - Slint and slint-build 1.18.1; exact direct dependencies and resolved Cargo.lock.
 - Winit backend, explicitly selected FemtoVG/OpenGL and Skia renderers.
-- Deployment target 14.0 is configured; macOS 14/15 and Intel execution are untested.
+- Deployment target 14.0 is configured; macOS 14/15 execution on Apple Silicon is untested. Intel was removed from supported scope by the user on 2026-10-18.
 - Preferred content size 505×552, minimum constraints 400×440 logical pixels. Minimum-size interaction has not been tested.
 
 ## Results

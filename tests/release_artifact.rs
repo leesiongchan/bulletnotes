@@ -4,6 +4,14 @@ use std::{
     process::{Command, Output},
 };
 fn fixture(minimum: &str, signed: bool, resources: bool) -> (tempfile::TempDir, PathBuf) {
+    fixture_for_architecture("arm64", minimum, signed, resources)
+}
+fn fixture_for_architecture(
+    architecture: &str,
+    minimum: &str,
+    signed: bool,
+    resources: bool,
+) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let app = dir.path().join("Generated Artifact.app");
     let mac = app.join("Contents/MacOS");
@@ -14,11 +22,6 @@ fn fixture(minimum: &str, signed: bool, resources: bool) -> (tempfile::TempDir, 
         b"#include <stdio.h>\nint main(void){puts(\"installation_check: true\");return 0;}\n",
     )
     .unwrap();
-    let architecture = if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else {
-        "x86_64"
-    };
     let status = Command::new("xcrun")
         .args([
             "clang",
@@ -114,5 +117,65 @@ fn verifier_checks_real_macho_artifacts_and_rejects_incomplete_distribution() {
     assert!(
         !staple.status.success(),
         "ad-hoc fixture cannot have a production notarization staple"
+    );
+}
+
+fn verify_static(app: &Path) -> Output {
+    Command::new(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-release.sh"))
+        .args(["--development", "--static-only"])
+        .arg(app)
+        .output()
+        .unwrap()
+}
+#[test]
+fn verifier_rejects_intel_even_with_valid_metadata_and_signature() {
+    let (_dir, app) = fixture_for_architecture("x86_64", "14.0", true, true);
+    let output = verify_static(&app);
+    assert!(
+        !output.status.success(),
+        "Intel artifact was accepted: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        reason(&output).contains("Apple Silicon"),
+        "{}",
+        reason(&output)
+    );
+}
+#[test]
+fn verifier_rejects_universal_bundles_with_an_intel_slice() {
+    let (_arm_dir, arm) = fixture("14.0", true, true);
+    let (_intel_dir, intel) = fixture_for_architecture("x86_64", "14.0", true, true);
+    let binary = arm.join("Contents/MacOS/bulletnotes");
+    let combined = arm.parent().unwrap().join("universal");
+    let status = Command::new("xcrun")
+        .args(["lipo", "-create"])
+        .arg(&binary)
+        .arg(intel.join("Contents/MacOS/bulletnotes"))
+        .arg("-output")
+        .arg(&combined)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    std::fs::rename(combined, &binary).unwrap();
+    let status = Command::new("codesign")
+        .args([
+            "--force",
+            "--sign",
+            "-",
+            "--options",
+            "runtime",
+            "--timestamp=none",
+        ])
+        .arg(&arm)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let output = verify_static(&arm);
+    assert!(!output.status.success());
+    assert!(
+        reason(&output).contains("Apple Silicon"),
+        "{}",
+        reason(&output)
     );
 }

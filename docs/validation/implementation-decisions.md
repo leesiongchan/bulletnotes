@@ -107,3 +107,5 @@ Complete chronological export of the execution ledger’s ruling lines, includin
 52. Final: Ruling: reviewer declined screenshot acceptance — failed optional About capture is unobserved, no visual-fidelity claim — cost if wrong: human visual review may require corrections.
 
 53. Final: Ruling: retain this plan's evidence workspace while manual/native/performance/distribution completion contracts remain open; export all Ruling lines to committed docs/validation/implementation-decisions.md — deleting evidence now would discard the outstanding gate record — cost if wrong: local scratch storage retained longer.
+
+54. Ruling: User scope correction2026-10-18 supersedes the original dual-architecture spec: macOS14+ Apple Silicon only; build/package/attribution target only aarch64-apple-darwin, reject Intel and universal artifacts, and reject explicit Intel application compilation — the user directly requested purely Apple Silicon support — cost if wrong: Intel support requires a new scope decision; older supported macOS/native/performance/signing gates remain open.

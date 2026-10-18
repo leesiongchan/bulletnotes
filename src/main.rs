@@ -1,3 +1,6 @@
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+compile_error!("Bulletnotes supports Apple Silicon macOS only; build for aarch64-apple-darwin.");
+
 #[cfg(target_os = "macos")]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     use bulletnotes::{

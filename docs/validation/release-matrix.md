@@ -1,7 +1,8 @@
 # Native and release evidence
 
 Updated 2026-10-18. This is a development build; unobserved acceptance gates are
-open. The older live BN/BN 2 previews and the user's store were not replaced.
+open. Supported hardware is Apple Silicon only on macOS 14+; Intel and universal
+builds are excluded by the user’s 2026-10-18 scope correction. The older live BN/BN 2 previews and the user's store were not replaced.
 
 ## Lifecycle
 
@@ -68,7 +69,7 @@ open target remains unmet. Licensing and distribution have separate gates.
 
 ## Distribution gates
 
-Developer ID signing, notarization, clean Apple Silicon/Intel macOS 14+ installs,
+Developer ID signing, notarization, clean Apple Silicon macOS 14+ installs,
 physical accessibility checks, exact selection restoration, and measured native
 performance remain release gates. Ad-hoc fixture signing does not satisfy the
 Developer ID/notarization gate.
@@ -78,7 +79,7 @@ Developer ID/notarization gate.
 | Check | Evidence |
 | --- | --- |
 | Apple Silicon release build | Locked Rust1.99.1 build, thin LTO, one codegen unit; Mach-O/Info.plist target14.0; hardened ad-hoc signature verified; isolated generated-UI launch passed |
-| Intel release build | Locked cross build; x86_64 Mach-O target14.0 and hardened ad-hoc signature verified; launch/clean install unobserved |
+| Architecture boundary | Apple Silicon ARM64 only; Intel and universal packages are rejected. Earlier Intel artifacts are superseded historical evidence and are not supported releases. |
 | Strict distribution rejection | Real generated Mach-O regression rejects unsigned, minOS15, missing resources and development distribution; ad-hoc staple validation fails as expected |
 | Minimum Rust | Final production source compiles with Rust1.92.0 and Cargo.lock; no toolchain defaults changed |
 | Upgrade persistence | Separate current-code process retains committed notes, exact offline source, guarded queue and custom appearance; migration-failure/corruption regressions pass |
@@ -97,3 +98,9 @@ The user's existing note bodies and live preview processes remain untouched.
 ## Final review verification
 
 The [independent branch review and fix record](final-review.md) documents four behavioral fixes and one deferred presentation minor. Final automated verification: 171 passed, zero failed, 18 explicit ignores; strict Clippy/fmt and Rust 1.92.0 production check passed. Generated native merge-shutdown/restart, two-client offline sync/restart, and lifecycle checks passed; the signed LaunchServices lifecycle check also passed. Closing freezes authoring through the complete durability transition and restores it after failure. No manual gate above is waived.
+
+## Apple Silicon scope correction (2026-10-18)
+
+The user narrowed support to macOS 14+ on Apple Silicon only. Packaging and runtime attribution target `aarch64-apple-darwin`; the verifier accepts only a thin ARM64 Mach-O, and explicit Intel application compilation is rejected. Generated signed Intel and universal fixtures exercise rejection without executing either artifact. ARM64 positive verification remains covered.
+
+Verification: 173 passed, zero failed, 18 explicit ignored gates; strict Clippy/fmt passed. An explicit Intel Cargo check failed with the intended Apple Silicon-only diagnostic. Rust 1.92.0 production checking passed. Attribution regeneration passed with the same verified full license text. Intel runtime testing is removed from release acceptance; supported macOS, input/accessibility, performance, signing and notarization gates remain open.

@@ -1,7 +1,10 @@
 # Build and verify macOS artifacts
 
+Bulletnotes supports **macOS 14+ on Apple Silicon only**. Intel and universal
+bundles are unsupported.
+
 Build requirements: macOS/Xcode CLI tools, Python 3.11+, Rust 1.99.1,
-`aarch64-apple-darwin` and `x86_64-apple-darwin` standard libraries, and cargo-about
+the `aarch64-apple-darwin` standard library, and cargo-about
 0.9.2. On the project's Nix setup, a missing CLI can be run through comma.
 The toolchain file pins Rust; commands use `rustup run` explicitly because an
 inherited `RUSTUP_TOOLCHAIN` can override that file. Rust 1.92.0 also passes the
@@ -14,13 +17,14 @@ scripts/verify-release.sh --development target/packages/local/Bulletnotes-0.1.0-
 ```
 
 The version must match Cargo.toml. Output directories must be fresh: existing
-artifacts are not overwritten. Each architecture receives an `.app`, `.zip` and
+artifacts are not overwritten. The ARM64 build receives an `.app`, `.zip` and
 `.verification.json`. Deployment target is 14.0 in both Info.plist and Mach-O.
 The native binary and attribution resources are signed with hardened runtime and
 an empty entitlement dictionary. Development mode uses an explicit ad-hoc
-signature and never uploads to Apple. Cross-architecture verification is static
-and reports native launch as unobserved. Run the verifier without `--static-only`
-on the matching supported hardware to establish launchability.
+signature and never uploads to Apple. The verifier accepts only a thin `arm64`
+Mach-O; Intel and universal binaries are rejected. `--static-only` explicitly
+leaves launch unobserved; run without it on Apple Silicon to establish
+launchability. Explicit Intel application builds fail at compile time.
 
 `--verify-installation` is an explicit binary smoke path: it shows generated UI
 briefly and exits before opening SQLite, credentials, or HTTP. The verifier uses
@@ -71,6 +75,6 @@ CRLF/CJK/emoji offline edits, conditional queued writes, custom theme assignment
 font and paper settings after reopening with the current code. The existing
 migration-failure regression preserves the original store and backup; corrupt or
 newer-schema stores are not reset. This does not substitute for swapping app
-versions on clean macOS 14+ Apple Silicon/Intel systems. Keep the application data
+versions on clean macOS 14+ Apple Silicon systems. Keep the application data
 directory when replacing the app. A pre-migration SQLite backup is retained when
 schema changes require it; older binaries can reject newer schemas safely.

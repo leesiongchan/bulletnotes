@@ -4,7 +4,7 @@ app_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$app_root"
 exec python3 - "$@" <<'PYTHON'
 import argparse, hashlib, json, os, pathlib, platform, plistlib, re, shutil, subprocess, sys, tempfile
-parser=argparse.ArgumentParser(description="Build locked Apple Silicon/Intel macOS 14 bundles; nothing is published")
+parser=argparse.ArgumentParser(description="Build locked Apple Silicon macOS 14 bundles; nothing is published")
 parser.add_argument('--version',required=True)
 parser.add_argument('--output',type=pathlib.Path,required=True)
 parser.add_argument('--development',action='store_true',help='Explicit ad-hoc signing, no notary upload')
@@ -29,7 +29,7 @@ build_number=os.environ.get('BULLETNOTES_BUILD_NUMBER','1')
 if not re.fullmatch(r'[1-9][0-9]{0,3}',build_number):parser.error('BULLETNOTES_BUILD_NUMBER must be 1–9999')
 args.output.mkdir(parents=True,exist_ok=True);output=args.output.resolve()
 kind='development' if args.development else 'distribution'
-for architecture in ['arm64','x86_64']:
+for architecture in ['arm64']:
  for suffix in ['.app','.zip','.verification.json']:
   if (output/('Bulletnotes-'+args.version+'-'+architecture+'-'+kind+suffix)).exists():parser.error('refusing to overwrite an existing artifact; choose a fresh output directory')
 # Attribution generation fails rather than quietly dropping an unaccepted license.
@@ -37,13 +37,13 @@ run(['python3','scripts/generate-notices.py'])
 notices=root/'packaging/ThirdPartyNotices.html'
 if not notices.is_file() or notices.stat().st_size==0:parser.error('runtime attribution generation produced no resource')
 environment=os.environ.copy();environment['MACOSX_DEPLOYMENT_TARGET']='14.0'
-# Use the selected Xcode SDK explicitly, including for Intel cross compilation.
+# Use the selected Xcode SDK explicitly.
 environment['SDKROOT']=subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-path'],text=True).strip()
 source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
 source_dirty=bool(subprocess.check_output(['git','status','--porcelain'],text=True).strip())
 if source_dirty and not args.development:parser.error('distribution requires a clean committed worktree')
 lock_hash=sha(root/'Cargo.lock')
-for target,architecture in [('aarch64-apple-darwin','arm64'),('x86_64-apple-darwin','x86_64')]:
+for target,architecture in [('aarch64-apple-darwin','arm64')]:
  run(['rustup','run','1.99.1','cargo','build','--release','--locked','--bin','bulletnotes','--target',target],env=environment)
  name='Bulletnotes-'+args.version+'-'+architecture+'-'+kind
  with tempfile.TemporaryDirectory(prefix='.bulletnotes-package-',dir=output) as temporary:
@@ -68,8 +68,7 @@ for target,architecture in [('aarch64-apple-darwin','arm64'),('x86_64-apple-darw
    run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(app),str(archive)])
   command=[str(root/'scripts/verify-release.sh')]
   if args.development:command.append('--development')
-  host='arm64' if platform.machine()=='arm64' else 'x86_64'
-  if architecture!=host:command.append('--static-only')
+  if platform.machine()!='arm64':command.append('--static-only')
   command.append(str(app))
   verified=run(command,capture_output=True,text=True);evidence=json.loads(verified.stdout)
   evidence.update({'source_revision':source,'source_dirty':source_dirty,'cargo_lock_sha256':lock_hash,'binary_sha256':sha(mac/'bulletnotes'),'archive_sha256':sha(archive)})
