@@ -57,12 +57,6 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     }
     {
         let state = state.clone();
-        window.on_history_step(move |step| {
-            state.dispatch(AppAction::StepScratchpad(step.signum() as i8))
-        });
-    }
-    {
-        let state = state.clone();
         window.on_query_changed(move |_| {
             state.dispatch(AppAction::CancelOpen);
             state.issue_search();
