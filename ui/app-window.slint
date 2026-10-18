@@ -30,7 +30,50 @@ export component AppWindow inherits Window {
     in-out property <string> note-text;
     in property <string> status-text;
     in-out property <bool> is-pinned:false;
-    in property <bool> chrome-revealed:false;
+    in-out property <bool> header-hovered:false;
+    in-out property <bool> footer-hovered:false;
+    in-out property <bool> chrome-active:true;
+    out property <bool> header-revealed:false;
+    out property <bool> footer-revealed:false;
+    out property <float> header-opacity:header.opacity;
+    out property <float> footer-opacity:footer.opacity;
+    out property <length> editor-height:editor.height;
+    out property <length> editor-width:editor.width;
+    private property <int> pending-chrome-focus:0;
+    private property <bool> header-focused:pin.has-focus;
+    private property <bool> footer-focused:browse.has-focus || appearance-button.has-focus || recovery-button.has-focus || new-button.has-focus || back.has-focus || next.has-focus;
+    private property <bool> header-needed:root.chrome-active && (root.header-hovered || root.pending-chrome-focus == 1 || root.header-focused || pin.pressed);
+    private property <bool> footer-needed:root.chrome-active && root.active-view == "note" && (root.footer-hovered || root.pending-chrome-focus == 2 || root.footer-focused || browse.pressed || appearance-button.pressed || recovery-button.pressed || new-button.pressed || back.pressed || next.pressed);
+    callback header-visibility-changed(bool, bool);
+    changed header-needed => { if (root.header-needed) { root.header-revealed = true; } }
+    changed footer-needed => { if (root.footer-needed) { root.footer-revealed = true; } }
+    changed header-revealed => { root.header-visibility-changed(root.header-revealed,root.prefers-reduced-motion || !root.chrome-active); }
+    Timer { interval:100ms; running:root.header-revealed && !root.header-needed; triggered => { root.header-revealed = false; } }
+    Timer { interval:100ms; running:root.footer-revealed && !root.footer-needed; triggered => { root.footer-revealed = false; } }
+    // Focus only after the reveal has a visible frame; Slint drops focus in hidden ancestors.
+    Timer {
+        interval:16ms; running:root.pending-chrome-focus != 0;
+        triggered => {
+            if (root.pending-chrome-focus == 1 && header.opacity > 0) { pin.focus(); root.pending-chrome-focus = 0; }
+            else if (root.pending-chrome-focus == 2 && footer.opacity > 0) { browse.focus(); root.pending-chrome-focus = 0; }
+        }
+    }
+    function focus-active-view() {
+        if (root.active-view == "pages") { pages.focus-query(); }
+        else if (root.active-view == "appearance") { appearance.focus-panel(); }
+        else if (root.active-view == "recovery") { auxiliary.focus-panel(); }
+        else if (root.active-view == "connection") { connection.focus-panel(); }
+        else { editor.focus-editor(); }
+    }
+    public function reset-chrome() {
+        if (root.header-focused || root.footer-focused) { root.focus-active-view(); }
+        root.pending-chrome-focus = 0;
+        root.chrome-active = false;
+        root.header-hovered = false;
+        root.footer-hovered = false;
+        root.header-revealed = false;
+        root.footer-revealed = false;
+    }
     in property <bool> note-read-only:false;
     in property <bool> lifecycle-pending:false;
     in-out property <float> font-size-px:15;
@@ -139,6 +182,19 @@ export component AppWindow inherits Window {
     public function focus-editor() { editor.focus-editor(); }
     public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
     function shortcut(event: KeyEvent) -> EventResult {
+        if (event.text == Key.F6) {
+            root.chrome-active = true;
+            if ((root.header-focused || root.pending-chrome-focus == 1) && root.active-view == "note") {
+                root.pending-chrome-focus = 2; root.footer-revealed = true;
+            } else if (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0) {
+                root.pending-chrome-focus = 0; root.focus-active-view();
+            } else { root.pending-chrome-focus = 1; root.header-revealed = true; }
+            return accept;
+        }
+        if (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0)) {
+            root.pending-chrome-focus = 0; root.focus-active-view();
+            return accept;
+        }
         // Slint maps the macOS Command key to control.
         if (event.modifiers.control) {
             if (event.text == "f" || event.text == "F") { root.show-find(); return accept; }
@@ -175,65 +231,19 @@ export component AppWindow inherits Window {
         clip: true;
         keys := FocusScope {
             key-pressed(event) => { root.shortcut(event) }
-            header := Rectangle {
-                x: 0px;
-                y: 0px;
-                width: parent.width;
-                height: 36px;
-                background: root.chrome-revealed ? root.theme.surface : transparent;
-                WindowMoveArea { }
-
-                Text {
-                    width: parent.width;
-                    height: parent.height;
-                    text: "Bulletnotes";
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    color: root.theme.muted;
-                    font-size: 11px;
-                    visible: root.chrome-revealed;
-                }
-
-                ActionButton {
-                    x: parent.width - 40px;
-                    y: 4px;
-                    theme: root.theme;
-                    icon: @image-url("../assets/icons/pin.svg");
-                    label: root.is-pinned ? "Unpin note" : "Pin note above other windows";
-                    selected: root.is-pinned;
-                    visible: root.chrome-revealed;
-                    clicked => { root.toggle-pin(); }
-                }
+            capture-key-pressed(event) => {
+                if (event.text == Key.F6 || (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0))) { return root.shortcut(event); }
+                return reject;
             }
             // Retain the editor instance while other views are shown, preserving its native editing state.
             note-view := Rectangle {
-                y: 36px;
-                height: parent.height - 36px;
+                height: parent.height;
                 width: parent.width;
                 visible: root.active-view != "pages" && root.active-view != "appearance" && root.active-view != "connection" && root.active-view != "recovery";
-                Text {
-                    x: 26px;
-                    y: 10px;
-                    width: parent.width - 52px;
-                    height: 14px;
-                    text:!root.native-warning || root.native-message.is-empty ? (root.current-path == "" ? "Quick note" : root.current-path) : root.native-message;
-                    color: root.theme.muted;
-                    font-size: 10px;
-                    overflow: elide;
-                }
-
-                find := FindBar {
-                    y: 32px; height: 36px; width: parent.width;
-                    visible: root.find-visible;
-                    theme: root.theme; query <=> root.find-query; status: root.find-status;
-                    query-changed(query) => { root.find-query-changed(query); }
-                    step(direction) => { root.find-step(direction); }
-                    close => { root.close-find(); }
-                }
                 editor := NoteEditor {
-                    y: 32px + (root.find-visible ? 36px : 0px);
                     width: parent.width;
-                    height: parent.height - 72px - (root.find-visible ? 36px : 0px);
+                    height: parent.height;
+                    top-clearance:root.find-visible ? 100px : 64px;
                     theme: root.theme;
                     text <=> root.note-text;
                     font-size-px: root.font-size-px;
@@ -244,74 +254,15 @@ export component AppWindow inherits Window {
                     key-pressed(event) => { root.shortcut(event) }
                 }
 
-                Rectangle {
-                    y: parent.height - 40px;
-                    height: 40px;
-                    width: parent.width;
-                    background: root.theme.surface;
-                    HorizontalLayout {
-                        y: 6px;
-                        width: parent.width;
-                        height: 28px;
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        ActionButton {
-                            theme: root.theme;
-                            icon: @image-url("../assets/icons/search.svg");
-                            label: "Browse all pages, Command K";
-                            clicked => { root.browse-pages(); }
-                        }
-
-                        ActionButton {
-                            theme: root.theme;
-                            icon: @image-url("../assets/icons/appearance.svg");
-                            label: "Appearance, Command comma";
-                            clicked => { root.show-appearance(); }
-                        }
-
-                        ActionButton { theme:root.theme; icon:@image-url("../assets/icons/recovery.svg"); label:"Review changes, Trash, and kept versions"; clicked => { root.show-recovery(); } }
-                        ActionButton {
-                            theme: root.theme;
-                            icon: @image-url("../assets/icons/plus.svg");
-                            label: "New quick note, Command N";
-                            clicked => { root.new-note(); }
-                        }
-
-                        Text {
-                            text: root.status-text;
-                            color: root.theme.muted;
-                            font-size: 9px;
-                            vertical-alignment: center;
-                            horizontal-alignment: right;
-                            horizontal-stretch: 1;
-                            overflow: elide;
-                        }
-
-                        Text {
-                            text: root.note-counter;
-                            color: root.theme.muted;
-                            font-size: 9px;
-                            vertical-alignment: center;
-                        }
-
-                        ActionButton {
-                            theme: root.theme;
-                            icon: @image-url("../assets/icons/left.svg");
-                            label: "Previous visited note";
-                            enabled: root.can-go-back;
-                            clicked => { root.history-step(-1); }
-                        }
-
-                        ActionButton {
-                            theme: root.theme;
-                            icon: @image-url("../assets/icons/right.svg");
-                            label: "Next visited note";
-                            enabled: root.can-go-forward;
-                            clicked => { root.history-step(1); }
-                        }
-                    }
+                find := FindBar {
+                    y: 56px; height: 36px; width: parent.width;
+                    visible: root.find-visible;
+                    theme: root.theme; query <=> root.find-query; status: root.find-status;
+                    query-changed(query) => { root.find-query-changed(query); }
+                    step(direction) => { root.find-step(direction); }
+                    close => { root.close-find(); }
                 }
+
             }
 
             pages := PageBrowser {
@@ -385,6 +336,112 @@ export component AppWindow inherits Window {
                 purge-item => { root.recovery-purge(); }
                 reload => { root.recovery-reload(); }
             }
+            header := Rectangle {
+                x:8px; y:8px - (root.prefers-reduced-motion || root.header-revealed ? 0px : 4px);
+                width:parent.width - 16px; height:root.active-view == "note" ? 44px : 28px;
+                border-radius:10px; background:root.theme.surface;
+                border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
+                opacity:root.header-revealed ? 1 : 0;
+                visible:self.opacity > 0;
+                animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? 160ms : 200ms); easing:ease-out; }
+                WindowMoveArea { x:78px; width:parent.width - 118px; height:parent.height; enabled:root.header-revealed; }
+                WindowMoveArea { width:78px; y:28px; height:max(0px,parent.height - 28px); enabled:root.header-revealed; }
+                Text {
+                    x:84px; y:root.active-view == "note" ? 5px : 0px;
+                    width:parent.width - 128px; height:16px;
+                    text:"Bulletnotes"; horizontal-alignment:center;
+                    color:root.theme.muted; font-size:11px;
+                }
+                Text {
+                    x:84px; y:23px; width:parent.width - 128px; height:14px;
+                    visible:root.active-view == "note";
+                    text:!root.native-warning || root.native-message.is-empty ? (root.current-path == "" ? "Quick note" : root.current-path) : root.native-message;
+                    color:root.theme.muted; font-size:10px; overflow:elide;
+                    horizontal-alignment:center;
+                }
+                pin := ActionButton {
+                    x:parent.width - 34px; y:(parent.height - self.height) / 2;
+                    theme:root.theme; enabled:root.header-revealed && header.opacity > 0;
+                    icon:@image-url("../assets/icons/pin.svg");
+                    label:root.is-pinned ? "Unpin note" : "Pin note above other windows";
+                    selected:root.is-pinned;
+                    clicked => { root.toggle-pin(); }
+                }
+            }
+            footer := Rectangle {
+                y: parent.height - 52px + (root.prefers-reduced-motion || root.footer-revealed ? 0px : 4px);
+                height: 44px;
+                x:8px; width: parent.width - 16px;
+                border-radius:10px;
+                border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
+                opacity:root.footer-revealed ? 1 : 0;
+                visible:self.opacity > 0 && root.active-view == "note";
+                animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? 160ms : 200ms); easing:ease-out; }
+                background: root.theme.surface;
+                HorizontalLayout {
+                    y: 8px;
+                    width: parent.width;
+                    height: 28px;
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 2px;
+                    browse := ActionButton { enabled:root.footer-revealed && footer.opacity > 0;
+                        theme: root.theme;
+                        icon: @image-url("../assets/icons/search.svg");
+                        label: "Browse all pages, Command K";
+                        clicked => { root.browse-pages(); }
+                    }
+
+                    appearance-button := ActionButton { enabled:root.footer-revealed && footer.opacity > 0;
+                        theme: root.theme;
+                        icon: @image-url("../assets/icons/appearance.svg");
+                        label: "Appearance, Command comma";
+                        clicked => { root.show-appearance(); }
+                    }
+
+                    recovery-button := ActionButton { enabled:root.footer-revealed && footer.opacity > 0; theme:root.theme; icon:@image-url("../assets/icons/recovery.svg"); label:"Review changes, Trash, and kept versions"; clicked => { root.show-recovery(); } }
+                    new-button := ActionButton { enabled:root.footer-revealed && footer.opacity > 0;
+                        theme: root.theme;
+                        icon: @image-url("../assets/icons/plus.svg");
+                        label: "New quick note, Command N";
+                        clicked => { root.new-note(); }
+                    }
+
+                    Text {
+                        text: root.status-text;
+                        color: root.theme.muted;
+                        font-size: 9px;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        text: root.note-counter;
+                        color: root.theme.muted;
+                        font-size: 9px;
+                        vertical-alignment: center;
+                    }
+
+                    back := ActionButton {
+                        theme: root.theme;
+                        icon: @image-url("../assets/icons/left.svg");
+                        label: "Previous visited note";
+                        enabled: root.footer-revealed && footer.opacity > 0 && root.can-go-back;
+                        clicked => { root.history-step(-1); }
+                    }
+
+                    next := ActionButton {
+                        theme: root.theme;
+                        icon: @image-url("../assets/icons/right.svg");
+                        label: "Next visited note";
+                        enabled: root.footer-revealed && footer.opacity > 0 && root.can-go-forward;
+                        clicked => { root.history-step(1); }
+                    }
+                }
+            }
+
         }
     }
 }

@@ -4,6 +4,7 @@ export component ActionButton inherits FocusScope {
     in property <image> icon;
     in property <string> label;
     in property <bool> selected:false;
+    out property <bool> pressed:touch.pressed;
     callback clicked();
     width: 28px;
     height: 28px;

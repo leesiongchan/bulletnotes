@@ -35,7 +35,7 @@ slint = { version = "=1.18.1", default-features = false, features = ["std", "bac
 security-framework = "=3.7.0"
 rfd = { version = "=0.17.2", default-features = false }
 objc2 = "=0.6.5"
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder", "NSApplication", "NSEvent", "NSButton", "NSControl", "NSScreen", "NSAppearance", "NSWorkspace", "NSRunningApplication", "NSAccessibility", "libc", "block2"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder", "NSApplication", "NSEvent", "NSButton", "NSControl", "NSScreen", "NSAppearance", "NSWorkspace", "NSRunningApplication", "NSAccessibility", "NSAnimation", "NSAnimationContext", "libc", "block2"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo", "NSFileManager", "NSPathUtilities", "NSURL", "NSArray", "NSError", "NSGeometry", "NSNotification", "NSDistributedNotificationCenter", "NSAppleEventManager", "NSAppleEventDescriptor", "NSOperation", "NSKeyValueObserving", "NSDictionary", "block2"] }
 raw-window-handle = "=0.6.2"
 block2 = "=0.6.2"

@@ -215,7 +215,7 @@ fn native_appearance_actions_persist_and_roll_back_on_failure() {
 
 #[test]
 #[ignore = "captures the generated native review window; build ui_review first"]
-fn maximum_text_size_keeps_native_navigation_visible() {
+fn floating_chrome_keeps_paper_edges_and_inset_surfaces_at_maximum_text_size() {
     let executable = std::env::current_exe()
         .unwrap()
         .parent()
@@ -225,8 +225,12 @@ fn maximum_text_size_keeps_native_navigation_visible() {
         .join("examples/ui_review");
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("large-text.png");
-    for attempt in 0..3 {
-        let output = std::process::Command::new(&executable)
+    for shown in [false, true] {
+        let mut command = std::process::Command::new(&executable);
+        if shown {
+            command.arg("--show-chrome");
+        }
+        let output = command
             .args(["--ruled", "--font", "24", "--capture"])
             .arg(&path)
             .env("SLINT_BACKEND", "winit-skia")
@@ -247,23 +251,28 @@ fn maximum_text_size_keeps_native_navigation_visible() {
             png::ColorType::Rgba => 4,
             other => panic!("unsupported capture format: {other:?}"),
         };
-        let expected = [243, 240, 231]; // Paper footer surface, distinct from the editor's paper.
-        let y = frame.height as usize - 30;
-        let mut surface_pixels = 0;
-        for x in 40..frame.width as usize - 40 {
-            let offset = (y * frame.width as usize + x) * channels;
-            if pixels[offset..offset + 3]
-                .iter()
-                .zip(expected)
-                .all(|(actual, expected)| actual.abs_diff(expected) <= 2)
-            {
-                surface_pixels += 1;
+        let expected = if shown {
+            [243, 240, 231]
+        } else {
+            [252, 250, 244]
+        };
+        for y in [40, frame.height as usize - 30] {
+            let mut surface_pixels = 0;
+            for x in 40..frame.width as usize - 40 {
+                let offset = (y * frame.width as usize + x) * channels;
+                if pixels[offset..offset + 3]
+                    .iter()
+                    .zip(expected)
+                    .all(|(actual, expected)| actual.abs_diff(expected) <= 2)
+                {
+                    surface_pixels += 1;
+                }
             }
+            assert!(
+                surface_pixels > frame.width as usize / 2,
+                "chrome surface mismatch (shown={shown}, y={y}): {surface_pixels}"
+            );
         }
-        assert!(
-            surface_pixels > frame.width as usize / 2,
-            "editor obscures navigation surface on capture {attempt}: {surface_pixels}"
-        );
     }
 }
 
@@ -289,5 +298,31 @@ fn native_connection_form_preserves_editor_and_clears_credentials() {
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("native_connection_contract_passed: true")
+    );
+}
+
+#[test]
+#[ignore = "opens the owned native floating-chrome fixture; build ui_review first"]
+fn native_floating_chrome_preserves_editor_and_handles_input_lifecycle() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let output = std::process::Command::new(executable)
+        .arg("--floating-contract")
+        .env_remove("SLINT_BACKEND")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("floating_chrome_contract_passed: true")
     );
 }

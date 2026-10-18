@@ -1,6 +1,9 @@
 //! Native UI contract fixture with generated text only; no SilverBullet connection.
 #[cfg(all(target_os = "macos", feature = "native-validation"))]
 use bulletnotes::platform::window_chrome as chrome;
+#[cfg(all(target_os = "macos", feature = "native-validation"))]
+#[path = "support/floating_chrome.rs"]
+mod floating_chrome;
 use bulletnotes::{
     AppWindow,
     app::ui::{apply_theme, present_settings},
@@ -10,9 +13,17 @@ use bulletnotes::{
 use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc, time::Duration};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    if std::env::args().any(|arg| arg == "--floating-contract") {
+        return floating_chrome::run();
+    }
     if std::env::args().any(|arg| arg == "--shortcut-contract") {
         return shortcut_contract();
     }
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    let application = Rc::new(bulletnotes::platform::application::NativeApplication::prepare()?);
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    bulletnotes::platform::renderer::select()?;
     let window = AppWindow::new()?;
     let mut settings = AppSettings {
         appearance: bulletnotes::theme::AppearanceSettings {
@@ -22,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let args: Vec<_> = std::env::args().collect();
+    window.set_prefers_reduced_motion(args.iter().any(|arg| arg == "--reduced-motion"));
     window.set_system_high_contrast(args.iter().any(|arg| arg == "--high-contrast"));
     window.set_can_load_more_pages(args.iter().any(|arg| arg == "--more-pages"));
     let argument = |name: &str| {
@@ -93,13 +105,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
+    let capture_failed = Rc::new(Cell::new(false));
     #[cfg(all(target_os = "macos", feature = "native-validation"))]
     if let Some(path) = argument("--capture") {
+        let capture_failed = capture_failed.clone();
         let weak = window.as_weak();
         slint::Timer::single_shot(Duration::from_millis(1000), move || {
             let capture = || -> Result<(), Box<dyn std::error::Error>> {
                 let window = weak.upgrade().ok_or("review window was closed")?;
                 let native = chrome::native_window(window.window())?;
+                println!(
+                    "capture_chrome_state: {},{}; visible={} key={} alpha={} occlusion={:?} frame={:?} metal={:?}",
+                    window.get_header_revealed(),
+                    window.get_footer_revealed(),
+                    native.isVisible(),
+                    native.isKeyWindow(),
+                    native.alphaValue(),
+                    native.occlusionState(),
+                    native.frame(),
+                    bulletnotes::platform::renderer::uses_metal(window.window())
+                );
                 // This native handle belongs to this fixture. Never select a desktop or another app.
                 let status = std::process::Command::new("/usr/sbin/screencapture")
                     .args(["-x", "-o", &format!("-l{}", native.windowNumber()), &path])
@@ -110,6 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(())
             };
             if let Err(error) = capture() {
+                capture_failed.set(true);
                 eprintln!("capture: {error}");
             }
             let _ = slint::quit_event_loop();
@@ -214,11 +240,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(all(target_os = "macos", feature = "native-validation"))]
     {
         let owner = monitor.clone();
+        let application = application.clone();
+        let show_chrome = args.iter().any(|arg| arg == "--show-chrome");
         let weak = window.as_weak();
         slint::Timer::single_shot(Duration::from_millis(220), move || {
             if let Some(window) = weak.upgrade() {
                 match chrome::ChromeMonitor::install(&window, None) {
-                    Ok(guard) => *owner.borrow_mut() = Some(guard),
+                    Ok(guard) => {
+                        *owner.borrow_mut() = Some(guard);
+                        application.activate();
+                        if show_chrome {
+                            let weak = window.as_weak();
+                            slint::Timer::single_shot(Duration::from_millis(80), move || {
+                                if let Some(window) = weak.upgrade() {
+                                    window.set_chrome_active(true);
+                                    window.set_header_hovered(true);
+                                    window.set_footer_hovered(true);
+                                }
+                            });
+                        }
+                    }
                     Err(error) => eprintln!("native frame: {error}"),
                 }
             }
@@ -274,7 +315,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = slint::quit_event_loop();
         });
     }
-    window.run()?;
+    window.show()?;
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    application.activate();
+    slint::run_event_loop()?;
+    window.hide()?;
+    if capture_failed.get() {
+        return Err("owned capture failed".into());
+    }
     if std::env::args().any(|arg| arg == "--contract") && !passed.get() {
         return Err("native UI contract failed".into());
     }

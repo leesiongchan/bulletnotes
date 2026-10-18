@@ -6,6 +6,7 @@ export component NoteEditor inherits Rectangle {
     in property <float> font-size-px:15;
     in property <string> paper-style:"plain";
     in property <bool> read-only:false;
+    in property <length> top-clearance:64px;
     out property <float> scroll-y:-scroll.content-y / 1px;
     out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
     callback edited(string);
@@ -35,11 +36,11 @@ export component NoteEditor inherits Rectangle {
     }
 
     private property <length> decoration-step:root.paper-style == "ruled" ? root.line-height : 18px;
-    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? 14px : 0px)) / root.decoration-step);
+    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? root.top-clearance : 0px)) / root.decoration-step);
     private property <int> rows:ceil(root.height / root.decoration-step) + 2;
     private property <int> columns:ceil(root.width / 18px) + 1;
     for row in root.rows: Rectangle {
-        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? 14px : 0px) - 3px;
+        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? root.top-clearance : 0px) - 3px;
         height: root.paper-style == "dots" ? 2px : 1px;
         width: parent.width;
         visible: root.paper-style != "plain";
@@ -108,12 +109,12 @@ export component NoteEditor inherits Rectangle {
             width: parent.width;
             height: parent.height;
             content-width: self.visible-width;
-            content-height: max(self.visible-height,input.preferred-height + 36px);
+            content-height: max(self.visible-height,input.preferred-height + root.top-clearance + 64px);
             input := TextInput {
                 x: 26px;
-                y: 14px;
+                y: root.top-clearance;
                 width: max(1px,scroll.visible-width - 52px);
-                height: max(scroll.visible-height - 28px,self.preferred-height);
+                height: max(scroll.visible-height - root.top-clearance - 64px,self.preferred-height);
                 text <=> root.text;
                 single-line: false;
                 wrap: word-wrap;
