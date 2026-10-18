@@ -1077,3 +1077,47 @@ async fn same_path_recreation_gets_a_new_generation_and_overflow_rolls_back() {
     assert_eq!(generation(), before + 1);
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn captured_recovery_head_cannot_lease_a_relocated_destination() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    let input = observation(&store, key("captured.md"), "immutable").await;
+    let event = store.register_automatic_recovery(input).await.unwrap();
+    let old = store
+        .recovery_uploads(&key("captured.md").connection, 10)
+        .await
+        .unwrap()
+        .remove(0);
+    let next = store
+        .relocate_recovery_upload(
+            event.id,
+            0,
+            old.operation_id,
+            RemoteFile {
+                key: old.key.clone(),
+                body: "occupied".into(),
+                revision: Some(RemoteRevision("occupied-etag".into())),
+                modified_ms: None,
+                permission: Permission::ReadWrite,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        store
+            .claim_recovery_upload_attempt(event.id, 0, old.operation_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        store
+            .claim_recovery_upload_attempt(event.id, 0, next.operation.id)
+            .await
+            .unwrap()
+            .unwrap(),
+        next
+    );
+    store.shutdown().await.unwrap();
+}

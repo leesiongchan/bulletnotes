@@ -4,7 +4,12 @@ use super::{
     probe::{self, CompatibilityEvidence},
 };
 use crate::{
-    domain::{connection::ConnectionId, error::SyncError, page::*},
+    domain::{
+        connection::ConnectionId,
+        error::{StoreError, SyncError},
+        page::*,
+        reconciliation::{RecoveryUpload, RecoveryUploadHead, RecoveryUploadState},
+    },
     store::{CacheProgress, PendingHead, StoreHandle},
 };
 use std::{
@@ -78,6 +83,8 @@ impl SyncHandle {
             snapshot,
             notify: Notify::new(),
             active: Mutex::new(HashSet::new()),
+            deferred: Mutex::new(std::collections::HashMap::new()),
+            passive: AtomicUsize::new(0),
             retry: Mutex::new(Retry {
                 attempt: 0,
                 until: Instant::now(),
@@ -138,9 +145,31 @@ struct Shared {
     notify: Notify,
     retry: Mutex<Retry>,
     active: Mutex<HashSet<PageKey>>,
+    deferred: Mutex<std::collections::HashMap<PageKey, Retry>>,
+    passive: AtomicUsize,
 }
 impl Shared {
+    fn deferred(&self, key: &PageKey) -> bool {
+        self.deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .is_some_and(|retry| retry.until > Instant::now())
+    }
+    fn defer(&self, key: &PageKey) {
+        let mut deferred = self.deferred.lock().unwrap_or_else(|e| e.into_inner());
+        let retry = deferred.entry(key.clone()).or_insert_with(|| Retry {
+            attempt: 0,
+            until: Instant::now(),
+            random: uuid::Uuid::new_v4().as_u128() as u64,
+        });
+        retry.until = Instant::now() + retry.delay();
+    }
     fn reserve(&self, key: &PageKey) -> bool {
+        if self.deferred(key) {
+            return false;
+        }
+
         self.active
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -168,7 +197,7 @@ impl Shared {
         })
     }
     fn page_blocked(&self, key: &PageKey) -> bool {
-        self.snapshot.borrow().page_errors.contains_key(key)
+        self.deferred(key) || self.snapshot.borrow().page_errors.contains_key(key)
     }
     fn ready(&self) -> bool {
         !self.blocked()
@@ -224,6 +253,15 @@ impl Shared {
             .cache_progress(&connection)
             .await
             .map_err(|_| SyncError::LocalStorage)?;
+        let blocked = store
+            .blocked_recovery_pages(&connection)
+            .await
+            .map_err(|_| SyncError::LocalStorage)?;
+        self.snapshot.send_modify(|snapshot| {
+            for key in blocked {
+                snapshot.page_errors.insert(key, SyncError::Permission);
+            }
+        });
         let previous = self.snapshot.borrow();
         let changed = previous.generation == 0
             || previous.pending != pending
@@ -250,9 +288,11 @@ impl Shared {
 }
 enum Work {
     Read(PageKey),
+    Watch(PageKey),
     Cleanup(PageKey),
     Write(PendingMutation),
     Resolve(PendingMutation),
+    Recovery(RecoveryUploadHead, Option<RecoveryUpload>),
 }
 struct Lane {
     reads: mpsc::Sender<Work>,
@@ -261,9 +301,13 @@ struct Lane {
 }
 fn work_key(work: &Work) -> &PageKey {
     match work {
-        Work::Read(key) | Work::Cleanup(key) => key,
+        Work::Read(key) | Work::Watch(key) | Work::Cleanup(key) => key,
         Work::Write(operation) | Work::Resolve(operation) => &operation.key,
+        Work::Recovery(head, _) => &head.key,
     }
+}
+fn passive_work(work: &Work) -> bool {
+    matches!(work, Work::Watch(_)) || matches!(work,Work::Recovery(head,_) if !head.current)
 }
 fn available_lane(lanes: &[Lane], writing: bool) -> Option<usize> {
     lanes
@@ -281,6 +325,10 @@ fn available_lane(lanes: &[Lane], writing: bool) -> Option<usize> {
 }
 fn enqueue(lane: &Lane, work: Work, writing: bool, shared: &Shared) -> Result<(), SyncError> {
     let key = work_key(&work).clone();
+    let passive = passive_work(&work);
+    if passive {
+        shared.passive.fetch_add(1, Ordering::Relaxed);
+    }
     lane.load.fetch_add(1, Ordering::Relaxed);
     let result = if writing {
         lane.writes.try_send(work)
@@ -288,6 +336,9 @@ fn enqueue(lane: &Lane, work: Work, writing: bool, shared: &Shared) -> Result<()
         lane.reads.try_send(work)
     };
     if result.is_err() {
+        if passive {
+            shared.passive.fetch_sub(1, Ordering::Relaxed);
+        }
         lane.load.fetch_sub(1, Ordering::Relaxed);
         shared.release(&key);
         return Err(SyncError::LocalStorage);
@@ -295,12 +346,16 @@ fn enqueue(lane: &Lane, work: Work, writing: bool, shared: &Shared) -> Result<()
     Ok(())
 }
 struct Admission {
+    passive: bool,
     key: PageKey,
     shared: Arc<Shared>,
     load: Arc<AtomicUsize>,
 }
 impl Drop for Admission {
     fn drop(&mut self) {
+        if self.passive {
+            self.shared.passive.fetch_sub(1, Ordering::Relaxed);
+        }
         self.load.fetch_sub(1, Ordering::Relaxed);
         self.shared.release(&self.key);
     }
@@ -319,7 +374,38 @@ async fn observe(
         Some(known) => client.read_if_changed(&known).await?,
         None => client.read(key).await?,
     };
-    let decision = storage(store.apply_remote(observation).await)?;
+    let mut observation = observation;
+    let mut decision = None;
+    for attempt in 0..3 {
+        match store.apply_remote(observation).await {
+            Ok(result) => {
+                decision = Some(result);
+                break;
+            }
+            Err(StoreError::UnknownOperation) => {
+                shared
+                    .deferred
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(key);
+                return Ok(());
+            }
+            Err(StoreError::StaleRevision) if attempt < 2 => {
+                observation = client.read(key).await?;
+            }
+            Err(StoreError::StaleRevision) => {
+                shared.defer(key);
+                return Ok(());
+            }
+            Err(_) => return Err(SyncError::LocalStorage),
+        }
+    }
+    shared
+        .deferred
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(key);
+    let decision = decision.ok_or(SyncError::LocalStorage)?;
     if matches!(decision, ReconcileDecision::Conflict(_)) {
         shared.fail(SyncError::Conflict, Some(key));
     } else {
@@ -356,47 +442,196 @@ async fn resolve(
     if let Some(ack) = applied {
         storage(store.acknowledge(operation.id, ack).await)?;
         if matches!(remote, RemoteRead::Present(_)) {
-            storage(store.apply_remote(remote).await)?;
+            observe(store, client, shared, &operation.key).await?;
         }
         shared.online();
         return Ok(());
     }
-    // A content validator cannot prove that this is the same incarnation.
-    // A lost DELETE acknowledgement followed by identical-content recreation
-    // must be reviewed, even if its validator equals the original precondition.
-    let unchanged = operation.kind != MutationKind::Delete
-        && match (&operation.condition, &remote) {
-            (WriteCondition::CreateOnly, RemoteRead::Missing(_)) => true,
-            (WriteCondition::Match(expected), RemoteRead::Present(file)) => {
-                file.revision.as_ref() == Some(expected)
+    if let (MutationKind::Delete, RemoteRead::Present(file)) = (&operation.kind, &remote) {
+        for attempt in 0..3 {
+            let file = if attempt == 0 {
+                file.clone()
+            } else {
+                match client.read(&operation.key).await? {
+                    RemoteRead::Present(file) => file,
+                    RemoteRead::Missing(_) => {
+                        storage(
+                            store
+                                .acknowledge(
+                                    operation.id,
+                                    MutationAck {
+                                        remote_revision: None,
+                                    },
+                                )
+                                .await,
+                        )?;
+                        return Ok(());
+                    }
+                }
+            };
+            match store.retire_unknown_delete(operation.id, file).await {
+                Ok(()) => return Ok(()),
+                Err(StoreError::StaleRevision) if attempt < 2 => {}
+                Err(StoreError::StaleRevision) => {
+                    shared.defer(&operation.key);
+                    return Ok(());
+                }
+                Err(_) => return Err(SyncError::LocalStorage),
             }
-            _ => false,
-        };
+        }
+    }
+    let unchanged = match (&operation.condition, &remote) {
+        (WriteCondition::CreateOnly, RemoteRead::Missing(_)) => true,
+        (WriteCondition::Match(expected), RemoteRead::Present(file)) => {
+            file.revision.as_ref() == Some(expected)
+        }
+        _ => false,
+    };
     if unchanged {
         if let RemoteRead::Present(file) = &remote
             && file.permission == Permission::ReadOnly
         {
             storage(store.block_page(&operation.key).await)?;
             shared.fail(SyncError::Permission, Some(&operation.key));
+        } else {
+            storage(store.retry_after_readback(operation.id).await)?;
+            observe(store, client, shared, &operation.key).await?;
+        }
+    } else {
+        let mut remote = remote;
+        for attempt in 0..3 {
+            match store.reconcile_unknown_put(operation.id, remote).await {
+                Ok(()) => break,
+                Err(StoreError::StaleRevision) if attempt < 2 => {
+                    remote = client.read(&operation.key).await?;
+                }
+                Err(StoreError::StaleRevision) => {
+                    shared.defer(&operation.key);
+                    return Ok(());
+                }
+                Err(_) => return Err(SyncError::LocalStorage),
+            }
+        }
+    }
+    Ok(())
+}
+async fn recover(
+    store: &StoreHandle,
+    client: &SilverBulletClient,
+    shared: &Shared,
+    head: &RecoveryUploadHead,
+    claimed: Option<RecoveryUpload>,
+) -> Result<(), SyncError> {
+    let upload = match &claimed {
+        Some(upload) => upload.clone(),
+        None => storage(
+            store
+                .read_recovery_upload(head.event_id, head.ordinal, head.operation_id)
+                .await,
+        )?,
+    };
+    let operation = &upload.operation;
+    let read_only = storage(store.load_page(&head.key).await)?
+        .is_some_and(|page| page.permission == Permission::ReadOnly);
+    if claimed.is_some() {
+        if !storage(
+            store
+                .recovery_upload_is_leased(head.event_id, head.ordinal, operation.id)
+                .await,
+        )? {
             return Ok(());
         }
-        storage(store.retry_after_readback(operation.id).await)?;
-    } else {
-        let local =
-            storage(store.load_page(&operation.key).await)?.ok_or(SyncError::LocalStorage)?;
-        storage(
-            store
-                .save_conflict(ConflictRecord {
-                    id: uuid::Uuid::new_v4(),
-                    key: operation.key.clone(),
-                    base: local.remote_base.clone(),
-                    local,
-                    remote,
-                })
-                .await,
-        )?;
-        shared.fail(SyncError::Conflict, Some(&operation.key));
+        if shared.blocked() || shared.page_blocked(&head.key) {
+            storage(
+                store
+                    .mark_recovery_unknown(head.event_id, head.ordinal, operation.id)
+                    .await,
+            )?;
+            return Ok(());
+        }
+        let result = if read_only {
+            Err(SyncError::Conflict)
+        } else {
+            client.put(operation).await
+        };
+        match result {
+            Ok(ack) => {
+                storage(
+                    store
+                        .acknowledge_recovery_upload(head.event_id, head.ordinal, operation.id, ack)
+                        .await,
+                )?;
+                shared.online();
+                return Ok(());
+            }
+            Err(error) => {
+                storage(
+                    store
+                        .mark_recovery_unknown(head.event_id, head.ordinal, operation.id)
+                        .await,
+                )?;
+                if error == SyncError::Permission {
+                    storage(
+                        store
+                            .block_recovery_upload(head.event_id, head.ordinal, operation.id)
+                            .await,
+                    )?;
+                    return Err(error);
+                }
+                if !matches!(
+                    error,
+                    SyncError::Conflict | SyncError::Missing | SyncError::UnknownMutationOutcome
+                ) {
+                    return Err(error);
+                }
+            }
+        }
     }
+    match client.read(&head.key).await? {
+        RemoteRead::Present(file) => {
+            if operation.kind == MutationKind::Put(file.body.clone()) {
+                if file.revision.is_none() {
+                    return Err(SyncError::Incompatible);
+                }
+                storage(
+                    store
+                        .acknowledge_recovery_upload(
+                            head.event_id,
+                            head.ordinal,
+                            operation.id,
+                            MutationAck {
+                                remote_revision: file.revision,
+                            },
+                        )
+                        .await,
+                )?;
+            } else if head.current {
+                storage(
+                    store
+                        .relocate_recovery_upload(head.event_id, head.ordinal, operation.id, file)
+                        .await,
+                )?;
+            }
+        }
+        RemoteRead::Missing(_) => {
+            if head.current && read_only {
+                storage(
+                    store
+                        .block_recovery_upload(head.event_id, head.ordinal, operation.id)
+                        .await,
+                )?;
+                return Err(SyncError::Permission);
+            }
+            if head.current {
+                storage(
+                    store
+                        .retry_recovery_upload(head.event_id, head.ordinal, operation.id)
+                        .await,
+                )?;
+            }
+        }
+    }
+    shared.online();
     Ok(())
 }
 async fn perform(
@@ -405,12 +640,20 @@ async fn perform(
     client: &SilverBulletClient,
     shared: &Shared,
 ) -> Result<(), SyncError> {
-    let key = match &work {
-        Work::Read(key) | Work::Cleanup(key) => key.clone(),
-        Work::Write(operation) | Work::Resolve(operation) => operation.key.clone(),
+    let key = work_key(&work).clone();
+    let recovery_origin = if let Work::Recovery(head, _) = &work {
+        Some(
+            storage(store.automatic_recovery_event(head.event_id).await)?
+                .input
+                .local
+                .key,
+        )
+    } else {
+        None
     };
     let result = match work {
-        Work::Read(key) => observe(store, client, shared, &key).await,
+        Work::Recovery(head, claimed) => recover(store, client, shared, &head, claimed).await,
+        Work::Read(key) | Work::Watch(key) => observe(store, client, shared, &key).await,
         Work::Cleanup(key) => {
             // A historical probe may reappear after an uncertain create. Only
             // its exact generated body is eligible for guarded deletion.
@@ -444,7 +687,11 @@ async fn perform(
                     Ok(())
                 }
                 Err(error) => {
-                    storage(store.mark_unknown(operation.id).await)?;
+                    if operation.kind == MutationKind::Delete && error == SyncError::Conflict {
+                        storage(store.record_delete_rejection(operation.id).await)?;
+                    } else {
+                        storage(store.mark_unknown(operation.id).await)?;
+                    }
                     if matches!(
                         error,
                         SyncError::Conflict
@@ -466,6 +713,9 @@ async fn perform(
         }
     };
     if let Err(error) = result {
+        if let Some(origin) = &recovery_origin {
+            shared.fail(error, Some(origin));
+        }
         shared.fail(error, Some(&key));
     }
     shared.publish(store).await?;
@@ -490,6 +740,7 @@ async fn run_lane(
             break;
         };
         let _admission = Admission {
+            passive: passive_work(&work),
             key: work_key(&work).clone(),
             shared: shared.clone(),
             load: load.clone(),
@@ -538,16 +789,20 @@ async fn supervise(
         let mut changes=store.subscribe_local_changes();
         let mut reads=DownloadQueue::default();
         let mut cleanup=DownloadQueue::default();
+        let mut watches=DownloadQueue::default();
         let started=Instant::now();let mut deadlines=WriteDebounce::default();
         let mut poll=Instant::now();let mut last_refresh=0;
         let mut listing:Option<JoinHandle<Result<Vec<RemoteMetadata>,SyncError>>>=None;
         let mut heads=Vec::<PendingHead>::new();let mut rescan=true;
+        let mut recovery_due=std::collections::HashMap::<OperationId,Instant>::new();
+        let mut prefer_watch=false;
         shared.publish(&store).await?;
         loop {
             let control=controls.borrow_and_update().clone();
             if control.stop {break;}
             if control.refresh!=last_refresh {
                 poll=Instant::now();last_refresh=control.refresh;
+                recovery_due.clear();
                 shared.retry.lock().unwrap_or_else(|e|e.into_inner()).until=Instant::now();
                 if let Some(key)=&control.priority {
                     reads.prioritize(key.clone());
@@ -555,12 +810,14 @@ async fn supervise(
             }
             if rescan {
                 heads=storage(store.pending_heads(&connection).await)?;
+                reads.extend(storage(store.pending_reconciliation_keys(&connection).await)?);
                 let pending:HashSet<_>=heads.iter().map(|head|head.key.clone()).collect();
                 deadlines.retain(&pending);
                 for head in &heads {deadlines.observe(&head.key,head.revision,started.elapsed());}
                 rescan=false;
             }
             if shared.ready() {
+                reads.extend(shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).iter().filter(|(_,retry)|retry.until<=Instant::now()).map(|(key,_)|key.clone()));
                 if Instant::now()>=poll && listing.is_none() {
                     let client=client.clone();listing=Some(tokio::spawn(async move{client.list_files().await}));
                 }
@@ -585,6 +842,28 @@ async fn supervise(
                     }
                 }
                 if writable {
+                    let mut uploads=storage(store.recovery_uploads(&connection,i64::MAX as usize).await)?;
+                    uploads.sort_by_key(|head|(!head.current,recovery_due.get(&head.operation_id).copied()));
+                    let mut passive=false;
+                    for head in uploads {
+                        if !head.current && (passive || shared.passive.load(Ordering::Relaxed)>0 || (prefer_watch && watches.len()>0)) {continue;}
+                        if recovery_due.get(&head.operation_id).is_some_and(|due|*due>Instant::now()) {continue;}
+                        let writing=head.current;
+                        if !shared.page_blocked(&head.key)
+                            && let Some(index)=available_lane(&lanes,writing)
+                            && shared.reserve(&head.key) {
+                            let claimed=if head.state==RecoveryUploadState::Pending {
+                                storage(store.claim_recovery_upload_attempt(head.event_id,head.ordinal,head.operation_id).await)?
+                            } else {None};
+                            if head.state==RecoveryUploadState::Pending && claimed.is_none() {shared.release(&head.key);continue;}
+                            recovery_due.insert(head.operation_id,Instant::now()+Duration::from_secs(if head.current {1}else{30}));
+                            passive|=!head.current;
+                            if !head.current {prefer_watch=true;}
+                            enqueue(&lanes[index],Work::Recovery(head,claimed),writing,&shared)?;
+                        }
+                    }
+                }
+                if writable {
                     let count=cleanup.len();
                     for _ in 0..count {
                         let Some(key)=cleanup.pop() else {break;};
@@ -600,6 +879,13 @@ async fn supervise(
                         enqueue(&lanes[index],Work::Read(key),false,&shared)?;
                     } else {reads.defer(key);}
                 }
+            }
+            if shared.ready() && shared.passive.load(Ordering::Relaxed)==0
+                && let Some(key)=watches.pop() {
+                if let Some(index)=available_lane(&lanes,false) && shared.reserve(&key) {
+                    prefer_watch=false;
+                    enqueue(&lanes[index],Work::Watch(key),false,&shared)?;
+                } else {watches.defer(key);}
             }
             // Wake for real work, deadlines, or polls; do not query SQLite on a
             // repeating idle timer. Completed requests release admission and notify.
@@ -620,6 +906,14 @@ async fn supervise(
                     }
                 }
             }
+            if !shared.blocked() {
+                for retry in shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).values().filter(|retry|retry.until>Instant::now()) {
+                    wake=Some(wake.map_or(retry.until,|current:Instant|current.min(retry.until)));
+                }
+                for deadline in recovery_due.values().filter(|deadline|**deadline>Instant::now()) {
+                    wake=Some(wake.map_or(*deadline,|current:Instant|current.min(*deadline)));
+                }
+            }
             if rescan {wake=Some(Instant::now());}
             tokio::select! {
                 biased;
@@ -638,7 +932,9 @@ async fn supervise(
                             if writable {
                                 cleanup.extend(storage(store.pending_probes(&connection).await)?);
                             }
-                            reads.extend(storage(store.known_remote_keys(&connection).await)?);
+                            let watched:HashSet<_>=storage(store.retired_delete_keys(&connection).await)?.into_iter().collect();
+                            reads.extend(storage(store.known_remote_keys(&connection).await)?.into_iter().filter(|key|!watched.contains(key)));
+                            watches.extend(watched);
                             shared.online();shared.publish(&store).await?;
                         },
                         Some(Ok(Err(error)))=>{

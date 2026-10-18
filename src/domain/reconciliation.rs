@@ -57,6 +57,7 @@ pub enum RecoveryUploadState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecoveryUploadHead {
+    pub current: bool,
     pub event_id: Uuid,
     pub ordinal: u32,
     pub operation_id: OperationId,

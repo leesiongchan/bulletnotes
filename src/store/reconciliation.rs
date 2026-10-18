@@ -1,9 +1,90 @@
 //! Compare captured source and work identity before atomically publishing a prepared result.
-use super::{StoreHandle, outbox, pages, recovery_uploads, remote, restoration};
+use super::{StoreHandle, delete_watches, outbox, pages, recovery_uploads, remote, restoration};
 use crate::domain::{error::StoreError, page::*, reconciliation::*};
 use rusqlite::{Connection, params};
 
 impl StoreHandle {
+    /// Persist a validated DELETE guard rejection before its readback or process restart.
+    pub async fn record_delete_rejection(&self, id: OperationId) -> Result<(), StoreError> {
+        self.call(move |w| {
+            let changed = w.db.execute("UPDATE outbox SET state='unknown',delete_rejected=1 WHERE operation_id=?1 AND kind='delete' AND state IN ('leased','unknown')", [id.0.to_string()])?;
+            if changed == 0 {
+                return Err(StoreError::UnknownOperation);
+            }
+            Ok(())
+        }).await
+    }
+    /// Automatic conflict-consuming facade: draft admission must span capture through commit.
+    pub async fn retire_unknown_delete(
+        &self,
+        id: OperationId,
+        observed: RemoteFile,
+    ) -> Result<(), StoreError> {
+        let key = observed.key.clone();
+        let prepared = self
+            .prepare_observation(&key, RemoteRead::Present(observed), Some((id, true)))
+            .await?;
+        self.commit_observation(prepared).await?;
+        Ok(())
+    }
+    /// Divergent readback retires only the exact captured PUT before reconciliation.
+    pub async fn reconcile_unknown_put(
+        &self,
+        id: OperationId,
+        observed: RemoteRead,
+    ) -> Result<(), StoreError> {
+        let key = match &observed {
+            RemoteRead::Present(file) => file.key.clone(),
+            RemoteRead::Missing(key) => key.clone(),
+        };
+        let prepared = self
+            .prepare_observation(&key, observed, Some((id, false)))
+            .await?;
+        self.commit_observation(prepared).await?;
+        Ok(())
+    }
+    pub(super) async fn prepare_observation(
+        &self,
+        key: &PageKey,
+        observed: RemoteRead,
+        retired: Option<(OperationId, bool)>,
+    ) -> Result<(PreparedResolution, ObservationGuard), StoreError> {
+        let key = key.clone();
+        let (context, watch) = self
+            .call(move |w| {
+                delete_watches::restore_missing(&mut w.db, &key)?;
+                Ok((
+                    load(&w.db, &key, observed)?,
+                    delete_watches::authority(&w.db, &key)?,
+                ))
+            })
+            .await?;
+        let mut policy = context.clone();
+        if retired.is_some_and(|(_, delete)| delete) {
+            policy.token.trashed = false;
+        }
+        let mut prepared =
+            crate::sync::reconcile::prepare_reconciliation(policy, &self.merge_executor).await;
+        prepared.context = context;
+        if retired.is_some() {
+            prepared.preserve_history = true;
+        }
+        if !watch.is_empty()
+            && matches!(prepared.context.remote, RemoteRead::Missing(_))
+            && !prepared.context.token.trashed
+        {
+            prepared.disposition = ResolutionDisposition::Install;
+            prepared.preserve_history = true;
+        }
+        Ok((prepared, ObservationGuard { retired, watch }))
+    }
+    pub(super) async fn commit_observation(
+        &self,
+        prepared: (PreparedResolution, ObservationGuard),
+    ) -> Result<StoredPage, StoreError> {
+        self.call(move |w| commit_observation(&mut w.db, prepared.0, Some(prepared.1)))
+            .await
+    }
     /// Commands already admitted to this store are drained before the context is captured.
     /// The editor coordinator must also drain admitted in-memory draft writes before calling.
     pub async fn load_reconcile_context(
@@ -24,7 +105,7 @@ impl StoreHandle {
     }
 }
 
-fn load(
+pub(super) fn load(
     db: &Connection,
     key: &PageKey,
     remote: RemoteRead,
@@ -84,7 +165,18 @@ fn load(
     })
 }
 
+pub(super) struct ObservationGuard {
+    retired: Option<(OperationId, bool)>,
+    watch: Vec<String>,
+}
 fn commit(db: &mut Connection, prepared: PreparedResolution) -> Result<StoredPage, StoreError> {
+    commit_observation(db, prepared, None)
+}
+fn commit_observation(
+    db: &mut Connection,
+    prepared: PreparedResolution,
+    guard: Option<ObservationGuard>,
+) -> Result<StoredPage, StoreError> {
     let tx = db.transaction()?;
     let context = &prepared.context;
     let key = &context.token.key;
@@ -98,14 +190,46 @@ fn commit(db: &mut Connection, prepared: PreparedResolution) -> Result<StoredPag
     {
         return Err(StoreError::StaleRevision);
     }
+    let retired = guard.as_ref().and_then(|guard| guard.retired);
+    let watched = guard.as_ref().is_some_and(|guard| !guard.watch.is_empty());
+    if let Some(guard) = &guard
+        && delete_watches::authority(&tx, key)? != guard.watch
+    {
+        return Err(StoreError::StaleRevision);
+    }
     if context.token.mutations.iter().any(|op| {
-        matches!(
-            op.state,
-            ReconcileMutationState::Leased | ReconcileMutationState::Unknown
-        )
+        Some(op.id) != retired.map(|(id, _)| id)
+            && matches!(
+                op.state,
+                ReconcileMutationState::Leased | ReconcileMutationState::Unknown
+            )
     }) || recovery_uploads::fenced(&tx, key)?
     {
         return Err(StoreError::UnknownOperation);
+    }
+    if let Some((id, delete)) = retired {
+        if !context
+            .token
+            .mutations
+            .iter()
+            .any(|op| op.id == id && op.state == ReconcileMutationState::Unknown)
+        {
+            return Err(StoreError::UnknownOperation);
+        }
+        let operation = outbox::read_operation(&tx, &id.0.to_string())?;
+        if (operation.kind == MutationKind::Delete) != delete {
+            return Err(StoreError::InvalidData);
+        }
+        if delete {
+            if !matches!(context.remote, RemoteRead::Present(_)) {
+                return Err(StoreError::InvalidData);
+            }
+            delete_watches::retire(&tx, &operation, context)?;
+        }
+        tx.execute(
+            "DELETE FROM outbox WHERE operation_id=?1",
+            [id.0.to_string()],
+        )?;
     }
     let keep_deletion = prepared.disposition == ResolutionDisposition::KeepDeletion;
     if keep_deletion && !prepared.preserve_history {
@@ -199,7 +323,7 @@ fn commit(db: &mut Connection, prepared: PreparedResolution) -> Result<StoredPag
             offset
         };
         let explicit_create =
-            base.is_none() && (context.token.explicit_create || context.base.is_some());
+            base.is_none() && (watched || context.token.explicit_create || context.base.is_some());
         tx.execute("UPDATE pages SET body=?1,title=?2,anchor=?3,caret=?4,trashed=?5,remote_deleted=0,explicit_create=?6 WHERE id=?7", params![prepared.body,key.title_from(&prepared.body),clamp(current.local.position.anchor) as i64,clamp(current.local.position.caret) as i64,keep_deletion,explicit_create,pages::id(&tx,key)?])?;
         let snapshot = pages::load(&tx, key)?.ok_or(StoreError::PageMissing)?;
         outbox::queue_put(&tx, pages::id(&tx, key)?, &snapshot)?;
@@ -211,6 +335,7 @@ fn commit(db: &mut Connection, prepared: PreparedResolution) -> Result<StoredPag
         }
     }
     let stored = pages::load_stored(&tx, key)?.ok_or(StoreError::PageMissing)?;
+    delete_watches::protect(&tx, &stored.page)?;
     tx.commit()?;
     Ok(stored)
 }

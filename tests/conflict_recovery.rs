@@ -420,7 +420,17 @@ mod network {
         until(|| f.data.lock().unwrap().deleted).await;
         f.put("one.md", "replacement");
         f.data.lock().unwrap().release.notify_one();
-        until(|| sync.snapshot().conflicts == 1).await;
+        until(|| sync.snapshot().complete && sync.snapshot().pending == 0).await;
+        assert_eq!(
+            store
+                .load_active_page(&key("one.md"))
+                .await
+                .unwrap()
+                .unwrap()
+                .body,
+            "replacement"
+        );
+        assert_eq!(sync.snapshot().conflicts, 0);
         assert_eq!(f.body("one.md").as_deref(), Some("replacement"));
         assert_eq!(
             f.data
@@ -480,13 +490,28 @@ mod network {
             sync
         };
         assert_eq!(c.read(&key("one.md")).await.unwrap(), original);
-        until(|| sync.snapshot().conflicts > 0 || f.body("one.md").is_none()).await;
+        until(|| sync.snapshot().complete && sync.snapshot().pending == 0).await;
         assert_eq!(
             f.body("one.md").as_deref(),
             Some("identical generated content"),
             "unknown delete removed a same-content recreation"
         );
-        assert_eq!(sync.snapshot().conflicts, 1);
+        assert_eq!(sync.snapshot().conflicts, 0);
+        assert_eq!(
+            store
+                .load_active_page(&key("one.md"))
+                .await
+                .unwrap()
+                .unwrap()
+                .body,
+            "identical generated content"
+        );
+        assert_eq!(
+            store.trash(&key("one.md").connection).await.unwrap()[0]
+                .page
+                .body,
+            "identical generated content"
+        );
         let deletes = f
             .data
             .lock()
@@ -508,7 +533,7 @@ mod network {
         identical_recreation(true).await;
     }
     #[tokio::test]
-    async fn automatic_recovery_stays_pending_while_unrelated_pages_keep_syncing() {
+    async fn automatic_recovery_uploads_while_unrelated_pages_keep_syncing() {
         let dir = tempfile::tempdir().unwrap();
         let store = StoreHandle::open(&dir.path().join("notes.sqlite"))
             .await
@@ -532,6 +557,11 @@ mod network {
             .apply_remote(c.read(&key("one.md")).await.unwrap())
             .await
             .unwrap();
+        let jobs = store
+            .recovery_uploads(&key("one.md").connection, 10)
+            .await
+            .unwrap();
+        assert_eq!(jobs.len(), 1);
         let sync = SyncHandle::start(store.clone(), c, Some(evidence)).unwrap();
         store.create_draft(key("two.md")).await.unwrap();
         store
@@ -551,11 +581,6 @@ mod network {
                 .unwrap()
                 .is_empty()
         );
-        let jobs = store
-            .recovery_uploads(&key("one.md").connection, 10)
-            .await
-            .unwrap();
-        assert_eq!(jobs.len(), 1);
         let event = store
             .automatic_recovery_event(jobs[0].event_id)
             .await
@@ -567,7 +592,8 @@ mod network {
             .await
             .unwrap();
         assert_eq!(pending.operation.kind, MutationKind::Put("local".into()));
-        until(|| sync.snapshot().pending == 1 && sync.snapshot().conflicts == 0).await;
+        until(|| sync.snapshot().pending == 0 && sync.snapshot().conflicts == 0).await;
+        assert_eq!(f.body(jobs[0].key.path.as_str()).as_deref(), Some("local"));
         sync.shutdown().await.unwrap();
         store.shutdown().await.unwrap();
     }

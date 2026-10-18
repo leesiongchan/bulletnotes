@@ -240,6 +240,7 @@ pub(super) fn move_to_trash(
             pages::now_ms()?
         ],
     )?;
+    super::delete_watches::supersede(&tx, &key)?;
     tx.execute("UPDATE pages SET trashed=1 WHERE id=?1", [page_id])?;
     outbox::queue_put(&tx, page_id, &record.page)?;
     tx.commit()?;

@@ -42,8 +42,26 @@ impl StoreHandle {
         event_id: Uuid,
         ordinal: u32,
     ) -> Result<Option<RecoveryUpload>, StoreError> {
-        self.call(move |w| claim(&mut w.db, event_id, ordinal))
+        self.call(move |w| claim(&mut w.db, event_id, ordinal, None))
             .await
+    }
+    /// Lease only the admitted destination; known read-only pages require readback before any send.
+    pub async fn claim_recovery_upload_attempt(
+        &self,
+        event_id: Uuid,
+        ordinal: u32,
+        expected: OperationId,
+    ) -> Result<Option<RecoveryUpload>, StoreError> {
+        self.call(move |w| claim(&mut w.db, event_id, ordinal, Some(expected)))
+            .await
+    }
+    pub async fn recovery_upload_is_leased(
+        &self,
+        event_id: Uuid,
+        ordinal: u32,
+        expected: OperationId,
+    ) -> Result<bool, StoreError> {
+        self.call(move |w|Ok(w.db.query_row("SELECT EXISTS(SELECT 1 FROM recovery_uploads WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND current=1 AND state='leased')",params![event_id.to_string(),ordinal,expected.0.to_string()],|row|row.get(0))?)).await
     }
     pub async fn read_recovery_upload(
         &self,
@@ -75,6 +93,39 @@ impl StoreHandle {
     ) -> Result<(), StoreError> {
         self.call(move |w| acknowledge(&mut w.db, event_id, ordinal, expected, ack))
             .await
+    }
+    /// Only the current immutable attempt may be retried; retired attempts are passive.
+    pub async fn retry_recovery_upload(
+        &self,
+        event_id: Uuid,
+        ordinal: u32,
+        expected: OperationId,
+    ) -> Result<(), StoreError> {
+        self.call(move |w| {
+            w.db.execute("UPDATE recovery_uploads SET state='pending' WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND current=1 AND state='unknown'", params![event_id.to_string(),ordinal,expected.0.to_string()])?;
+            Ok(())
+        }).await
+    }
+    pub async fn block_recovery_upload(
+        &self,
+        event_id: Uuid,
+        ordinal: u32,
+        expected: OperationId,
+    ) -> Result<(), StoreError> {
+        self.call(move |w| {
+            w.db.execute("UPDATE recovery_uploads SET state='blocked' WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND current=1 AND state='unknown'", params![event_id.to_string(),ordinal,expected.0.to_string()])?;
+            Ok(())
+        }).await
+    }
+    pub async fn blocked_recovery_pages(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<PageKey>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| {
+            let mut query=w.db.prepare("SELECT DISTINCT e.path FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.current=1 AND u.state='blocked'")?;
+            query.query_map([connection.as_str()],|row|row.get::<_,String>(0))?.map(|path|Ok(PageKey {connection:connection.clone(),path:PagePath::parse(&path?).map_err(|_|StoreError::InvalidData)?})).collect()
+        }).await
     }
     /// Occupied-path evidence must identify this exact current attempt and contain different bytes.
     pub async fn relocate_recovery_upload(
@@ -255,7 +306,7 @@ fn heads(
     limit: usize,
 ) -> Result<Vec<RecoveryUploadHead>, StoreError> {
     let limit = i64::try_from(limit).map_err(|_| StoreError::InvalidQuery)?;
-    let mut query = db.prepare("SELECT u.event_id,u.ordinal,u.operation_id,u.path,u.state FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.state IN ('pending','unknown') ORDER BY u.rowid LIMIT ?2")?;
+    let mut query = db.prepare("SELECT u.event_id,u.ordinal,u.operation_id,u.path,u.state,u.current FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.state IN ('pending','unknown') ORDER BY u.current DESC,u.rowid LIMIT ?2")?;
     query
         .query_map(params![connection.as_str(), limit], |row| {
             Ok((
@@ -264,11 +315,13 @@ fn heads(
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
+                row.get::<_, bool>(5)?,
             ))
         })?
         .map(|row| {
-            let (event_id, ordinal, operation_id, path, value) = row?;
+            let (event_id, ordinal, operation_id, path, value, current) = row?;
             Ok(RecoveryUploadHead {
+                current,
                 event_id: parse_uuid(&event_id)?,
                 ordinal,
                 operation_id: OperationId(parse_uuid(&operation_id)?),
@@ -308,9 +361,10 @@ fn claim(
     db: &mut Connection,
     event_id: Uuid,
     ordinal: u32,
+    expected: Option<OperationId>,
 ) -> Result<Option<RecoveryUpload>, StoreError> {
     let tx = db.transaction()?;
-    let id: Option<String> = tx.query_row("SELECT u.operation_id FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id JOIN pages p ON p.connection=e.connection AND p.path=u.path WHERE u.event_id=?1 AND u.ordinal=?2 AND u.current=1 AND u.state='pending' AND p.permission=1", params![event_id.to_string(), ordinal], |row| row.get(0)).optional()?;
+    let id: Option<String> = tx.query_row("SELECT u.operation_id FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id JOIN pages p ON p.connection=e.connection AND p.path=u.path WHERE u.event_id=?1 AND u.ordinal=?2 AND u.current=1 AND u.state='pending' AND (p.permission=1 OR ?3 IS NOT NULL) AND (?3 IS NULL OR u.operation_id=?3)", params![event_id.to_string(), ordinal,expected.map(|id|id.0.to_string())], |row| row.get(0)).optional()?;
     let Some(id) = id else {
         return Ok(None);
     };
@@ -396,5 +450,5 @@ fn relocate(
 }
 
 pub(super) fn fenced(db: &Connection, key: &PageKey) -> Result<bool, StoreError> {
-    Ok(db.query_row("SELECT EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.path=?2 AND (u.current=1 AND u.state!='acknowledged' OR u.state IN ('leased','unknown')))", [key.connection.as_str(), key.path.as_str()], |row| row.get(0))?)
+    Ok(db.query_row("SELECT EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.path=?2 AND (u.current=1 AND u.state!='acknowledged'))", [key.connection.as_str(), key.path.as_str()], |row| row.get(0))?)
 }

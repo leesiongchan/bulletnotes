@@ -72,7 +72,7 @@ pub(super) fn unknown_batch(
     limit: usize,
 ) -> Result<Vec<PendingMutation>, StoreError> {
     let limit = i64::try_from(limit).map_err(|_| StoreError::InvalidQuery)?;
-    let mut statement=db.prepare("SELECT o.operation_id FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1 AND o.state='unknown' AND NOT EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) ORDER BY o.rowid LIMIT ?2")?;
+    let mut statement=db.prepare("SELECT o.operation_id FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1 AND o.state='unknown' ORDER BY o.rowid LIMIT ?2")?;
     let ids = statement
         .query_map(params![connection.as_str(), limit], |row| {
             row.get::<_, String>(0)
@@ -102,25 +102,16 @@ pub(super) fn retry(db: &mut Connection, id: OperationId) -> Result<(), StoreErr
         return Err(StoreError::UnknownOperation);
     }
     let operation = outbox::read_operation(&tx, &id.0.to_string())?;
+    if operation.kind == MutationKind::Delete {
+        return Err(StoreError::UnknownOperation);
+    }
     let page = pages::id(&tx, &operation.key)?;
     tx.execute(
         "DELETE FROM outbox WHERE operation_id=?1",
         [id.0.to_string()],
     )?;
     let current = pages::load(&tx, &operation.key)?.ok_or(StoreError::PageMissing)?;
-    if operation.kind == MutationKind::Delete && operation.local_revision == current.local_revision
-    {
-        tx.execute(
-            "DELETE FROM outbox WHERE page_id=?1 AND state IN ('pending','blocked')",
-            [page],
-        )?;
-        let WriteCondition::Match(revision) = operation.condition else {
-            return Err(StoreError::InvalidData);
-        };
-        tx.execute("INSERT INTO outbox(operation_id,page_id,local_revision,kind,condition_kind,condition_revision,state) VALUES(?1,?2,?3,'delete','match',?4,'pending')",params![OperationId::new().0.to_string(),page,current.local_revision.0.to_string(),revision.0])?;
-    } else {
-        outbox::queue_put(&tx, page, &current)?;
-    }
+    outbox::queue_put(&tx, page, &current)?;
     tx.commit()?;
     Ok(())
 }
@@ -137,7 +128,23 @@ pub(super) fn release_connection(
     connection: &ConnectionId,
 ) -> Result<(), StoreError> {
     db.execute("UPDATE outbox SET state='unknown' WHERE state='leased' AND page_id IN (SELECT id FROM pages WHERE connection=?1)",[connection.as_str()])?;
+    db.execute("UPDATE recovery_uploads SET state='unknown' WHERE state='leased' AND event_id IN (SELECT id FROM automatic_events WHERE connection=?1)",[connection.as_str()])?;
     Ok(())
+}
+pub(super) fn reconciliation_keys(
+    db: &Connection,
+    connection: &ConnectionId,
+) -> Result<Vec<PageKey>, StoreError> {
+    let mut query = db.prepare("SELECT c.path FROM conflicts c WHERE c.connection=?1 AND NOT EXISTS(SELECT 1 FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=c.connection AND p.path=c.path AND o.state IN ('leased','unknown')) ORDER BY c.path")?;
+    query
+        .query_map([connection.as_str()], |row| row.get::<_, String>(0))?
+        .map(|row| {
+            Ok(PageKey {
+                connection: connection.clone(),
+                path: PagePath::parse(&row?).map_err(|_| StoreError::InvalidData)?,
+            })
+        })
+        .collect()
 }
 pub(super) fn keys(db: &Connection, connection: &ConnectionId) -> Result<Vec<PageKey>, StoreError> {
     let mut query=db.prepare("SELECT id FROM pages WHERE connection=?1 AND (catalogued=1 OR (remote_deleted=0 AND (remote_body IS NOT NULL OR body IS NULL))) ORDER BY path")?;
@@ -158,7 +165,7 @@ pub(super) fn progress(
         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     )?;
     let pending = db.query_row(
-        "SELECT (SELECT count(*) FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1) + (SELECT count(*) FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND ((u.current=1 AND u.state!='acknowledged') OR u.state IN ('leased','unknown')))",
+        "SELECT (SELECT count(*) FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1) + (SELECT count(*) FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND (u.current=1 AND u.state!='acknowledged'))",
         [connection.as_str()],
         |row| row.get::<_, i64>(0),
     )?;
@@ -200,7 +207,7 @@ pub(super) fn page_facts(
     let Some(page) = pages::load(db, key)? else {
         return Ok(None);
     };
-    let (pending,conflict,deleted,id)=db.query_row("SELECT (EXISTS(SELECT 1 FROM outbox o WHERE o.page_id=p.id) OR EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=p.connection AND (e.path=p.path OR u.path=p.path) AND ((u.current=1 AND u.state!='acknowledged') OR u.state IN ('leased','unknown')))),EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path),remote_deleted,(SELECT id FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p WHERE connection=?1 AND path=?2",[key.connection.as_str(),key.path.as_str()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get::<_,Option<String>>(3)?)))?;
+    let (pending,conflict,deleted,id)=db.query_row("SELECT (EXISTS(SELECT 1 FROM outbox o WHERE o.page_id=p.id) OR EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=p.connection AND (e.path=p.path OR u.path=p.path) AND (u.current=1 AND u.state!='acknowledged'))),EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path),remote_deleted,(SELECT id FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p WHERE connection=?1 AND path=?2",[key.connection.as_str(),key.path.as_str()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get::<_,Option<String>>(3)?)))?;
     let conflict_id = id
         .map(|id| uuid::Uuid::parse_str(&id).map_err(|_| StoreError::InvalidData))
         .transpose()?;

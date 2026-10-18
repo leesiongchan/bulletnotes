@@ -91,6 +91,10 @@ impl Worker {
                     version: 5,
                     sql: include_str!("../../migrations/005_automatic_reconciliation.sql"),
                 },
+                Migration {
+                    version: 6,
+                    sql: include_str!("../../migrations/006_retired_delete_watches.sql"),
+                },
             ],
             Some(&backup),
         )?;

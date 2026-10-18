@@ -1,4 +1,5 @@
 //! A bounded async handle to one blocking SQLite owner.
+mod delete_watches;
 mod outbox;
 mod pages;
 mod probes;
@@ -246,6 +247,14 @@ impl StoreHandle {
         self.call(move |w| sync_queue::release_connection(&w.db, &id))
             .await
     }
+    pub async fn pending_reconciliation_keys(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<PageKey>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| sync_queue::reconciliation_keys(&w.db, &connection))
+            .await
+    }
     pub async fn known_remote_keys(
         &self,
         connection: &ConnectionId,
@@ -359,9 +368,11 @@ impl StoreHandle {
             RemoteRead::Present(file) => &file.key,
             RemoteRead::Missing(key) => key,
         };
-        let context = self.load_reconcile_context(key, observation.clone()).await;
-        let context = match context {
-            Ok(context) => context,
+        let prepared = self
+            .prepare_observation(key, observation.clone(), None)
+            .await;
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
             Err(StoreError::PageMissing) => {
                 return self
                     .call(move |w| remote::apply_uncached(&mut w.db, observation))
@@ -369,10 +380,8 @@ impl StoreHandle {
             }
             Err(error) => return Err(error),
         };
-        let prepared =
-            crate::sync::reconcile::prepare_reconciliation(context, &self.merge_executor).await;
-        let disposition = prepared.disposition;
-        let stored = self.commit_reconciliation(prepared).await?;
+        let disposition = prepared.0.disposition;
+        let stored = self.commit_observation(prepared).await?;
         Ok(match disposition {
             crate::domain::reconciliation::ResolutionDisposition::RetainDeleted => {
                 ReconcileDecision::RetainDeletedSnapshot
