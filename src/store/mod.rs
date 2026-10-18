@@ -11,6 +11,7 @@ pub mod recovery;
 mod recovery_uploads;
 mod remote;
 mod restoration;
+pub mod scratchpads;
 mod sync_queue;
 pub use sync_queue::{CacheProgress, PageSyncFacts, PendingHead};
 pub mod search;
@@ -89,6 +90,16 @@ impl StoreHandle {
         }
         .await;
         timer.store(result)
+    }
+    pub async fn scratchpad_stack(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<scratchpads::ScratchpadEntry>, StoreError> {
+        let connection = connection.clone();
+        self.call_timed(crate::diagnostics::Operation::Storage, move |w| {
+            scratchpads::list(&w.db, &connection)
+        })
+        .await
     }
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();

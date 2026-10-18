@@ -99,9 +99,14 @@ impl Worker {
                     version: 7,
                     sql: include_str!("../../migrations/007_editor_handoffs.sql"),
                 },
+                Migration {
+                    version: 8,
+                    sql: include_str!("../../migrations/008_scratchpad_stack.sql"),
+                },
             ],
             Some(&backup),
         )?;
+        super::scratchpads::backfill(&mut db)?;
         db.execute("UPDATE outbox SET state='unknown' WHERE state='leased'", [])?;
         db.execute(
             "UPDATE recovery_uploads SET state='unknown' WHERE state='leased'",
