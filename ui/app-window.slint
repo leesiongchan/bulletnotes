@@ -87,6 +87,21 @@ export component AppWindow inherits Window {
     public function close-find() { root.find-visible = false; editor.focus-editor(); }
     public function select-find-match(anchor:int, caret:int) { editor.select-match(anchor,caret); }
     callback native-window-ready();
+    callback native-preferences-changed();
+    callback native-activation-changed();
+    callback native-reopen-requested();
+    callback native-geometry-changed();
+    callback native-displays-changed();
+    callback toggle-activation();
+    callback window-will-hide();
+    in-out property <string> hotkey-accelerator:"Option+A";
+    in property <string> native-message;
+    in property <bool> native-warning:false;
+    in property <bool> hotkey-busy:false;
+    callback apply-hotkey();
+    in property <bool> prefers-reduced-motion:false;
+    in property <bool> prefers-reduced-transparency:false;
+    in property <bool> system-high-contrast:false;
     callback local-startup-ready();
     in property <bool> sync-available:false;
     callback request-quit();
@@ -193,7 +208,7 @@ export component AppWindow inherits Window {
                     y: 10px;
                     width: parent.width - 52px;
                     height: 14px;
-                    text: root.current-path == "" ? "Quick note" : root.current-path;
+                    text:!root.native-warning || root.native-message.is-empty ? (root.current-path == "" ? "Quick note" : root.current-path) : root.native-message;
                     color: root.theme.muted;
                     font-size: 10px;
                     overflow: elide;
@@ -320,6 +335,8 @@ export component AppWindow inherits Window {
                 font-size-px <=> root.font-size-px;
                 message: root.appearance-message;
                 low-contrast-warning: root.low-contrast-warning;
+                hotkey-accelerator <=> root.hotkey-accelerator; native-message:root.native-message; hotkey-busy:root.hotkey-busy;
+                apply-hotkey => { root.apply-hotkey(); }
                 changed => { root.appearance-changed(); }
                 theme-selected(id) => { root.theme-selected(id); }
                 import-theme => { root.import-theme(); }

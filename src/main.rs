@@ -14,7 +14,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let connection = ConnectionConfig::parse("https://notes.harflix.lol")?
         .id()
         .clone();
-    let startup = runtime.block_on(startup::open(&database_path()?, connection))?;
+    let database = database_path()?;
+    let startup = match runtime.block_on(startup::open(&database, connection)) {
+        Ok(startup) => startup,
+        Err(bulletnotes::domain::error::StoreError::AlreadyRunning) => {
+            let activated = bulletnotes::store::owner_process_id(&database)
+                .ok()
+                .is_some_and(|pid| native.activate_store_owner(pid).is_ok());
+            runtime.shutdown_timeout(std::time::Duration::from_millis(100));
+            if activated {
+                return Ok(());
+            }
+            return Err("Bulletnotes is already open. Reopen the existing app from its BN menu; a second writer was not opened".into());
+        }
+        Err(error) => return Err(error.into()),
+    };
     let controller = ConnectionController::new(startup.store.clone(), CredentialStore::keychain());
     let connection = startup.connection.clone();
     let store = startup.store.clone();

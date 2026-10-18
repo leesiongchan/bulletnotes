@@ -538,6 +538,7 @@ impl State {
                         if let Some(sync) = self.sync.borrow().as_ref() {
                             sync.set_active(false);
                         }
+                        window.invoke_window_will_hide();
                         let _ = window.hide();
                     }
                 }

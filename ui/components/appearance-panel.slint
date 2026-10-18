@@ -72,6 +72,10 @@ export component AppearancePanel inherits Rectangle {
     in property <bool> low-contrast-warning:false;
     callback return-to-note();
     callback show-connection();
+    in-out property <string> hotkey-accelerator;
+    in property <string> native-message;
+    in property <bool> hotkey-busy:false;
+    callback apply-hotkey();
     callback changed();
     callback theme-selected(string);
     callback import-theme();
@@ -254,6 +258,14 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
 
+            Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.theme.muted; }
+            Rectangle {
+                height:34px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;border-radius:5px;
+                TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.theme.ink;font-size:12px;selection-background-color:root.theme.selection;selection-foreground-color:root.theme.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
+            }
+            Text {text:"For example, Option+A or Control+Shift+Space.";font-size:10px;color:root.theme.muted;wrap:word-wrap;}
+            ChoiceButton {theme:root.theme;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}
+            Text {text:root.native-message;font-size:11px;color:root.theme.muted;wrap:word-wrap;}
             Text {
                 visible: root.message != "";
                 text: root.message;

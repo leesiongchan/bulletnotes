@@ -3,6 +3,7 @@ use crate::domain::error::StoreError;
 use rusqlite::Connection;
 use std::{
     fs::{File, OpenOptions, TryLockError},
+    io::{Read, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -138,10 +139,35 @@ fn acquire_instance_lock(path: &Path) -> Result<InstanceGuard, StoreError> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let file = options.open(PathBuf::from(name))?;
+    let mut file = options.open(PathBuf::from(name))?;
     match file.try_lock() {
-        Ok(()) => Ok(InstanceGuard { _file: file }),
+        Ok(()) => {
+            file.set_len(0)?;
+            write!(file, "{}", std::process::id())?;
+            file.sync_data()?;
+            Ok(InstanceGuard { _file: file })
+        }
         Err(TryLockError::WouldBlock) => Err(StoreError::AlreadyRunning),
         Err(TryLockError::Error(error)) => Err(StoreError::Io(error)),
     }
+}
+
+/// Read only after AlreadyRunning. The kernel lock remains the writer authority;
+/// this metadata is a hint for activating a verified running native owner.
+pub fn owner_process_id(path: &Path) -> Result<u32, StoreError> {
+    let path = absolute_path(path)?;
+    let mut lock = path.as_os_str().to_owned();
+    lock.push(".lock");
+    let mut text = String::new();
+    File::open(PathBuf::from(lock))?
+        .take(11)
+        .read_to_string(&mut text)?;
+    if text.len() > 10 {
+        return Err(StoreError::InvalidData);
+    }
+    let pid = text.parse::<u32>().map_err(|_| StoreError::InvalidData)?;
+    if pid == 0 || pid > i32::MAX as u32 {
+        return Err(StoreError::InvalidData);
+    }
+    Ok(pid)
 }

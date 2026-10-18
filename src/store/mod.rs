@@ -18,8 +18,8 @@ use search::{SearchQuery, SearchResults};
 use settings::AppSettings;
 use std::path::Path;
 use tokio::sync::{mpsc, oneshot, watch};
-pub use worker::Durability;
 use worker::{Command, Worker};
+pub use worker::{Durability, owner_process_id};
 
 #[derive(Clone)]
 pub struct StoreHandle {

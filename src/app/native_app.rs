@@ -29,6 +29,7 @@ pub struct LocalApplication {
     tray: LocalTray,
     local: LocalUi,
     native: Rc<NativeApplication>,
+    integration: super::native_ui::NativeUi,
     _appearance: AppearanceUi,
     _recovery: super::recovery_ui::RecoveryUi,
     _chrome: Rc<RefCell<Option<ChromeMonitor>>>,
@@ -37,6 +38,7 @@ impl LocalApplication {
     pub fn new(startup: Startup, mut native: NativeApplication) -> AppResult<Self> {
         let window = AppWindow::new()?;
         let tray = LocalTray::new()?;
+        let settings = startup.settings.clone();
         let placement = startup.settings.window.clone();
         let appearance = appearance_ui::bind(
             &window,
@@ -53,6 +55,13 @@ impl LocalApplication {
         let recovery = super::recovery_ui::bind(&window, local.clone(), startup.store)?;
         native.bind_quit(&window);
         let native = Rc::new(native);
+        let integration = super::native_ui::bind(
+            &window,
+            local.clone(),
+            appearance.clone(),
+            native.clone(),
+            &settings,
+        );
         let transition_pending = Rc::new(Cell::new(false));
         for quit in [false, true] {
             let weak = window.as_weak();
@@ -97,22 +106,13 @@ impl LocalApplication {
         }
         {
             let weak = window.as_weak();
-            let native = native.clone();
-            let local = local.clone();
+            let integration = integration.clone();
             tray.on_reopen(move || {
-                if let Some(window) = weak.upgrade() {
-                    match window.show() {
-                        Ok(()) => {
-                            local.set_active(true);
-                            native.activate();
-                            if let Ok(native) = native_window(window.window()) {
-                                native.makeKeyAndOrderFront(None);
-                            }
-                        }
-                        Err(_) => {
-                            window.set_status_text("Window could not be shown. Try again.".into())
-                        }
-                    }
+                if integration.show().is_err()
+                    && let Some(window) = weak.upgrade()
+                {
+                    window.set_native_message("Window could not be shown. Try again.".into());
+                    window.set_native_warning(true);
                 }
             });
         }
@@ -129,6 +129,7 @@ impl LocalApplication {
             let owner = chrome.clone();
             let weak = window.as_weak();
             let local = local.clone();
+            let integration = integration.clone();
             let mut initial = Some((placement, startup.last_page));
             window.on_native_window_ready(move || {
                 let Some((placement, last_page)) = initial.take() else {
@@ -138,6 +139,7 @@ impl LocalApplication {
                     let result = (|| -> AppResult<()> {
                         *owner.borrow_mut() = Some(ChromeMonitor::install(&window, None)?);
                         restore_window(&window, placement.as_ref())?;
+                        integration.attach(&settings)?;
                         Ok(())
                     })();
                     if result.is_err() {
@@ -171,6 +173,7 @@ impl LocalApplication {
             tray,
             local,
             native,
+            integration,
             _appearance: appearance,
             _recovery: recovery,
             _chrome: chrome,
@@ -189,12 +192,7 @@ impl LocalApplication {
         self.native.request_termination();
     }
     pub fn show(&self) -> AppResult<()> {
-        self.window.show()?;
-        self.local.set_active(true);
-        self.native.activate();
-        if let Ok(native) = native_window(self.window.window()) {
-            native.makeKeyAndOrderFront(None);
-        }
+        self.integration.show()?;
         Ok(())
     }
     pub fn run(&self) -> AppResult<()> {
@@ -204,7 +202,7 @@ impl LocalApplication {
         Ok(())
     }
 }
-fn capture(window: &AppWindow) -> AppResult<WindowPlacement> {
+pub(super) fn capture(window: &AppWindow) -> AppResult<WindowPlacement> {
     let frame = native_window(window.window())?.frame();
     Ok(WindowPlacement {
         x: frame.origin.x,
@@ -214,7 +212,7 @@ fn capture(window: &AppWindow) -> AppResult<WindowPlacement> {
         pinned: window.get_is_pinned(),
     })
 }
-fn restore_window(window: &AppWindow, saved: Option<&WindowPlacement>) -> AppResult<()> {
+pub(super) fn restore_window(window: &AppWindow, saved: Option<&WindowPlacement>) -> AppResult<()> {
     let mtm = MainThreadMarker::new().ok_or("window restoration requires main thread")?;
     let native = native_window(window.window())?;
     let screens: Vec<_> = NSScreen::screens(mtm)

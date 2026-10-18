@@ -122,3 +122,73 @@ fn native_startup_close_and_termination_preserve_local_data() {
         String::from_utf8_lossy(&output.stdout).contains("native_startup_close_and_quit: true")
     );
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn hotkey_conflict_preserves_the_previous_registration() {
+    use bulletnotes::platform::hotkey::{HotkeyBackend, HotkeyError, HotkeyRegistration};
+    use global_hotkey::hotkey::{Code, HotKey, Modifiers};
+    use std::{cell::RefCell, rc::Rc};
+    #[derive(Default)]
+    struct Fake {
+        registered: RefCell<Vec<HotKey>>,
+        busy: RefCell<Option<HotKey>>,
+    }
+    impl HotkeyBackend for Fake {
+        fn register(&self, key: HotKey) -> Result<(), HotkeyError> {
+            if self.busy.borrow().as_ref() == Some(&key) {
+                return Err(HotkeyError::Unavailable);
+            }
+            self.registered.borrow_mut().push(key);
+            Ok(())
+        }
+        fn unregister(&self, key: HotKey) -> Result<(), HotkeyError> {
+            self.registered
+                .borrow_mut()
+                .retain(|registered| *registered != key);
+            Ok(())
+        }
+    }
+    let backend = Rc::new(Fake::default());
+    let old = HotKey::new(Some(Modifiers::ALT), Code::KeyA);
+    let busy = HotKey::new(Some(Modifiers::ALT), Code::KeyB);
+    *backend.busy.borrow_mut() = Some(busy);
+    let mut binding = HotkeyRegistration::new(backend.clone());
+    binding.commit(binding.prepare(old).unwrap()).unwrap();
+    assert!(binding.prepare(busy).is_err());
+    assert_eq!(binding.current(), Some(old));
+    assert_eq!(*backend.registered.borrow(), vec![old]);
+    let candidate = HotKey::new(Some(Modifiers::ALT), Code::KeyC);
+    {
+        let _abandoned = binding.prepare(candidate).unwrap();
+        assert_eq!(binding.current(), Some(old));
+    }
+    assert_eq!(
+        *backend.registered.borrow(),
+        vec![old],
+        "abandoned settings commit must release only its reserved candidate"
+    );
+    let stale = binding.prepare(old).unwrap();
+    binding.commit(binding.prepare(candidate).unwrap()).unwrap();
+    assert!(
+        binding.commit(stale).is_err(),
+        "a stale reservation cannot undo a later committed shortcut"
+    );
+    assert_eq!(binding.current(), Some(candidate));
+    assert_eq!(*backend.registered.borrow(), vec![candidate]);
+    drop(binding);
+    assert!(backend.registered.borrow().is_empty());
+}
+#[tokio::test]
+async fn a_contested_store_identifies_its_owner_without_opening_a_second_writer() {
+    use bulletnotes::store::{StoreHandle, owner_process_id};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.sqlite");
+    let owner = StoreHandle::open(&path).await.unwrap();
+    assert!(matches!(
+        StoreHandle::open(&path).await,
+        Err(StoreError::AlreadyRunning)
+    ));
+    assert_eq!(owner_process_id(&path).unwrap(), std::process::id());
+    owner.shutdown().await.unwrap();
+}

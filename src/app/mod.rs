@@ -21,3 +21,6 @@ pub mod sync_ui;
 
 pub mod recovery;
 pub mod recovery_ui;
+
+#[cfg(target_os = "macos")]
+pub mod native_ui;

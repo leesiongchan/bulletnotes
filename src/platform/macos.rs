@@ -1,4 +1,5 @@
 //! Read-only validation through Slint's supported handle and public AppKit APIs.
+pub use super::integration::{LifecycleAction, MacIntegration};
 use crate::domain::error::PlatformError;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};

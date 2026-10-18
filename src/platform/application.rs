@@ -42,6 +42,7 @@ pub struct NativeApplication {
 impl NativeApplication {
     /// Must be the first NSApplication creation, before creating any Slint components.
     pub fn prepare() -> Result<Self, &'static str> {
+        super::integration::remember_foreign_app();
         let _mtm = MainThreadMarker::new().ok_or("application requires the main thread")?;
         // SAFETY: sharedApplication is the documented singleton method. objc2 retains
         // its result. Sending it to our registered subclass creates it if absent; the
@@ -70,7 +71,51 @@ impl NativeApplication {
         self.app.terminate(None);
     }
     pub fn activate(&self) {
+        super::integration::remember_foreign_app();
         self.app.activate();
+    }
+    /// Activate a verified native owner after the store rejected a second writer.
+    pub fn activate_store_owner(&self, pid: u32) -> Result<(), &'static str> {
+        use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+        if pid == std::process::id() || pid == 0 || pid > i32::MAX as u32 {
+            return Err("invalid existing owner");
+        }
+        let owner = NSRunningApplication::runningApplicationWithProcessIdentifier(pid as i32)
+            .ok_or("existing owner is unavailable")?;
+        let bundled = owner
+            .bundleIdentifier()
+            .is_some_and(|id| id.to_string().starts_with("lol.harflix.bulletnotes"));
+        let same_executable = owner
+            .executableURL()
+            .and_then(|url| url.path())
+            .and_then(|path| {
+                std::env::current_exe()
+                    .ok()
+                    .map(|current| current == std::path::Path::new(&path.to_string()))
+            })
+            .unwrap_or(false);
+        if owner.isTerminated() || !(bundled || same_executable) {
+            return Err("existing owner could not be verified");
+        }
+        self.app.yieldActivationToApplication(&owner);
+        let _ = owner.activateFromApplication_options(
+            &NSRunningApplication::currentApplication(),
+            NSApplicationActivationOptions::empty(),
+        );
+        // Activation alone neither guarantees reopen nor succeeds for every short-
+        // lived LaunchServices launcher. Ask the verified owner to show its window.
+        // SAFETY: destination is only a decimal PID. No userInfo, path, or secrets
+        // cross this untrusted same-session channel; the receiver only shows UI.
+        unsafe {
+            objc2_foundation::NSDistributedNotificationCenter::defaultCenter()
+                .postNotificationName_object_userInfo_deliverImmediately(
+                    super::native_events::reopen_name(),
+                    Some(&objc2_foundation::NSString::from_str(&pid.to_string())),
+                    None,
+                    true,
+                );
+        }
+        Ok(())
     }
     pub fn system_appearance(&self) -> SystemAppearance {
         // SAFETY: these immutable NSString constants are exported by AppKit, which

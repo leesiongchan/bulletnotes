@@ -5,6 +5,9 @@ use std::fmt;
 pub enum PlatformError {
     WrongThread,
     WindowUnavailable,
+    HotkeyUnavailable,
+    MaterialUnavailable,
+    ActivationDeclined,
     #[cfg(target_os = "macos")]
     Handle(raw_window_handle::HandleError),
 }
@@ -14,6 +17,13 @@ impl fmt::Display for PlatformError {
         match self {
             Self::WrongThread => f.write_str("native probe requires the main thread"),
             Self::WindowUnavailable => f.write_str("native macOS window is not available"),
+            Self::HotkeyUnavailable => {
+                f.write_str("shortcut is unavailable; use the menu or choose another shortcut")
+            }
+            Self::MaterialUnavailable => {
+                f.write_str("native materials are deferred; solid paper is available")
+            }
+            Self::ActivationDeclined => f.write_str("previous application declined activation"),
             #[cfg(target_os = "macos")]
             Self::Handle(error) => write!(f, "native window handle: {error}"),
         }
