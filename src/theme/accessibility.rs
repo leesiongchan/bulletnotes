@@ -25,6 +25,8 @@ pub fn high_contrast(theme: &Theme) -> Theme {
     result.muted = ink;
     result.accent = ink;
     result.line = ink;
+    result.cursor = theme.cursor.map(|_| ink);
+    result.scrollbar = theme.scrollbar.map(|_| ink);
     // Retain the paper's tint when it already reaches enhanced text contrast.
     for step in 0..=100 {
         let candidate = theme.paper.mix(paper, f64::from(step) / 100.0);

@@ -1,4 +1,5 @@
-import { ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, ThemeOption, ThemePair } from "../types.slint";
 import { ActionButton, ChoiceButton } from "action-button.slint";
 component ThemeCard inherits FocusScope {
@@ -102,7 +103,8 @@ export component AppearancePanel inherits Rectangle {
         clicked => { root.return-to-note(); }
     }
 
-    scroll := ScrollView {
+    scroll := ThemeScrollView {
+        scrollbar-color: root.theme.scrollbar;
         x: 24px;
         y: 53px;
         width: parent.width - 48px;
@@ -261,7 +263,7 @@ export component AppearancePanel inherits Rectangle {
             Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.theme.muted; }
             Rectangle {
                 height:34px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;border-radius:5px;
-                TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.theme.ink;font-size:12px;selection-background-color:root.theme.selection;selection-foreground-color:root.theme.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
+                TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.theme.ink;font-size:12px;selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
             }
             Text {text:"For example, Option+A or Control+Shift+Space.";font-size:10px;color:root.theme.muted;wrap:word-wrap;}
             ChoiceButton {theme:root.theme;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}

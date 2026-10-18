@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Catppuccin Mocha",
+  "dark": true,
+  "paper": "#1E1E2E",
+  "surface": "#313244",
+  "ink": "#CDD6F4",
+  "muted": "#89B4FA",
+  "accent": "#CBA6F7",
+  "line": "#7F849C",
+  "selection": "#413956",
+  "cursor": "#CBA6F7",
+  "scrollbar": "#45475A"
+}

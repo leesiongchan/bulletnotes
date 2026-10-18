@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Gruvbox",
+  "dark": true,
+  "paper": "#282828",
+  "surface": "#3C3836",
+  "ink": "#EBDBB2",
+  "muted": "#98971A",
+  "accent": "#D65D0E",
+  "line": "#7B7B7B",
+  "selection": "#4B3323",
+  "cursor": "#D65D0E",
+  "scrollbar": "#746550"
+}

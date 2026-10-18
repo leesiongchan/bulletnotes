@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Neo",
+  "dark": true,
+  "paper": "#19002E",
+  "surface": "#302F2F",
+  "ink": "#E3D9D2",
+  "muted": "#8A2BE2",
+  "accent": "#556B2F",
+  "line": "#555555",
+  "selection": "#25152E",
+  "cursor": "#556B2F",
+  "scrollbar": "#746550"
+}

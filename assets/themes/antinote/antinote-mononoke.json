@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Mononoke",
+  "dark": true,
+  "paper": "#03180C",
+  "surface": "#0D2819",
+  "ink": "#DCDCDC",
+  "muted": "#85620F",
+  "accent": "#289A28",
+  "line": "#A0A0A0",
+  "selection": "#0A3212",
+  "cursor": "#289A28",
+  "scrollbar": "#F06446"
+}

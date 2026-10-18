@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Vendetta",
+  "dark": true,
+  "paper": "#141414",
+  "surface": "#330404",
+  "ink": "#DCDCDC",
+  "muted": "#8C0A0A",
+  "accent": "#BA0B0B",
+  "line": "#787878",
+  "selection": "#351212",
+  "cursor": "#BA0B0B",
+  "scrollbar": "#781414"
+}

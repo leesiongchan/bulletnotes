@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Dracula",
+  "dark": true,
+  "paper": "#282A36",
+  "surface": "#44475A",
+  "ink": "#F8F8F2",
+  "muted": "#8BE9FD",
+  "accent": "#BD93F9",
+  "line": "#6272A4",
+  "selection": "#463F5D",
+  "cursor": "#BD93F9",
+  "scrollbar": "#44475A"
+}

@@ -1,4 +1,5 @@
-import { ScrollView, ListView } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
+import { ThemeScrollbar } from "theme-scrollbar.slint";
 import { UiTheme, PageRow } from "../types.slint";
 import { ActionButton, ChoiceButton } from "action-button.slint";
 component ResultRow inherits FocusScope {
@@ -148,7 +149,7 @@ export component PageBrowser inherits Rectangle {
             single-line: true;
             color: root.theme.ink;
             font-size: 12px;
-            selection-background-color: root.theme.selection;
+            selection-background-color: root.theme.cursor;
             selection-foreground-color: root.theme.ink;
             accessible-label: "Search every page";
             edited => { root.selected-index = -1; root.query-changed(self.text); }
@@ -201,7 +202,7 @@ export component PageBrowser inherits Rectangle {
             text <=> root.folder;
             font-size: 11px;
             color: root.theme.ink;
-            selection-background-color: root.theme.selection;
+            selection-background-color: root.theme.cursor;
             selection-foreground-color: root.theme.ink;
             accessible-label: "Filter by folder, empty for all folders";
             edited => { root.selected-index = -1; root.folder-changed(self.text); }
@@ -221,6 +222,7 @@ export component PageBrowser inherits Rectangle {
     }
 
     list := ListView {
+        vertical-scrollbar-policy: always-off;
         x: 8px;
         y: 136px;
         width: parent.width - 16px;
@@ -233,6 +235,16 @@ export component PageBrowser inherits Rectangle {
             opened => { root.open-page(item.key); }
             step(amount) => { root.move-selection(amount); }
         }
+    }
+
+    ThemeScrollbar {
+        x: list.x + list.width - self.width;
+        y: list.y;
+        height: list.height;
+        thumb-color: root.theme.scrollbar;
+        content-height: list.content-height;
+        visible-height: list.visible-height;
+        content-y <=> list.content-y;
     }
 
     Text {

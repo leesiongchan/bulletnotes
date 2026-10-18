@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Wumpus",
+  "dark": true,
+  "paper": "#323339",
+  "surface": "#303040",
+  "ink": "#F4F4F4",
+  "muted": "#6DA4F7",
+  "accent": "#5865F2",
+  "line": "#7B7B7B",
+  "selection": "#3A3D5E",
+  "cursor": "#5865F2",
+  "scrollbar": "#585864"
+}

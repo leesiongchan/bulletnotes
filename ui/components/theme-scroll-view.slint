@@ -1,0 +1,24 @@
+import { ScrollView } from "std-widgets.slint";
+import { ThemeScrollbar } from "theme-scrollbar.slint";
+export component ThemeScrollView inherits Rectangle {
+    in property <color> scrollbar-color;
+    in-out property <length> content-width <=> scroll.content-width;
+    in-out property <length> content-height <=> scroll.content-height;
+    in-out property <length> content-y <=> scroll.content-y;
+    out property <length> visible-width:scroll.visible-width;
+    out property <length> visible-height:scroll.visible-height;
+    scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        vertical-scrollbar-policy: always-off;
+        @children
+    }
+    ThemeScrollbar {
+        x: parent.width - self.width;
+        height: parent.height;
+        thumb-color: root.scrollbar-color;
+        content-height: root.content-height;
+        visible-height: root.visible-height;
+        content-y <=> root.content-y;
+    }
+}

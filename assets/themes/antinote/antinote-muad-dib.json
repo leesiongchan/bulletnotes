@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Muad'Dib",
+  "dark": false,
+  "paper": "#E1D2B4",
+  "surface": "#EDDEBF",
+  "ink": "#9F865E",
+  "muted": "#85704F",
+  "accent": "#99501A",
+  "line": "#AE9C7E",
+  "selection": "#D3B895",
+  "cursor": "#99501A",
+  "scrollbar": "#EFD978"
+}

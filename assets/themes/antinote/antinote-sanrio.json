@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Sanrio",
+  "dark": false,
+  "paper": "#FFFFFF",
+  "surface": "#F4E7ED",
+  "ink": "#E876B2",
+  "muted": "#F1BFDC",
+  "accent": "#84B0DD",
+  "line": "#9CCCE8",
+  "selection": "#E6EFF8",
+  "cursor": "#84B0DD",
+  "scrollbar": "#CCE1D1"
+}

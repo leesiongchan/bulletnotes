@@ -81,6 +81,31 @@ fn export_roundtrips_version_one() -> Result<(), ThemeError> {
     Ok(())
 }
 #[test]
+fn cursor_and_scrollbar_colors_survive_export_and_settings_roundtrips() {
+    let mut input: Value = serde_json::from_slice(VALID).unwrap();
+    input["cursor"] = json!("#19A2E6");
+    input["scrollbar"] = json!("#E69A19");
+    let theme = decode_theme(&serde_json::to_vec(&input).unwrap()).unwrap();
+    let exported: Value = serde_json::from_slice(&encode_theme(&theme).unwrap()).unwrap();
+    assert_eq!(exported["cursor"], "#19A2E6");
+    assert_eq!(exported["scrollbar"], "#E69A19");
+    let settings = bulletnotes::store::settings::AppSettings {
+        imported_themes: vec![ThemeEntry::import(theme)],
+        ..Default::default()
+    };
+    let restored: bulletnotes::store::settings::AppSettings =
+        serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+    assert_eq!(restored, settings);
+}
+#[test]
+fn cursor_and_scrollbar_reject_invalid_colors() {
+    for field in ["cursor", "scrollbar"] {
+        for value in [json!("#fff"), json!("#FFFFFF00"), json!(17)] {
+            assert!(decode_theme(&modified(field, value)).is_err(), "{field}");
+        }
+    }
+}
+#[test]
 fn system_mode_preserves_both_assignments() {
     let themes = builtin_themes().unwrap();
     let settings = AppearanceSettings {

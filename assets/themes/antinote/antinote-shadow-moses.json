@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Shadow Moses",
+  "dark": true,
+  "paper": "#292D2D",
+  "surface": "#374041",
+  "ink": "#CADEE8",
+  "muted": "#B5C2C8",
+  "accent": "#9BC6D3",
+  "line": "#859393",
+  "selection": "#404C4E",
+  "cursor": "#9BC6D3",
+  "scrollbar": "#7BC290"
+}

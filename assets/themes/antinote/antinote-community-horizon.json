@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Horizon (Warm)",
+  "dark": true,
+  "paper": "#1C1E26",
+  "surface": "#232530",
+  "ink": "#E0E0E0",
+  "muted": "#BBBBBB",
+  "accent": "#E95678",
+  "line": "#6C6F93",
+  "selection": "#452936",
+  "cursor": "#E95678",
+  "scrollbar": "#2E303E"
+}

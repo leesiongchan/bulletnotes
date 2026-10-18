@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "North Star",
+  "dark": false,
+  "paper": "#FFFFFF",
+  "surface": "#FFFFFF",
+  "ink": "#1C1C1E",
+  "muted": "#6B6B70",
+  "accent": "#4F46E5",
+  "line": "#3C3C43",
+  "selection": "#DCDAFA",
+  "cursor": "#4F46E5",
+  "scrollbar": "#F2F2F2"
+}

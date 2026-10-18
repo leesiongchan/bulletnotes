@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Totoro",
+  "dark": false,
+  "paper": "#FAF5EB",
+  "surface": "#E8DECD",
+  "ink": "#46321E",
+  "muted": "#5F8750",
+  "accent": "#557D69",
+  "line": "#B4B4B4",
+  "selection": "#D9DDD1",
+  "cursor": "#557D69",
+  "scrollbar": "#FFE6A0"
+}

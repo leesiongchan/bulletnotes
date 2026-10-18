@@ -1,4 +1,4 @@
-import { ScrollView } from "std-widgets.slint";
+import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
@@ -105,7 +105,8 @@ export component NoteEditor inherits Rectangle {
             }
         }
 
-        scroll := ScrollView {
+        scroll := ThemeScrollView {
+            scrollbar-color: root.theme.scrollbar;
             width: parent.width;
             height: parent.height;
             content-width: self.visible-width;
@@ -123,7 +124,7 @@ export component NoteEditor inherits Rectangle {
                 font-size: root.font-size-px * 1px;
                 line-height-factor: 1.5;
                 color: root.theme.ink;
-                selection-background-color: root.theme.selection;
+                selection-background-color: root.theme.cursor;
                 selection-foreground-color: root.theme.ink;
                 input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
                 page-height: scroll.visible-height;

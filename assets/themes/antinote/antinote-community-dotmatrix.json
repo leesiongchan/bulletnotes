@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Dot Matrix",
+  "dark": true,
+  "paper": "#9BBC0F",
+  "surface": "#829F12",
+  "ink": "#0F380F",
+  "muted": "#306230",
+  "accent": "#306230",
+  "line": "#88A612",
+  "selection": "#86AA16",
+  "cursor": "#306230",
+  "scrollbar": "#BCC787"
+}

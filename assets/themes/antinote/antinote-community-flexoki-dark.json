@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Flexoki Dark",
+  "dark": true,
+  "paper": "#100F0F",
+  "surface": "#1C1B1A",
+  "ink": "#CECDC3",
+  "muted": "#878580",
+  "accent": "#3AA99F",
+  "line": "#403E3C",
+  "selection": "#182E2C",
+  "cursor": "#3AA99F",
+  "scrollbar": "#282726"
+}

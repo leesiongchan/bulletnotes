@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Catppuccin Macchiato",
+  "dark": true,
+  "paper": "#24273A",
+  "surface": "#181926",
+  "ink": "#CAD3F5",
+  "muted": "#B7BDF8",
+  "accent": "#8AADF4",
+  "line": "#939AB7",
+  "selection": "#38425F",
+  "cursor": "#8AADF4",
+  "scrollbar": "#363A4F"
+}

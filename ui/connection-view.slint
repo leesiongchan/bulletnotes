@@ -1,4 +1,5 @@
-import { ScrollView, VerticalBox, CheckBox } from "std-widgets.slint";
+import { VerticalBox, CheckBox } from "std-widgets.slint";
+import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { UiTheme } from "types.slint";
 import { ActionButton, ChoiceButton } from "components/action-button.slint";
 component ConnectionField inherits Rectangle {
@@ -20,7 +21,7 @@ component ConnectionField inherits Rectangle {
         single-line: true; vertical-alignment: center;
         color: root.theme.ink; font-size: 12px;
         input-type: root.password ? InputType.password : InputType.text;
-        selection-background-color: root.theme.selection;
+        selection-background-color: root.theme.cursor;
         selection-foreground-color: root.theme.ink;
         input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
         accessible-label: root.label;
@@ -51,7 +52,8 @@ export component ConnectionPanel inherits Rectangle {
         icon: @image-url("../assets/icons/close.svg"); label: "Return to note";
         clicked => { root.return-to-note(); }
     }
-    scroll := ScrollView {
+    scroll := ThemeScrollView {
+        scrollbar-color: root.theme.scrollbar;
         x:24px; y:54px; width:parent.width - 48px; height:parent.height - 78px;
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {

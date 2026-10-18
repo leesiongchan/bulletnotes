@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Monokai",
+  "dark": true,
+  "paper": "#272822",
+  "surface": "#3E3D32",
+  "ink": "#F8F8F2",
+  "muted": "#66D9EF",
+  "accent": "#F92672",
+  "line": "#75715E",
+  "selection": "#512832",
+  "cursor": "#F92672",
+  "scrollbar": "#49483E"
+}

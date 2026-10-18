@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Catppuccin Frappé",
+  "dark": true,
+  "paper": "#303446",
+  "surface": "#232634",
+  "ink": "#C6D0F5",
+  "muted": "#BABBF1",
+  "accent": "#8CAAEE",
+  "line": "#949CBB",
+  "selection": "#424C68",
+  "cursor": "#8CAAEE",
+  "scrollbar": "#414559"
+}

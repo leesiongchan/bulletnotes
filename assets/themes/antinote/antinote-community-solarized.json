@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Solarized Dark",
+  "dark": true,
+  "paper": "#002B36",
+  "surface": "#073642",
+  "ink": "#839496",
+  "muted": "#268BD2",
+  "accent": "#B58900",
+  "line": "#586E75",
+  "selection": "#243E2B",
+  "cursor": "#B58900",
+  "scrollbar": "#073642"
+}

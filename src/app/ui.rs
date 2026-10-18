@@ -18,6 +18,12 @@ fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
         accent: color(theme.accent),
         line: color(theme.line),
         selection: color(theme.selection),
+        // macOS Slint draws the caret using the selection brush at full opacity.
+        cursor: theme
+            .cursor
+            .map(|value| slint::Color::from_argb_u8(51, value.r, value.g, value.b))
+            .unwrap_or_else(|| color(theme.selection)),
+        scrollbar: color(theme.scrollbar.unwrap_or(theme.muted)),
         pattern: color(pattern),
         dark: theme.dark,
     }

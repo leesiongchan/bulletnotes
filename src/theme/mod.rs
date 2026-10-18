@@ -64,6 +64,10 @@ pub struct Theme {
     pub accent: Color,
     pub line: Color,
     pub selection: Color,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scrollbar: Option<Color>,
 }
 impl Theme {
     pub fn validate(&self) -> Result<(), ThemeError> {
@@ -81,7 +85,9 @@ impl Theme {
 pub struct ThemeId(pub String);
 impl ThemeId {
     pub fn is_builtin(&self) -> bool {
-        matches!(self.0.as_str(), "paper" | "graphite" | "matcha" | "rose")
+        palette::BUILTIN_THEME_FILES
+            .iter()
+            .any(|(id, _)| self.0 == *id)
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

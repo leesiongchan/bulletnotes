@@ -232,9 +232,89 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let original = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n";
     window.set_note_text(original.into());
+    if args
+        .iter()
+        .any(|arg| arg == "--long-note" || arg == "--scrollbar-contract")
+    {
+        window.set_note_text(
+            format!(
+                "{original}{}",
+                "A generated line for scrollbar review.\n".repeat(80)
+            )
+            .into(),
+        );
+        let weak = window.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(900), move || {
+            if let Some(window) = weak.upgrade() {
+                window.invoke_focus_editor();
+                window.invoke_restore_editor_position(0, 0, 0.0);
+            }
+        });
+    }
     window.set_current_path("Journal/Saturday.md".into());
     window.set_status_text("Preview · temporary text".into());
     let passed = Rc::new(Cell::new(false));
+    if args.iter().any(|arg| arg == "--scrollbar-contract") {
+        let weak = window.as_weak();
+        let result = passed.clone();
+        slint::Timer::single_shot(Duration::from_millis(500), move || {
+            use slint::platform::{PointerEventButton, WindowEvent};
+            let window = weak.upgrade().unwrap();
+            let source = window.get_note_text();
+            let x = window.get_editor_width() - 6.0;
+            let start = slint::LogicalPosition::new(x, 12.0);
+            let end = slint::LogicalPosition::new(x, 200.0);
+            window.window().dispatch_event(WindowEvent::PointerPressed {
+                position: start,
+                button: PointerEventButton::Left,
+            });
+            window
+                .window()
+                .dispatch_event(WindowEvent::PointerMoved { position: end });
+            window
+                .window()
+                .dispatch_event(WindowEvent::PointerReleased {
+                    position: end,
+                    button: PointerEventButton::Left,
+                });
+            assert!(
+                window.get_editor_scroll_y() > 100.0,
+                "themed scrollbar did not drag"
+            );
+            window.invoke_restore_editor_position(0, 0, 0.0);
+            window
+                .window()
+                .dispatch_event(WindowEvent::PointerScrolled {
+                    position: slint::LogicalPosition::new(200.0, 200.0),
+                    delta_x: 0.0,
+                    delta_y: -120.0,
+                });
+            assert!(
+                window.get_editor_scroll_y() > 0.0,
+                "editor wheel scrolling failed"
+            );
+            window.invoke_restore_editor_position(0, 0, 0.0);
+            let track = slint::LogicalPosition::new(x, window.get_editor_height() - 24.0);
+            window.window().dispatch_event(WindowEvent::PointerPressed {
+                position: track,
+                button: PointerEventButton::Left,
+            });
+            window
+                .window()
+                .dispatch_event(WindowEvent::PointerReleased {
+                    position: track,
+                    button: PointerEventButton::Left,
+                });
+            assert!(
+                window.get_editor_scroll_y() > 100.0,
+                "themed scrollbar track did not scroll"
+            );
+            assert_eq!(window.get_note_text(), source);
+            result.set(true);
+            println!("native_scrollbar_contract_passed: true");
+            let _ = slint::quit_event_loop();
+        });
+    }
     #[cfg(all(target_os = "macos", feature = "native-validation"))]
     let monitor = Rc::new(std::cell::RefCell::new(None));
     #[cfg(all(target_os = "macos", feature = "native-validation"))]
@@ -272,14 +352,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(window) = weak.upgrade() {
                 let check = || -> Result<(), Box<dyn std::error::Error>> {
                     let themes = settings.themes()?;
-                    for id in ["paper", "graphite", "matcha", "rose"] {
+                    for entry in &themes {
                         let mut appearance = settings.appearance.clone();
-                        appearance.light_theme = ThemeId(id.into());
+                        appearance.light_theme = entry.id.clone();
                         for font in [11.0, 15.0, 24.0] {
                             appearance.font_size = font;
                             let resolved =
                                 resolve_theme(&appearance, SystemAppearance::Light, &themes)?;
                             apply_theme(&window, &resolved);
+                            let shown = window.get_theme();
+                            if let Some(cursor) = resolved.palette.cursor
+                                && (shown.cursor.red() != cursor.r
+                                    || shown.cursor.green() != cursor.g
+                                    || shown.cursor.blue() != cursor.b
+                                    || shown.cursor.alpha() != 51)
+                            {
+                                return Err("theme cursor color was not presented".into());
+                            }
+                            if let Some(scrollbar) = resolved.palette.scrollbar
+                                && shown.scrollbar
+                                    != slint::Color::from_rgb_u8(
+                                        scrollbar.r,
+                                        scrollbar.g,
+                                        scrollbar.b,
+                                    )
+                            {
+                                return Err("theme scrollbar color was not presented".into());
+                            }
                             let line_height = window.get_editor_line_height();
                             if line_height <= font || line_height > font * 3.0 {
                                 return Err("measured editor line spacing is invalid".into());
@@ -325,6 +424,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if std::env::args().any(|arg| arg == "--contract") && !passed.get() {
         return Err("native UI contract failed".into());
+    }
+    if args.iter().any(|arg| arg == "--scrollbar-contract") && !passed.get() {
+        return Err("native scrollbar contract failed".into());
     }
     Ok(())
 }

@@ -1,4 +1,6 @@
-import { ScrollView, ListView, VerticalBox } from "std-widgets.slint";
+import { ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeScrollView } from "components/theme-scroll-view.slint";
+import { ThemeScrollbar } from "components/theme-scrollbar.slint";
 import { UiTheme, PageRow } from "types.slint";
 import { ActionButton, ChoiceButton } from "components/action-button.slint";
 component SourcePane inherits Rectangle {
@@ -12,7 +14,8 @@ component SourcePane inherits Rectangle {
     min-height:120px; preferred-height:140px;
     background:root.theme.surface;
     border-width:1px; border-color:root.theme.line; border-radius:6px; clip:true;
-    ScrollView {
+    ThemeScrollView {
+        scrollbar-color: root.theme.scrollbar;
         width:parent.width; height:parent.height;
         content-width:self.visible-width; content-height:max(self.visible-height,input.preferred-height + 16px);
         input := TextInput {
@@ -20,7 +23,7 @@ component SourcePane inherits Rectangle {
             height:max(parent.visible-height - 16px,self.preferred-height);
             text <=> root.text; wrap:word-wrap; single-line:false; read-only:root.read-only;
             color:root.theme.ink; font-family:"Menlo"; font-size:12px;
-            selection-background-color:root.theme.selection; selection-foreground-color:root.theme.ink;
+            selection-background-color:root.theme.cursor; selection-foreground-color:root.theme.ink;
             accessible-label:root.label;
             input-method-hints:{capitalization:none,auto-correct:false,auto-complete:false};
             edited => { root.edited(); }
@@ -65,7 +68,8 @@ export component RecoveryPanel inherits Rectangle {
         icon:@image-url("../assets/icons/close.svg"); label:"Return to note";
         clicked => { root.return-to-note(); }
     }
-    scroll := ScrollView {
+    scroll := ThemeScrollView {
+        scrollbar-color: root.theme.scrollbar;
         x:24px; y:54px; width:parent.width - 48px; height:parent.height - 68px;
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {
@@ -78,14 +82,25 @@ export component RecoveryPanel inherits Rectangle {
             }
             Text { text:root.message; wrap:word-wrap; color:root.theme.muted; font-size:11px; }
             if root.items.length == 0:Text { text:root.section == "conflicts" ? "No changes need review." : "No saved copies here."; color:root.theme.ink; font-size:12px; }
-            item-scroll := ListView {
+            Rectangle {
                 visible:root.items.length > 0; height:min(92px,root.items.length * 30px);
-                content-width:self.visible-width;
-                for item in root.items:ChoiceButton {
-                    width:item-scroll.visible-width; height:30px;
-                    theme:root.theme; text:item.title; label:"Review " + item.title;
-                    selected:item.key == root.selected-id; enabled:!root.busy;
-                    clicked => { root.confirming-purge=false; root.select-item(item.key); }
+                item-scroll := ListView {
+                    width:parent.width; height:parent.height;
+                    vertical-scrollbar-policy:always-off;
+                    content-width:self.visible-width;
+                    for item in root.items:ChoiceButton {
+                        width:item-scroll.visible-width; height:30px;
+                        theme:root.theme; text:item.title; label:"Review " + item.title;
+                        selected:item.key == root.selected-id; enabled:!root.busy;
+                        clicked => { root.confirming-purge=false; root.select-item(item.key); }
+                    }
+                }
+                ThemeScrollbar {
+                    x:parent.width - self.width; height:parent.height;
+                    thumb-color:root.theme.scrollbar;
+                    content-height:item-scroll.content-height;
+                    visible-height:item-scroll.visible-height;
+                    content-y <=> item-scroll.content-y;
                 }
             }
             if root.selected:Text { text:root.path; wrap:word-wrap; color:root.theme.ink; font-size:12px; }
@@ -107,7 +122,7 @@ export component RecoveryPanel inherits Rectangle {
             if root.selected && root.section != "conflicts":Text { text:"Restore destination · existing pages are preserved"; color:root.theme.ink; font-size:11px; wrap:word-wrap; }
             if root.selected && root.section != "conflicts":Rectangle {
                 height:34px; background:root.theme.surface; border-width:1px; border-color:root.theme.line; border-radius:5px;
-                TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:root.theme.ink; selection-background-color:root.theme.selection; selection-foreground-color:root.theme.ink; font-size:12px; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
+                TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:root.theme.ink; selection-background-color:root.theme.cursor; selection-foreground-color:root.theme.ink; font-size:12px; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
             }
             if root.selected && root.section != "conflicts":ChoiceButton { theme:root.theme; text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }
             if root.selected && root.section == "trash" && !root.confirming-purge:ChoiceButton { theme:root.theme; text:"Delete this local Trash copy…"; enabled:!root.busy; clicked => { root.confirming-purge=true; } }

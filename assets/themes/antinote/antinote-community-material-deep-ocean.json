@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Material Deep Ocean",
+  "dark": true,
+  "paper": "#0D101A",
+  "surface": "#080B10",
+  "ink": "#A6ACCD",
+  "muted": "#6E92DC",
+  "accent": "#88DDFF",
+  "line": "#7B7B7B",
+  "selection": "#263948",
+  "cursor": "#88DDFF",
+  "scrollbar": "#1F2233"
+}

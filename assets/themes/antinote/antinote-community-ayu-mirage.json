@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Ayu Mirage",
+  "dark": true,
+  "paper": "#202734",
+  "surface": "#1F2430",
+  "ink": "#CBCCC6",
+  "muted": "#59C2FF",
+  "accent": "#FFB454",
+  "line": "#5C6773",
+  "selection": "#4D433A",
+  "cursor": "#FFB454",
+  "scrollbar": "#1F2430"
+}

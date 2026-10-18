@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Tartan",
+  "dark": false,
+  "paper": "#F3F1EB",
+  "surface": "#FFFFF0",
+  "ink": "#3C280A",
+  "muted": "#C85A14",
+  "accent": "#FF7828",
+  "line": "#828282",
+  "selection": "#F5D9C4",
+  "cursor": "#FF7828",
+  "scrollbar": "#F6BF9F"
+}

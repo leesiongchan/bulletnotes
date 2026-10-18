@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Agrabah",
+  "dark": true,
+  "paper": "#0A0A28",
+  "surface": "#1B1943",
+  "ink": "#F0F0F0",
+  "muted": "#CEAC00",
+  "accent": "#F5DC00",
+  "line": "#828282",
+  "selection": "#393420",
+  "cursor": "#F5DC00",
+  "scrollbar": "#993055"
+}

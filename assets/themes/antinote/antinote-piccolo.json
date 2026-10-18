@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Piccolo",
+  "dark": false,
+  "paper": "#F5FFF5",
+  "surface": "#CEECCE",
+  "ink": "#323232",
+  "muted": "#821EA0",
+  "accent": "#A032B4",
+  "line": "#969696",
+  "selection": "#E4D6E8",
+  "cursor": "#A032B4",
+  "scrollbar": "#B3F92C"
+}

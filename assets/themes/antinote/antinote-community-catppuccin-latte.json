@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Catppuccin Latte",
+  "dark": false,
+  "paper": "#EFF1F5",
+  "surface": "#DCE0E8",
+  "ink": "#4C4F69",
+  "muted": "#7287FD",
+  "accent": "#1E66F5",
+  "line": "#7C7F93",
+  "selection": "#C5D5F5",
+  "cursor": "#1E66F5",
+  "scrollbar": "#CCD0DA"
+}

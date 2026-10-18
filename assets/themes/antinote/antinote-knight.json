@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Knight",
+  "dark": true,
+  "paper": "#0A0A0F",
+  "surface": "#161822",
+  "ink": "#585858",
+  "muted": "#324664",
+  "accent": "#3C5082",
+  "line": "#828282",
+  "selection": "#141826",
+  "cursor": "#3C5082",
+  "scrollbar": "#1C4B63"
+}

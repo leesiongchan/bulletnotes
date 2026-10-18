@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Iceberg",
+  "dark": true,
+  "paper": "#161821",
+  "surface": "#1E2132",
+  "ink": "#C6C8D1",
+  "muted": "#6B7089",
+  "accent": "#E27878",
+  "line": "#686F9A",
+  "selection": "#3F2B32",
+  "cursor": "#E27878",
+  "scrollbar": "#2E313F"
+}

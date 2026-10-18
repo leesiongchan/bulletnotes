@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "A24",
+  "dark": true,
+  "paper": "#0F1612",
+  "surface": "#23332A",
+  "ink": "#E3D4B4",
+  "muted": "#BCB483",
+  "accent": "#4D7967",
+  "line": "#828282",
+  "selection": "#1B2A23",
+  "cursor": "#4D7967",
+  "scrollbar": "#493B59"
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Nord Aurora",
+  "dark": true,
+  "paper": "#2E3440",
+  "surface": "#3B4252",
+  "ink": "#D8DEE9",
+  "muted": "#81A1C1",
+  "accent": "#BF616A",
+  "line": "#E5E9F0",
+  "selection": "#4B3D48",
+  "cursor": "#BF616A",
+  "scrollbar": "#434C5E"
+}

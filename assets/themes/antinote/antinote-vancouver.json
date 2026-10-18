@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Vancouver",
+  "dark": false,
+  "paper": "#FFFFFF",
+  "surface": "#ECECEC",
+  "ink": "#473F37",
+  "muted": "#1F4F79",
+  "accent": "#0B486B",
+  "line": "#B2B2B2",
+  "selection": "#CEDAE1",
+  "cursor": "#0B486B",
+  "scrollbar": "#FFEBCF"
+}

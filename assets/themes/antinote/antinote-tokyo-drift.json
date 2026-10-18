@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Tokyo Drift",
+  "dark": true,
+  "paper": "#2A2626",
+  "surface": "#302F2F",
+  "ink": "#EBE3DB",
+  "muted": "#B2E2EC",
+  "accent": "#58C2FF",
+  "line": "#7B7B7B",
+  "selection": "#334551",
+  "cursor": "#58C2FF",
+  "scrollbar": "#746550"
+}

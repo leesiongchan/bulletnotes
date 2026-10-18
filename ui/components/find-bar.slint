@@ -23,7 +23,7 @@ export component FindBar inherits Rectangle {
                 vertical-alignment: center; single-line: true;
                 text <=> root.query;
                 color: root.theme.ink; font-size: 12px;
-                selection-background-color: root.theme.selection;
+                selection-background-color: root.theme.cursor;
                 selection-foreground-color: root.theme.ink;
                 input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
                 accessible-label: "Find in note, case sensitive";

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Gundam Wing",
+  "dark": false,
+  "paper": "#F5F5F5",
+  "surface": "#E4E2E2",
+  "ink": "#323232",
+  "muted": "#0055AA",
+  "accent": "#0064B4",
+  "line": "#969696",
+  "selection": "#C4D8E8",
+  "cursor": "#0064B4",
+  "scrollbar": "#FFDF5A"
+}

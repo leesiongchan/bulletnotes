@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "One Dark Pro",
+  "dark": true,
+  "paper": "#282C34",
+  "surface": "#21252B",
+  "ink": "#ABB2BF",
+  "muted": "#61AFEF",
+  "accent": "#C678DD",
+  "line": "#5C6370",
+  "selection": "#483B56",
+  "cursor": "#C678DD",
+  "scrollbar": "#3E4451"
+}

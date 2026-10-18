@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Nord",
+  "dark": true,
+  "paper": "#2E3440",
+  "surface": "#3B4252",
+  "ink": "#D8DEE9",
+  "muted": "#81A1C1",
+  "accent": "#8FBCBB",
+  "line": "#4C566A",
+  "selection": "#414F59",
+  "cursor": "#8FBCBB",
+  "scrollbar": "#434C5E"
+}
