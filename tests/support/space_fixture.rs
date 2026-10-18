@@ -35,6 +35,7 @@ pub struct Data {
     pub read_only: Option<String>,
     pub delay_put: Option<String>,
     pub puts: Vec<(String, String, bool)>,
+    pub reads: BTreeMap<String, usize>,
     pub release: Arc<tokio::sync::Notify>,
     pub deletes: Vec<(String, String)>,
 }
@@ -172,6 +173,7 @@ async fn process(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) 
         let existing = data.files.get(path).cloned();
         match parts.method {
             Method::GET | Method::HEAD => {
+                *data.reads.entry(path.into()).or_default() += 1;
                 return match existing {
                     Some(file) => {
                         let mut response = reply(

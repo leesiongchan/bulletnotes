@@ -155,3 +155,65 @@ all-feature strict Clippy and diff whitespace checks. No full/native/live run wa
 repeated for these instrumentation/ownership fixes. Deferred review minors remain:
 browser completion markers are not nonce-bound across invocations, and benchmark
 compiler metadata hardcodes 1.99.1 (the actual compiler of the recorded samples).
+
+## Final branch review corrections
+
+The final correction based on `44ded26` fixes permission-denied canonical PUTs
+stranded as unknown, and repeated editor handoff reads behind immutable operations.
+Permission errors now allow bounded readback; ordinary writes still require fresh
+writable evidence and the existing guarded claim. Refresh reopens read admission
+without restarting the worker. Fenced observations use their own per-page retry
+delay, leaving unknown readback and recovery settlement independently eligible.
+Immutable payloads, authentication guards and conservative unknown DELETE handling
+remain covered by the existing suites.
+
+The worker regression reproduced 543 recovery-fence GETs in 500 ms before the fix.
+Afterward, canonical denial with writable metadata, canonical denial with read-only
+metadata, and recovery-fence cases each measured zero GETs in that window (asserted
+bound: three). Unrelated uploads progressed, the exact latest authored source was
+replayed, and earlier drafts/displaced source and immutable recovery originals
+remained preserved. Another test settles unknown recovery readback within 500 ms
+while ordinary observation is still deferred, then uploads the latest source
+without Refresh. Permission restoration passes both with and without Refresh.
+
+Browser readiness now includes the current nonce and exact owned page. The browser
+driver must write JSON with those same `nonce` and `page` values to `browser-done`
+after its existing exact-source observation and session drain. Plain, stale,
+wrong-page and missing-page markers cannot advance the phase or mark its summary
+complete. The headless regression passed; the dated actual browser observation and
+both three-path live cleanup receipts remain valid and were not rerun.
+
+Build metadata now captures Cargo's selected `RUSTC --version` through
+`cargo:rustc-env`, and the merge distribution embeds it at compile time. The test
+build recorded Rust 1.99.1; the final MSRV build recorded Rust 1.92.0. This follows
+the [Cargo build-script contract](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-env)
+and [compiler environment contract](https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts).
+Existing raw benchmark samples actually used 1.99.1 and remain unchanged.
+
+An affected crash test exposed an empty ready-file publication race. Both newly
+added crash helpers now write their PID/nonce marker completely before publishing
+it with a same-directory rename. The parent assertions are unchanged; both crash
+parent tests passed afterward. This was a test fixture failure, not source loss.
+
+After all code changes, one `scripts/check.sh` run passed formatting, strict
+all-target/all-feature Clippy and **288 tests, zero failures, 24 explicit ignores
+across 49 test binaries**. One Rust 1.92.0 `cargo check --all-targets --locked`
+passed without warnings. Affected checks passed 91 tests across seven targets;
+the two crash parents were additionally rechecked after their marker correction.
+The older 281-test full run and 83-test scoped run above are historical evidence.
+
+One fresh owned loopback native acceptance passed independent edits during typing,
+overlap/exact recovery, unchanged-poll deduplication, offline restart, resumed
+upload and delete/edit handling. Its relay rejected zero requests and confirmed
+three guarded absences after both child processes exited. Event/attempt counts
+stayed at 1/1 and kept-history count at 14 across unchanged polling. No live server,
+browser, normal app database or Keychain was opened. The fresh overlap capture was
+inspected; no additional floating/hover input assumptions were introduced.
+
+The lock SHA-256 still matches the dated audit, with zero known vulnerabilities and
+five existing maintenance warnings; no dependency, migration or notice changed.
+The static/palette Slint convergence diagnostic remains an explicit investigation:
+attribution unknown, no equivalent baseline and no demonstrated product failure.
+The accepted floating contract is unchanged. No diagnostic was suppressed or
+speculative UI fix made. Existing physical/native-fidelity and distribution gates
+remain open; the controller owns scoped re-review and subsequent packaging.

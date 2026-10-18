@@ -777,8 +777,13 @@ fn editor_process_boundary_child() {
         // The lock proves these started operations cannot commit before the parent kills us.
         tokio::time::sleep(Duration::from_millis(30)).await;
         std::fs::write(
-            path.parent().unwrap().join("ready"),
+            path.parent().unwrap().join("ready.tmp"),
             format!("{}:{nonce}", std::process::id()),
+        )
+        .unwrap();
+        std::fs::rename(
+            path.parent().unwrap().join("ready.tmp"),
+            path.parent().unwrap().join("ready"),
         )
         .unwrap();
         std::thread::park();

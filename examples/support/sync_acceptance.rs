@@ -71,6 +71,14 @@ fn mark(dir: &Path, name: &str) -> Result<()> {
     std::fs::write(dir.join(name), b"owned")?;
     Ok(())
 }
+fn browser_complete(dir: &Path, nonce: &str, page: &str) -> bool {
+    std::fs::read(dir.join("browser-done"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .is_some_and(|marker| {
+            marker["nonce"].as_str() == Some(nonce) && marker["page"].as_str() == Some(page)
+        })
+}
 async fn pause() -> Result<()> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     slint::Timer::single_shot(Duration::from_millis(10), move || {
@@ -422,11 +430,11 @@ pub fn supervise(live: bool) -> Result<()> {
             std::fs::write(
                 evidence_dir.join("browser-ready.json"),
                 serde_json::to_vec_pretty(
-                    &serde_json::json!({"page":page.path.as_str(),"before":RECREATED,"after":BROWSER}),
+                    &serde_json::json!({"nonce":nonce,"page":page.path.as_str(),"before":RECREATED,"after":BROWSER}),
                 )?,
             )?;
             let deadline = Instant::now() + Duration::from_secs(300);
-            while !evidence_dir.join("browser-done").exists() {
+            while !browser_complete(&evidence_dir, &nonce, page.path.as_str()) {
                 if Instant::now() >= deadline {
                     failure = Some("owned browser peer deadline");
                     break;
@@ -553,7 +561,7 @@ pub fn supervise(live: bool) -> Result<()> {
     std::fs::write(
         evidence_dir.join("summary.json"),
         serde_json::to_vec_pretty(
-            &serde_json::json!({"live":live,"routing":"exact-path allowlist relay; normal upstream TLS for live; owned catalogue only","cleaned_paths":cleaned,"guarded_cleanup_after_child_exit":true,"relay_rejections":relay.rejected(),"passed":failure.is_none(),"unsaved_at_remote_release":dir.join("release-independent").exists(),"restart_before_reconnect":dir.join("resume-verified").exists(),"browser_peer":live && evidence_dir.join("browser-done").exists(),"exact_live_selection_ime_voiceover":"unverified"}),
+            &serde_json::json!({"live":live,"routing":"exact-path allowlist relay; normal upstream TLS for live; owned catalogue only","cleaned_paths":cleaned,"guarded_cleanup_after_child_exit":true,"relay_rejections":relay.rejected(),"passed":failure.is_none(),"unsaved_at_remote_release":dir.join("release-independent").exists(),"restart_before_reconnect":dir.join("resume-verified").exists(),"browser_peer":live && browser_complete(&evidence_dir, &nonce, page.path.as_str()),"exact_live_selection_ime_voiceover":"unverified"}),
         )?,
     )?;
     relay_task.abort();
@@ -562,6 +570,37 @@ pub fn supervise(live: bool) -> Result<()> {
     }
     println!("supervised_native_acceptance_passed: true");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_completion_requires_current_nonce_and_exact_page() {
+        let dir = tempfile::tempdir().unwrap();
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let page = format!("Quick Notes/Bulletnotes Acceptance/{nonce}.md");
+        assert!(!browser_complete(dir.path(), &nonce, &page));
+        for marker in [
+            b"done".to_vec(),
+            serde_json::to_vec(&serde_json::json!({"nonce":"old-run","page":page})).unwrap(),
+            serde_json::to_vec(&serde_json::json!({"nonce":nonce,"page":"wrong.md"})).unwrap(),
+            serde_json::to_vec(&serde_json::json!({"nonce":nonce})).unwrap(),
+        ] {
+            std::fs::write(dir.path().join("browser-done"), marker).unwrap();
+            assert!(
+                !browser_complete(dir.path(), &nonce, &page),
+                "stale or wrong marker cannot advance the browser phase"
+            );
+        }
+        std::fs::write(
+            dir.path().join("browser-done"),
+            serde_json::to_vec(&serde_json::json!({"nonce":nonce,"page":page})).unwrap(),
+        )
+        .unwrap();
+        assert!(browser_complete(dir.path(), &nonce, &page));
+    }
 }
 
 /// Resume guarded cleanup only for a retained supervised generated fixture.

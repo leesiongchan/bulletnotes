@@ -69,6 +69,365 @@ async fn recovery(store: &StoreHandle, f: &SpaceFixture) -> RecoveryUploadHead {
         .remove(0)
 }
 #[tokio::test]
+async fn denied_canonical_put_recovers_after_fresh_permission_without_restart() {
+    for refresh in [true, false] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+            .await
+            .unwrap();
+        let f = SpaceFixture::start().await;
+        f.put("one.md", "red fox jumps");
+        store
+            .apply_remote(client(&f).read(&key("one.md")).await.unwrap())
+            .await
+            .unwrap();
+        store
+            .save_local(key("one.md"), "red fox runs".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        f.data.lock().unwrap().denied_put = Some("one.md".into());
+        let sync = start(&store, &f).await;
+        until(|| sync.snapshot().page_errors.get(&key("one.md")) == Some(&SyncError::Permission))
+            .await;
+        let unknown = store
+            .unknown_mutations(config().id())
+            .await
+            .unwrap()
+            .remove(0);
+        f.data.lock().unwrap().read_only = Some("one.md".into());
+        let before = *f.data.lock().unwrap().reads.get("one.md").unwrap();
+        sync.refresh();
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        let reads = *f.data.lock().unwrap().reads.get("one.md").unwrap() - before;
+        assert!(
+            (1..=4).contains(&reads),
+            "read-only readback must be bounded: {reads}"
+        );
+        assert_eq!(
+            store.unknown_mutations(config().id()).await.unwrap()[0],
+            unknown
+        );
+        assert_eq!(
+            f.data
+                .lock()
+                .unwrap()
+                .puts
+                .iter()
+                .filter(|p| p.0 == "one.md")
+                .count(),
+            1
+        );
+        assert!(sync.snapshot().pending > 0);
+        assert_eq!(f.body("one.md").as_deref(), Some("red fox jumps"));
+        {
+            let mut data = f.data.lock().unwrap();
+            data.denied_put = None;
+            data.read_only = None;
+        }
+        if refresh {
+            sync.refresh();
+        }
+        until(|| {
+            f.body("one.md").as_deref() == Some("red fox runs") && sync.snapshot().pending == 0
+        })
+        .await;
+        assert!(!sync.snapshot().page_errors.contains_key(&key("one.md")));
+        assert!(
+            store
+                .unknown_mutations(config().id())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn blocked_handoffs_bound_reads_and_replay_latest_after_settlement() {
+    for (fenced, read_only) in [(false, false), (false, true), (true, false)] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+            .await
+            .unwrap();
+        let f = SpaceFixture::start().await;
+        let recovery_head = if fenced {
+            Some(recovery(&store, &f).await)
+        } else {
+            f.put("one.md", "red fox jumps");
+            store
+                .apply_remote(client(&f).read(&key("one.md")).await.unwrap())
+                .await
+                .unwrap();
+            store
+                .save_local(key("one.md"), "red fox runs".into(), LocalRevision(1))
+                .await
+                .unwrap();
+            None
+        };
+        let target = recovery_head
+            .as_ref()
+            .map_or_else(|| key("one.md"), |head| head.key.clone());
+        let stored = store.load_page(&target).await.unwrap().unwrap();
+        let baseline = EditorBaseline {
+            body: if fenced {
+                "本地\r\nold"
+            } else {
+                "red fox jumps"
+            }
+            .into(),
+            remote_base: stored.remote_base.clone(),
+        };
+        let earlier = if fenced {
+            "new 本地\r\n💾"
+        } else {
+            "blue fox runs"
+        };
+        let latest = if fenced {
+            "latest 本地\r\n💾"
+        } else {
+            "purple fox runs"
+        };
+        {
+            let mut data = f.data.lock().unwrap();
+            data.denied_put = Some(target.path.as_str().into());
+            data.delay_put = Some(target.path.as_str().into());
+        }
+        let sync = start(&store, &f).await;
+        until(|| f.data.lock().unwrap().delay_put.is_none()).await;
+        for (revision, body) in [(2, earlier), (3, latest)] {
+            let saved = store
+                .save_local_from_base_outcome(
+                    target.clone(),
+                    body.into(),
+                    LocalRevision(revision),
+                    baseline.clone(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(saved.attempt.local_revision, LocalRevision(revision));
+            assert_eq!(
+                saved.stored.page.body, stored.body,
+                "blocked replay cannot acknowledge the authored source as canonical"
+            );
+        }
+        {
+            let mut data = f.data.lock().unwrap();
+            if read_only {
+                data.read_only = Some(target.path.as_str().into());
+            }
+            data.release.notify_one();
+        }
+        until(|| sync.snapshot().page_errors.get(&target) == Some(&SyncError::Permission)).await;
+        let before = *f
+            .data
+            .lock()
+            .unwrap()
+            .reads
+            .get(target.path.as_str())
+            .unwrap_or(&0);
+        store.create_draft(key("peer.md")).await.unwrap();
+        store
+            .save_local(key("peer.md"), "unrelated peer".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let reads = *f
+            .data
+            .lock()
+            .unwrap()
+            .reads
+            .get(target.path.as_str())
+            .unwrap_or(&0)
+            - before;
+        eprintln!("fenced={fenced}, read_only={read_only}: blocked target reads in 500ms={reads}");
+        assert!(
+            reads <= 3,
+            "blocked handoff hot-looped: {reads} reads/500ms"
+        );
+        let restored = store.load_editor_page(&target).await.unwrap().unwrap();
+        assert_eq!(restored.authored.unwrap().body, latest);
+        until(|| f.body("peer.md").as_deref() == Some("unrelated peer")).await;
+        eprintln!("fenced={fenced}: unrelated peer progressed");
+        assert!(sync.snapshot().pending > 0);
+        if let Some(head) = &recovery_head {
+            assert_eq!(
+                store
+                    .read_recovery_upload(head.event_id, head.ordinal, head.operation_id)
+                    .await
+                    .unwrap()
+                    .operation
+                    .kind,
+                MutationKind::Put("本地\r\n💾".into())
+            );
+        }
+        {
+            let mut data = f.data.lock().unwrap();
+            data.denied_put = None;
+            data.read_only = None;
+        }
+        sync.refresh();
+        let settled = tokio::time::timeout(Duration::from_secs(8), async {
+            while f.body(target.path.as_str()).as_deref() != Some(latest)
+                || sync.snapshot().pending != 0
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        assert!(
+            settled.is_ok(),
+            "fenced={fenced}: pending={}, error={:?}, page_errors={:?}, unknown={}, latest_remote={}, latest_stored={}, authored_pending={}",
+            sync.snapshot().pending,
+            sync.snapshot().error,
+            sync.snapshot().page_errors.values().collect::<Vec<_>>(),
+            store.unknown_mutations(config().id()).await.unwrap().len(),
+            f.body(target.path.as_str()).as_deref() == Some(latest),
+            store.load_page(&target).await.unwrap().unwrap().body == latest,
+            store
+                .load_editor_page(&target)
+                .await
+                .unwrap()
+                .unwrap()
+                .authored
+                .is_some()
+        );
+        assert_eq!(
+            store.load_page(&target).await.unwrap().unwrap().body,
+            latest
+        );
+        assert!(
+            store
+                .load_editor_page(&target)
+                .await
+                .unwrap()
+                .unwrap()
+                .authored
+                .is_none()
+        );
+        let copies = store.recovery_copies(config().id()).await.unwrap();
+        for body in [earlier, latest, stored.body.as_str()] {
+            assert!(
+                copies.iter().any(|copy| copy.page.body == body),
+                "lost admitted source"
+            );
+        }
+        if fenced {
+            let data = f.data.lock().unwrap();
+            let puts: Vec<_> = data
+                .puts
+                .iter()
+                .filter(|put| put.0 == target.path.as_str())
+                .collect();
+            assert!(
+                puts.iter()
+                    .filter(|put| put.2)
+                    .all(|put| put.1 == "本地\r\n💾")
+            );
+            assert_eq!(puts.last().unwrap().1, latest);
+            assert!(!puts.last().unwrap().2);
+        }
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn unknown_recovery_readback_bypasses_fenced_observation_backoff() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = SpaceFixture::start().await;
+    let head = recovery(&store, &f).await;
+    let upload = store
+        .claim_recovery_upload(head.event_id, head.ordinal)
+        .await
+        .unwrap()
+        .unwrap();
+    let latest = "latest 本地\r\n💾";
+    store
+        .save_local_from_base_outcome(
+            head.key.clone(),
+            latest.into(),
+            LocalRevision(2),
+            EditorBaseline {
+                body: "本地\r\nold".into(),
+                remote_base: None,
+            },
+        )
+        .await
+        .unwrap();
+    let sync = start(&store, &f).await;
+    until(|| {
+        f.data
+            .lock()
+            .unwrap()
+            .reads
+            .get(head.key.path.as_str())
+            .copied()
+            .unwrap_or(0)
+            > 0
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        store
+            .load_editor_page(&head.key)
+            .await
+            .unwrap()
+            .unwrap()
+            .authored
+            .is_some()
+    );
+    // Model the leased transport becoming uncertain after the fenced observation has backed off.
+    client(&f).put(&upload.operation).await.unwrap();
+    store
+        .mark_recovery_unknown(head.event_id, head.ordinal, head.operation_id)
+        .await
+        .unwrap();
+    store.create_draft(key("peer.md")).await.unwrap();
+    tokio::time::timeout(Duration::from_millis(500), async {
+        while !store
+            .recovery_uploads(config().id(), 10)
+            .await
+            .unwrap()
+            .is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("unknown recovery readback must not wait for the observation backoff");
+    assert_eq!(
+        f.body(head.key.path.as_str()).as_deref(),
+        Some("本地\r\n💾")
+    );
+    assert!(
+        store
+            .load_editor_page(&head.key)
+            .await
+            .unwrap()
+            .unwrap()
+            .authored
+            .is_some()
+    );
+    until(|| {
+        f.body(head.key.path.as_str()).as_deref() == Some(latest) && sync.snapshot().pending == 0
+    })
+    .await;
+    assert!(
+        store
+            .load_editor_page(&head.key)
+            .await
+            .unwrap()
+            .unwrap()
+            .authored
+            .is_none()
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+#[tokio::test]
 async fn lost_recovery_ack_uses_exact_readback_and_queues_later_edits() {
     let dir = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&dir.path().join("test.sqlite"))
@@ -1425,8 +1784,13 @@ fn sync_process_boundary_child() {
         }
         tokio::time::sleep(Duration::from_millis(30)).await;
         std::fs::write(
-            path.parent().unwrap().join("ready"),
+            path.parent().unwrap().join("ready.tmp"),
             format!("{}:{nonce}", std::process::id()),
+        )
+        .unwrap();
+        std::fs::rename(
+            path.parent().unwrap().join("ready.tmp"),
+            path.parent().unwrap().join("ready"),
         )
         .unwrap();
         std::thread::park();

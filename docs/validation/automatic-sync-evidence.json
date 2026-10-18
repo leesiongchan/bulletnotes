@@ -127,7 +127,8 @@
       "custom_slint_licenses_hash_verified": 9
     },
     "audit_lock_hash_verified": true,
-    "source_commit": "48278926734a1e11d3a2e444b4b3782869bac880"
+    "source_commit": "48278926734a1e11d3a2e444b4b3782869bac880",
+    "historical": true
   },
   "scoped_review_fix_round_1": {
     "source_base": "48278926734a1e11d3a2e444b4b3782869bac880",
@@ -149,5 +150,125 @@
       "browser-done marker is not nonce-bound across repeated invocations",
       "benchmark compiler metadata hardcodes rustup1.99.1; current measured run used that actual compiler"
     ]
+  },
+  "final_review_correction": {
+    "date": "2026-10-18",
+    "source_base": "44ded26681cc2d7cb9c35217f7a3c24f29626619",
+    "source_binding": "This final correction commit; exact compiled source SHA-256 values below, recorded after all code changes and before commit.",
+    "source_files_sha256": {
+      "src/sync/worker.rs": "31e45aaba818af56b14a2246dbfc3139639ed0591f9bb6572498d246016aaf32",
+      "tests/automatic_sync.rs": "f3f32b91102b8acb560ab751af8d1d58e0d498c37cfd008cc1eba4d6265fb598",
+      "tests/support/space_fixture.rs": "54cd547d54bdc4398236a7e26d947adae14769eb85422a5bbebd9582f54d0823",
+      "tests/editor_reconciliation.rs": "ba284100e8bb6975f90a4f8e05aba1bdba5addf64436a6734706e421f32e9255",
+      "examples/support/sync_acceptance.rs": "a6a786017a5add7a9aaa163d573f6f4a55c03bbeef598bbb42338a4bbbab5efc",
+      "build.rs": "5ee2aeee7acd333435a68bc502f5d3bcf31ac25b474655bd4a8eda8a3622498e",
+      "benches/support/merge_distribution.rs": "ef7f001bf08efd5ed058c4ea01534a7ff8f884a3ee6f39c6e2774af1e832f6f3",
+      "tests/build_metadata.rs": "ada9b3394a9b7fcaf87eaa317377b999c1f5b77174b9a5c40a1d102ce24bd5b0"
+    },
+    "permission_readmission": {
+      "red": "Restored permission plus Refresh left the canonical PUT unknown and pending until the regression timed out.",
+      "green": "Fresh readback restores guarded upload without worker restart, with explicit Refresh and autonomous retry. Read-only evidence preserves the exact unknown operation and permits no additional PUT.",
+      "readonly_reads_per_1300ms_bound": 4
+    },
+    "handoff_cadence": {
+      "red_recovery_fence_gets_per_500ms": 543,
+      "green_gets_per_500ms": [
+        0,
+        0,
+        0
+      ],
+      "variants": [
+        "canonical 403 with writable read metadata",
+        "canonical 403 with read-only read metadata",
+        "immutable recovery first-create fence"
+      ],
+      "asserted_max_gets_per_500ms": 3,
+      "unrelated_peer_progress": true,
+      "exact_latest_authored_source_replayed": true,
+      "earlier_authored_and_displaced_source_preserved": true,
+      "immutable_recovery_first_create_preserved": true,
+      "unknown_recovery_settled_within_ms_while_observation_deferred": 500
+    },
+    "browser_marker": {
+      "readiness_and_completion_bound_to": [
+        "current_run_nonce",
+        "exact_owned_page"
+      ],
+      "rejects": [
+        "stale plain marker",
+        "wrong nonce",
+        "wrong page",
+        "missing page"
+      ],
+      "headless_regression_passed": true,
+      "live_rerun": false
+    },
+    "compiler_metadata": {
+      "method": "build.rs invokes Cargo RUSTC --version and embeds cargo:rustc-env; merge benchmark uses env! at compile time",
+      "test_build": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+      "msrv_build": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+      "historical_raw_benchmark_samples_changed": false
+    },
+    "fixture_correction": {
+      "observed_failure": "Editor crash helper ready file existed before PID/nonce bytes were written.",
+      "fix": "Both newly added crash helpers publish their existing ready marker by same-directory rename after writing it completely.",
+      "assertions_unchanged": true,
+      "targeted_parent_tests_passed": 2
+    },
+    "covering_checks": {
+      "passed": 91,
+      "failed": 0,
+      "ignored": 2,
+      "test_binaries": 7
+    },
+    "final_checks": {
+      "scripts/check.sh": {
+        "exit": 0,
+        "formatting": "passed",
+        "strict_all_feature_clippy": "passed",
+        "passed": 288,
+        "failed": 0,
+        "ignored": 24,
+        "test_binaries": 49
+      },
+      "rust_1_92_all_targets_locked": {
+        "exit": 0,
+        "warnings": 0
+      },
+      "git_diff_check": {
+        "exit": 0
+      }
+    },
+    "native_loopback": {
+      "browser_peer": false,
+      "cleaned_paths": 3,
+      "exact_live_selection_ime_voiceover": "unverified",
+      "guarded_cleanup_after_child_exit": true,
+      "live": false,
+      "passed": true,
+      "relay_rejections": 0,
+      "restart_before_reconnect": true,
+      "routing": "exact-path allowlist relay; normal upstream TLS for live; owned catalogue only",
+      "unsaved_at_remote_release": true
+    },
+    "native_unchanged_polling": {
+      "events_before": 1,
+      "events_after": 1,
+      "attempts_before": 1,
+      "attempts_after": 1,
+      "local_history_before": 14,
+      "local_history_after": 14
+    },
+    "original_live_evidence": "Prior browser/native observation and both 3-path guarded absence receipts remain dated evidence; browser stayed closed and no live resources were reopened.",
+    "dependency_audit": {
+      "lock_sha256": "8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b",
+      "unchanged": true,
+      "dated_audit_reused": true,
+      "known_vulnerabilities": 0,
+      "existing_maintenance_warnings": 5,
+      "notices_changed": false
+    },
+    "tracked_ui_investigation": "Slint static/palette long callback/instantiation chain attribution remains unknown; no equivalent baseline or demonstrated product failure. Accepted floating contract still stands; no suppression or speculative product change.",
+    "remaining_review": "Controller scoped final-correction re-review, then development packaging; no merge or push."
   }
 }

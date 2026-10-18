@@ -84,6 +84,7 @@ impl SyncHandle {
             notify: Notify::new(),
             active: Mutex::new(HashSet::new()),
             deferred: Mutex::new(std::collections::HashMap::new()),
+            observation_deferred: Mutex::new(std::collections::HashMap::new()),
             recovery_errors: Mutex::new(HashSet::new()),
             passive: AtomicUsize::new(0),
             retry: Mutex::new(Retry {
@@ -147,6 +148,7 @@ struct Shared {
     retry: Mutex<Retry>,
     active: Mutex<HashSet<PageKey>>,
     deferred: Mutex<std::collections::HashMap<PageKey, Retry>>,
+    observation_deferred: Mutex<std::collections::HashMap<PageKey, Retry>>,
     recovery_errors: Mutex<HashSet<PageKey>>,
     passive: AtomicUsize,
 }
@@ -165,6 +167,23 @@ impl Shared {
             until: Instant::now(),
             random: uuid::Uuid::new_v4().as_u128() as u64,
         });
+        retry.until = Instant::now() + retry.delay();
+    }
+    fn observation_deferred(&self, key: &PageKey) -> bool {
+        self.observation_deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .is_some_and(|retry| retry.until > Instant::now())
+    }
+    fn defer_observation(&self, key: &PageKey) {
+        let mut deferred = self
+            .observation_deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let retry = deferred
+            .entry(key.clone())
+            .or_insert_with(|| Retry::new(uuid::Uuid::new_v4().as_u128() as u64));
         retry.until = Instant::now() + retry.delay();
     }
     fn reserve(&self, key: &PageKey) -> bool {
@@ -422,11 +441,8 @@ async fn observe(
                 break;
             }
             Err(StoreError::UnknownOperation) => {
-                shared
-                    .deferred
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .remove(key);
+                // Defer the fenced replay, while its readback/upload remains independently eligible.
+                shared.defer_observation(key);
                 return Ok(());
             }
             Err(StoreError::StaleRevision) if attempt < 2 => {
@@ -441,6 +457,11 @@ async fn observe(
     }
     shared
         .deferred
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(key);
+    shared
+        .observation_deferred
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(key);
@@ -531,6 +552,7 @@ async fn resolve(
             && file.permission == Permission::ReadOnly
         {
             storage(store.block_page(&operation.key).await)?;
+            shared.defer(&operation.key);
             shared.fail(SyncError::Permission, Some(&operation.key));
         } else {
             storage(store.retry_after_readback(operation.id).await)?;
@@ -761,6 +783,7 @@ async fn perform(
                     } else {
                         if error == SyncError::Permission {
                             storage(store.block_page(&key).await)?;
+                            shared.defer(&key);
                         }
                         Err(error)
                     }
@@ -866,6 +889,8 @@ async fn supervise(
             if control.refresh!=last_refresh {
                 poll=Instant::now();last_refresh=control.refresh;
                 recovery_due.clear();
+                shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).clear();
+                shared.observation_deferred.lock().unwrap_or_else(|e|e.into_inner()).clear();
                 shared.retry.lock().unwrap_or_else(|e|e.into_inner()).until=Instant::now();
                 if let Some(key)=&control.priority {
                     reads.prioritize(key.clone());
@@ -881,12 +906,14 @@ async fn supervise(
             }
             if shared.ready() {
                 reads.extend(shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).iter().filter(|(_,retry)|retry.until<=Instant::now()).map(|(key,_)|key.clone()));
+                reads.extend(shared.observation_deferred.lock().unwrap_or_else(|e|e.into_inner()).iter().filter(|(_,retry)|retry.until<=Instant::now()).map(|(key,_)|key.clone()));
                 if Instant::now()>=poll && listing.is_none() {
                     let client=client.clone();listing=Some(tokio::spawn(async move{client.list_files().await}));
                 }
                 if writable {
                     for operation in storage(store.unknown_batch(&connection,LANES*2).await)? {
-                        if !shared.page_blocked(&operation.key)
+                        // Readback may establish fresh permission; ordinary writes remain blocked.
+                        if !shared.recovery_blocked(&operation.key)
                             && let Some(index)=available_lane(&lanes,true)
                             && shared.reserve(&operation.key) {
                             enqueue(&lanes[index],Work::Resolve(operation),true,&shared)?;
@@ -943,7 +970,7 @@ async fn supervise(
                 let count=reads.len();
                 for _ in 0..count {
                     let Some(key)=reads.pop() else {break;};
-                    if let Some(index)=available_lane(&lanes,false) && shared.reserve(&key) {
+                    if !shared.observation_deferred(&key) && let Some(index)=available_lane(&lanes,false) && shared.reserve(&key) {
                         enqueue(&lanes[index],Work::Read(key),false,&shared)?;
                     } else {reads.defer(key);}
                 }
@@ -976,6 +1003,9 @@ async fn supervise(
             }
             if !shared.blocked() {
                 for retry in shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).values().filter(|retry|retry.until>Instant::now()) {
+                    wake=Some(wake.map_or(retry.until,|current:Instant|current.min(retry.until)));
+                }
+                for retry in shared.observation_deferred.lock().unwrap_or_else(|e|e.into_inner()).values().filter(|retry|retry.until>Instant::now()) {
                     wake=Some(wake.map_or(retry.until,|current:Instant|current.min(retry.until)));
                 }
                 for (_,deadline) in recovery_due.values().filter(|(_,deadline)|*deadline>Instant::now()) {
