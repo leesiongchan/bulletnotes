@@ -26,6 +26,10 @@ to the deployed space, inspect existing notes, or synthesize physical key events
 | Edge/corner resize and full top hover/drag strip | User confirmed in Preview 2; latest production composition needs manual repeat |
 | Physical shortcut delivery, previous-app focus, full-screen/Spaces, pinning | Manual observation open |
 | Real IME, clipboard/undo behavior, VoiceOver selection and editing | Manual observation open |
+| High contrast palette and minimum-size layout | Palette regressions passed; native Paper/Graphite captures inspected; physical OS toggle still open |
+| Reduced transparency/motion | Policy flags observed via public API; opaque/static UI; physical preference change still open |
+| Long page list | Native benchmark reached all 10,000 generated rows; physical keyboard/VoiceOver traversal still open |
+| Diagnostics | Sentinel, seven-day expiry, failed export preservation regressions passed; explicit native save dialog awaits manual interaction |
 | Exact directional caret/selection capture and restoration after relaunch | Open supported API gate; see [selection investigation](selection-api.md) |
 
 The initial signed-bundle run failed because `activateFromApplication:options:`
@@ -57,8 +61,10 @@ their originating sources; callbacks queue work into Slint's main loop.
 
 Solid paper and no animated transitions honor reduced-transparency/motion policy.
 Native blur and inline Markdown colors remain the user-approved deferrals. High
-contrast rendering, performance, licensing and distribution evidence are recorded
-in the later validation stages; their presence is not implied by lifecycle tests.
+contrast policy has palette regressions and native fixture captures; actual system
+preference toggling and physical accessibility observations remain open.
+[Performance evidence](performance.md) records the native measurements: the 1 MiB
+open target remains unmet. Licensing and distribution have separate gates.
 
 ## Distribution gates
 

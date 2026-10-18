@@ -25,6 +25,7 @@ use std::{
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct LocalApplication {
+    frames: std::sync::Arc<std::sync::atomic::AtomicU64>,
     window: AppWindow,
     tray: LocalTray,
     local: LocalUi,
@@ -124,6 +125,16 @@ impl LocalApplication {
                 }
             });
         }
+        let frames = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let rendered = frames.clone();
+        {
+            let weak = window.as_weak();
+            tray.on_export_diagnostics(move || {
+                if let Some(window) = weak.upgrade() {
+                    window.invoke_export_diagnostics();
+                }
+            });
+        }
         let chrome = Rc::new(RefCell::new(None));
         {
             let owner = chrome.clone();
@@ -159,6 +170,9 @@ impl LocalApplication {
             let weak = window.as_weak();
             let mut notified = false;
             window.window().set_rendering_notifier(move |state, _| {
+                if matches!(state, slint::RenderingState::AfterRendering) {
+                    rendered.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 if matches!(state, slint::RenderingState::AfterRendering) && !notified {
                     notified = true;
                     // The first frame proves that the native window exists. Queue UI
@@ -169,6 +183,7 @@ impl LocalApplication {
             })?;
         }
         Ok(Self {
+            frames,
             window,
             tray,
             local,
@@ -178,6 +193,10 @@ impl LocalApplication {
             _recovery: recovery,
             _chrome: chrome,
         })
+    }
+    /// Public rendering boundary for the native interaction harness; no editor internals.
+    pub fn rendered_frame_count(&self) -> u64 {
+        self.frames.load(std::sync::atomic::Ordering::Relaxed)
     }
     pub fn window(&self) -> &AppWindow {
         &self.window

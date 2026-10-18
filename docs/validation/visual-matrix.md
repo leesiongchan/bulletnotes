@@ -2,7 +2,7 @@
 
 Captured 2026-10-17 on macOS 27.0.1 arm64 with Rust 1.99.1, Slint 1.18.1, winit/FemtoVG. These are WindowServer captures of the generated-content `ui_review` fixture's own window. No live SilverBullet pages or user preview text were read or captured. PNGs are at this display's 2× scale; sizes below are logical pixels.
 
-This is a provisional UI checkpoint. The native input/accessibility gate is still open, automatic synchronization is not integrated, and this fixture is not a production release.
+These captures are a historical UI checkpoint. Native input/accessibility gates remain open; synchronization has since been integrated and is documented in [sync evidence](sync-lifecycle.md). This fixture is not a production release.
 
 | Palette | Default 505×552 | Minimum 400×440 |
 | --- | --- | --- |
@@ -33,3 +33,18 @@ rustup run 1.99.1 cargo test --test ui_contract --features native-validation --l
 ```
 
 The current-note find bar was reviewed separately at minimum size in [Paper](native-ui/find-paper-minimum.png) and [Graphite](native-ui/find-graphite-minimum.png). The path, field, match navigation, editor, and footer remain visible; the extra row reduces the editor viewport. These generated presentation captures do not prove physical keyboard behavior or selection direction. The existing missing-glyph observation at the tab/emoji line is still visible and remains open.
+
+## Accessibility and pagination presentation (2026-10-18)
+
+Generated native minimum-size captures show the programmatically applied system
+high-contrast policy in [Paper](native-ui/high-contrast-paper.png) and
+[Graphite](native-ui/high-contrast-graphite.png), plus the new
+[More pages footer](native-ui/pages-more-minimum.png). Text and footer controls fit
+at 400×440 logical pixels. The existing tab/emoji missing-glyph observation is
+still visible and remains open. These captures do not substitute for physical
+VoiceOver, keyboard/IME, or toggling actual system accessibility settings.
+
+The first pagination capture failed with WindowServer's “could not create image
+from window”; its explicit repeat succeeded and was inspected. Successful image
+files were checked directly; the fixture's exit status alone is insufficient
+because its capture path reports an error without failing the process.

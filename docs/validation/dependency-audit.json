@@ -1,0 +1,47 @@
+{
+  "checked": "2026-10-18",
+  "tool": "cargo-audit 0.22.2",
+  "database": {
+    "advisory-count": 1338,
+    "last-commit": "999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b",
+    "last-updated": "2026-10-17T17:23:59+02:00"
+  },
+  "vulnerabilities": 0,
+  "warnings": [
+    {
+      "id": "RUSTSEC-2025-0141",
+      "package": "bincode",
+      "version": "2.0.1",
+      "classification": "unmaintained",
+      "selected_macos_graph": false
+    },
+    {
+      "id": "RUSTSEC-2026-0192",
+      "package": "ttf-parser",
+      "version": "0.25.1",
+      "classification": "unmaintained",
+      "selected_macos_graph": false
+    },
+    {
+      "id": "RUSTSEC-2026-0371",
+      "package": "zbus_names",
+      "version": "4.3.5",
+      "classification": "unmaintained",
+      "selected_macos_graph": false
+    },
+    {
+      "id": "RUSTSEC-2026-0370",
+      "package": "zvariant",
+      "version": "5.15.1",
+      "classification": "unmaintained",
+      "selected_macos_graph": false
+    },
+    {
+      "id": "RUSTSEC-2026-0372",
+      "package": "zvariant_derive",
+      "version": "5.15.1",
+      "classification": "unmaintained",
+      "selected_macos_graph": false
+    }
+  ]
+}

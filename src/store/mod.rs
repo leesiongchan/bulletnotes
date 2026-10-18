@@ -54,14 +54,27 @@ impl StoreHandle {
         &self,
         operation: impl FnOnce(&mut Worker) -> Result<R, StoreError> + Send + 'static,
     ) -> Result<R, StoreError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.sender
-            .send(Command::Run(Box::new(move |worker| {
-                let _ = reply_tx.send(operation(worker));
-            })))
+        self.call_timed(crate::diagnostics::Operation::Storage, operation)
             .await
-            .map_err(|_| StoreError::Closed)?;
-        reply_rx.await.map_err(|_| StoreError::Closed)?
+    }
+    async fn call_timed<R: Send + 'static>(
+        &self,
+        category: crate::diagnostics::Operation,
+        operation: impl FnOnce(&mut Worker) -> Result<R, StoreError> + Send + 'static,
+    ) -> Result<R, StoreError> {
+        let timer = crate::diagnostics::OperationTimer::start(category);
+        let result = async {
+            let (reply_tx, reply_rx) = oneshot::channel();
+            self.sender
+                .send(Command::Run(Box::new(move |worker| {
+                    let _ = reply_tx.send(operation(worker));
+                })))
+                .await
+                .map_err(|_| StoreError::Closed)?;
+            reply_rx.await.map_err(|_| StoreError::Closed)?
+        }
+        .await;
+        timer.store(result)
     }
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
@@ -72,7 +85,10 @@ impl StoreHandle {
         key: &PageKey,
     ) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
-        self.call(move |w| pages::load_active(&w.db, &key)).await
+        self.call_timed(crate::diagnostics::Operation::CachedOpen, move |w| {
+            pages::load_active(&w.db, &key)
+        })
+        .await
     }
     pub async fn create_draft(&self, key: PageKey) -> Result<SavedRevision, StoreError> {
         let saved = self.call(move |w| pages::create(&mut w.db, key)).await?;
@@ -86,7 +102,9 @@ impl StoreHandle {
         revision: LocalRevision,
     ) -> Result<SavedRevision, StoreError> {
         let saved = self
-            .call(move |w| pages::save(&mut w.db, key, body, revision))
+            .call_timed(crate::diagnostics::Operation::LocalSave, move |w| {
+                pages::save(&mut w.db, key, body, revision)
+            })
             .await?;
         self.local_changes.send_replace(());
         Ok(saved)
@@ -124,7 +142,10 @@ impl StoreHandle {
             .await
     }
     pub async fn search(&self, query: SearchQuery) -> Result<SearchResults, StoreError> {
-        self.call(move |w| search::search(&w.db, query)).await
+        self.call_timed(crate::diagnostics::Operation::CachedSearch, move |w| {
+            search::search(&w.db, query)
+        })
+        .await
     }
     pub async fn claim_pending(
         &self,
@@ -344,7 +365,9 @@ impl StoreHandle {
         expected: EditorBaseline,
     ) -> Result<SavedRevision, StoreError> {
         let saved = self
-            .call(move |w| remote::save_from_base(&mut w.db, key, body, revision, expected))
+            .call_timed(crate::diagnostics::Operation::LocalSave, move |w| {
+                remote::save_from_base(&mut w.db, key, body, revision, expected)
+            })
             .await?;
         self.local_changes.send_replace(());
         Ok(saved)

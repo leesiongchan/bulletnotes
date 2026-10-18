@@ -37,6 +37,8 @@ export component AppWindow inherits Window {
     in-out property <string> appearance-mode:"system";
     in property <string> selected-theme-id;
     in property <[PageRow]> page-results;
+    in property <bool> can-load-more-pages:false;
+    callback load-more-pages();
     in property <[ThemePair]> theme-options;
     in-out property <string> search-query;
     in-out property <string> search-folder;
@@ -90,6 +92,7 @@ export component AppWindow inherits Window {
     callback native-preferences-changed();
     callback native-activation-changed();
     callback native-reopen-requested();
+    callback export-diagnostics();
     callback native-geometry-changed();
     callback native-displays-changed();
     callback toggle-activation();
@@ -313,6 +316,8 @@ export component AppWindow inherits Window {
                 visible: root.active-view == "pages";
                 theme: root.theme;
                 results: root.page-results;
+        can-load-more:root.can-load-more-pages;
+        load-more => { root.load-more-pages(); }
                 query <=> root.search-query;
                 folder <=> root.search-folder;
                 folder-changed(folder) => { root.folder-changed(folder); }
@@ -385,7 +390,9 @@ export component LocalTray inherits SystemTrayIcon {
     tooltip: "Bulletnotes";
     callback reopen();
     callback quit();
+    callback export-diagnostics();
     Menu {
+        MenuItem { title: "Export diagnostics…"; activated => { root.export-diagnostics(); } }
         MenuItem { title: "Show Bulletnotes"; activated => { root.reopen(); } }
         MenuSeparator {}
         MenuItem { title: "Quit Bulletnotes"; activated => { root.quit(); } }

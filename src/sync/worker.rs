@@ -224,6 +224,18 @@ impl Shared {
             .cache_progress(&connection)
             .await
             .map_err(|_| SyncError::LocalStorage)?;
+        let previous = self.snapshot.borrow();
+        let changed = previous.generation == 0
+            || previous.pending != pending
+            || previous.conflicts != conflicts;
+        drop(previous);
+        if changed {
+            crate::diagnostics::record(crate::diagnostics::DiagnosticEvent::Queue {
+                id: uuid::Uuid::new_v4(),
+                pending: pending as u64,
+                conflicts: conflicts as u64,
+            });
+        }
         self.snapshot.send_modify(|snapshot| {
             snapshot.indexed = indexed;
             snapshot.catalogue_total = catalogue_total;

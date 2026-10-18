@@ -19,6 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let args: Vec<_> = std::env::args().collect();
+    window.set_system_high_contrast(args.iter().any(|arg| arg == "--high-contrast"));
+    window.set_can_load_more_pages(args.iter().any(|arg| arg == "--more-pages"));
     let argument = |name: &str| {
         args.windows(2)
             .find(|pair| pair[0] == name)

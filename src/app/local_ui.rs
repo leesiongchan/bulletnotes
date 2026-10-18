@@ -569,6 +569,22 @@ impl State {
         }
     }
     fn issue_search(self: &Rc<Self>) -> Option<u64> {
+        self.issue_search_page(false)
+    }
+    fn issue_search_page(self: &Rc<Self>, more: bool) -> Option<u64> {
+        let offset = if more {
+            let app = self.coordinator.borrow();
+            if app.search_pending() {
+                return None;
+            }
+            let results = app.search_results()?;
+            if results.items.len() >= results.total {
+                return None;
+            }
+            results.items.len()
+        } else {
+            0
+        };
         let window = self.window.upgrade()?;
         let folder = window.get_search_folder();
         let folder = if folder.is_empty() {
@@ -594,8 +610,8 @@ impl State {
             connection: self.coordinator.borrow().connection().clone(),
             text: window.get_search_query().to_string(),
             folder,
-            offset: 0,
-            limit: 5000,
+            offset,
+            limit: 200,
         };
         self.dispatch(AppAction::Search(SearchRequest { id, query }));
         Some(id)
@@ -636,6 +652,9 @@ impl State {
         }
     }
     fn render(&self) {
+        let presentation = crate::diagnostics::OperationTimer::start(
+            crate::diagnostics::Operation::EditorPresentation,
+        );
         let Some(window) = self.window.upgrade() else {
             return;
         };
@@ -659,7 +678,11 @@ impl State {
                 || window.get_note_text().as_str() != editor.body()
             {
                 if window.get_note_text().as_str() != editor.body() {
+                    let timing = crate::diagnostics::OperationTimer::start(
+                        crate::diagnostics::Operation::EditorSourceUpdate,
+                    );
                     window.set_note_text(editor.body().into());
+                    timing.success();
                 }
                 self.find.borrow_mut().refresh(editor.body());
                 self.present_find(&window);
@@ -668,14 +691,22 @@ impl State {
                 self.rendered_revision.set(Some(editor.revision()));
                 if changed {
                     if app.view() == View::Note {
+                        let timing = crate::diagnostics::OperationTimer::start(
+                            crate::diagnostics::Operation::EditorFocus,
+                        );
                         window.invoke_focus_editor();
+                        timing.success();
                     }
                     let position = editor.restore_target();
                     if let (Ok(anchor), Ok(caret)) = (
                         i32::try_from(position.anchor),
                         i32::try_from(position.caret),
                     ) {
+                        let timing = crate::diagnostics::OperationTimer::start(
+                            crate::diagnostics::Operation::SelectionRestoration,
+                        );
                         window.invoke_restore_editor_position(anchor, caret, position.scroll_y);
+                        timing.success();
                     }
                 }
             }
@@ -730,6 +761,13 @@ impl State {
             }
             self.rendered_search.set(app.search_generation());
         }
+        window.set_can_load_more_pages(
+            !self.invalid_folder.get()
+                && !app.search_pending()
+                && app
+                    .search_results()
+                    .is_some_and(|results| results.items.len() < results.total),
+        );
         if self.invalid_folder.get() {
             window.set_index_status("Enter a relative folder path".into());
         } else if let Some(message) = app.notice() {
@@ -760,6 +798,7 @@ impl State {
             window.set_index_status("Searching local pages…".into());
         }
         self.updates.send_replace(());
+        presentation.success();
     }
     fn quit(self: &Rc<Self>) {
         if self.quitting.replace(true) {
@@ -972,6 +1011,12 @@ pub fn bind(
             state.dispatch(AppAction::CancelOpen);
             state.dispatch(AppAction::Navigate(View::AllPages));
             state.issue_search();
+        });
+    }
+    {
+        let state = state.clone();
+        window.on_load_more_pages(move || {
+            state.issue_search_page(true);
         });
     }
     {

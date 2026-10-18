@@ -29,10 +29,24 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(error) => return Err(error.into()),
     };
+    let diagnostics = bulletnotes::diagnostics::init(
+        &database
+            .parent()
+            .ok_or("local data directory unavailable")?
+            .join("Diagnostics"),
+    );
+    let diagnostics_unavailable = diagnostics.is_err();
+    let _diagnostics = diagnostics.ok();
     let controller = ConnectionController::new(startup.store.clone(), CredentialStore::keychain());
     let connection = startup.connection.clone();
     let store = startup.store.clone();
     let app = LocalApplication::new(startup, native)?;
+    bulletnotes::app::diagnostics_ui::bind(app.window());
+    if diagnostics_unavailable {
+        app.window()
+            .set_native_message("Diagnostics unavailable; notes can still be saved.".into());
+        app.window().set_native_warning(true);
+    }
     let connection_ui = connection_ui::bind(
         app.window(),
         controller,

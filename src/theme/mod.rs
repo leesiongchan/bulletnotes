@@ -213,3 +213,5 @@ pub enum ThemeError {
     #[error("theme needs explicit approval for insufficient contrast")]
     LowContrast,
 }
+
+pub mod accessibility;

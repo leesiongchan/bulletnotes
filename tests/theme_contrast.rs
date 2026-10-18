@@ -33,3 +33,25 @@ fn builtins_meet_contrast() {
         assert!(report.pairs.iter().any(|p| p.required == 3.0));
     }
 }
+
+#[test]
+fn system_high_contrast_changes_only_the_presentation_palette() {
+    use bulletnotes::theme::{
+        accessibility::high_contrast,
+        contrast::{check_contrast, contrast_ratio},
+        palette::builtin_themes,
+    };
+    for entry in builtin_themes().unwrap() {
+        let original = entry.theme.clone();
+        let adjusted = high_contrast(&original);
+        assert!(contrast_ratio(adjusted.ink, adjusted.paper) >= 7.0);
+        assert!(contrast_ratio(adjusted.ink, adjusted.surface) >= 7.0);
+        assert!(check_contrast(&adjusted).passes());
+        assert_eq!(entry.theme, original);
+    }
+    let mut low = builtin_themes().unwrap().remove(0).theme;
+    low.paper = bulletnotes::theme::Color::parse("#777777").unwrap();
+    low.ink = low.paper;
+    low.selection = low.paper;
+    assert!(check_contrast(&high_contrast(&low)).passes());
+}

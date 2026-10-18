@@ -109,6 +109,8 @@ pub struct Coordinator {
     next_load: u64,
     now: Duration,
     latest_search: Option<u64>,
+    search_offset: usize,
+    search_pending: bool,
     completed_search: Option<u64>,
     flush_target: Option<LocalRevision>,
     results: Option<SearchResults>,
@@ -131,6 +133,8 @@ impl Coordinator {
             next_load: 0,
             now: Duration::ZERO,
             latest_search: None,
+            search_offset: 0,
+            search_pending: false,
             completed_search: None,
             flush_target: None,
             results: None,
@@ -148,6 +152,9 @@ impl Coordinator {
     }
     pub fn view(&self) -> View {
         self.navigation.view()
+    }
+    pub fn search_pending(&self) -> bool {
+        self.search_pending
     }
     pub fn search_generation(&self) -> Option<u64> {
         self.completed_search
@@ -338,6 +345,18 @@ impl Coordinator {
                 {
                     let same_query = self.navigation.search_query == request.query.text
                         && self.search_folder == request.query.folder;
+                    if request.query.offset > 0
+                        && (!same_query
+                            || self.search_pending
+                            || self
+                                .results
+                                .as_ref()
+                                .is_none_or(|results| results.items.len() != request.query.offset))
+                    {
+                        return effects;
+                    }
+                    self.search_offset = request.query.offset;
+                    self.search_pending = true;
                     self.latest_search = Some(request.id);
                     if !same_query {
                         self.completed_search = None;
@@ -544,14 +563,29 @@ impl Coordinator {
                 }
             }
             AppEvent::SearchReady(id, result) => {
-                if Some(id) == self.latest_search {
+                if Some(id) == self.latest_search && self.search_pending {
+                    self.search_pending = false;
                     match result {
-                        Ok(results)
+                        Ok(mut results)
                             if results
                                 .items
                                 .iter()
                                 .all(|page| page.key.connection == self.connection) =>
                         {
+                            if self.search_offset > 0 {
+                                let Some(previous) = self
+                                    .results
+                                    .as_mut()
+                                    .filter(|previous| previous.items.len() == self.search_offset)
+                                else {
+                                    self.notice =
+                                        Some("Page list changed. Search again to reload it.");
+                                    return effects;
+                                };
+                                let mut items = std::mem::take(&mut previous.items);
+                                items.append(&mut results.items);
+                                results.items = items;
+                            }
                             self.completed_search = Some(id);
                             self.results = Some(results);
                             self.notice = None;

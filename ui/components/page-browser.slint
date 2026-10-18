@@ -1,6 +1,6 @@
 import { ScrollView, ListView } from "std-widgets.slint";
 import { UiTheme, PageRow } from "../types.slint";
-import { ActionButton } from "action-button.slint";
+import { ActionButton, ChoiceButton } from "action-button.slint";
 component ResultRow inherits FocusScope {
     in property <UiTheme> theme;
     in property <PageRow> data;
@@ -87,6 +87,8 @@ export component PageBrowser inherits Rectangle {
     in-out property <string> folder;
     in-out property <int> selected-index:-1;
     in property <string> index-status;
+    in property <bool> can-load-more:false;
+    callback load-more();
     callback query-changed(string);
     callback folder-changed(string);
     callback open-page(string);
@@ -243,10 +245,15 @@ export component PageBrowser inherits Rectangle {
         font-size: 12px;
     }
 
+    ChoiceButton {
+        x:parent.width - 124px;y:parent.height - 35px;width:104px;height:28px;
+        theme:root.theme;text:"More pages";visible:root.can-load-more;
+        clicked => { root.load-more(); }
+    }
     Text {
         x: 24px;
         y: parent.height - 25px;
-        width: parent.width - 48px;
+        width: parent.width - (root.can-load-more ? 156px : 48px);
         height: 16px;
         text: root.index-status;
         color: root.theme.muted;

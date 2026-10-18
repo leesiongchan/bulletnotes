@@ -24,7 +24,13 @@ fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
 }
 /// Change presentation without replacing the editor or modifying its source text.
 pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
-    window.set_theme(palette(&resolved.palette, resolved.pattern));
+    let adjusted = window
+        .get_system_high_contrast()
+        .then(|| theme::accessibility::high_contrast(&resolved.palette));
+    window.set_theme(palette(
+        adjusted.as_ref().unwrap_or(&resolved.palette),
+        resolved.pattern,
+    ));
     window.set_font_size_px(resolved.font_size);
     window.set_paper_style(
         match resolved.paper {

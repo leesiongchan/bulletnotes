@@ -108,6 +108,12 @@ impl SilverBulletClient {
         Ok(url)
     }
     pub async fn list_files(&self) -> Result<Vec<RemoteMetadata>, SyncError> {
+        let timer = crate::diagnostics::OperationTimer::start(
+            crate::diagnostics::Operation::RemoteCatalogue,
+        );
+        timer.sync(self.list_files_inner().await)
+    }
+    async fn list_files_inner(&self) -> Result<Vec<RemoteMetadata>, SyncError> {
         let response = self
             .client
             .get(self.endpoint(None)?)
@@ -126,6 +132,11 @@ impl SilverBulletClient {
     }
     /// Check current revision and permission without downloading an unchanged body.
     pub async fn read_if_changed(&self, known: &RemoteFile) -> Result<RemoteRead, SyncError> {
+        let timer =
+            crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::RemoteRead);
+        timer.sync(self.read_if_changed_inner(known).await)
+    }
+    async fn read_if_changed_inner(&self, known: &RemoteFile) -> Result<RemoteRead, SyncError> {
         let response = self
             .client
             .head(self.endpoint(Some(&known.key))?)
@@ -158,6 +169,11 @@ impl SilverBulletClient {
         self.read(&known.key).await
     }
     pub async fn read(&self, key: &PageKey) -> Result<RemoteRead, SyncError> {
+        let timer =
+            crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::RemoteRead);
+        timer.sync(self.read_inner(key).await)
+    }
+    async fn read_inner(&self, key: &PageKey) -> Result<RemoteRead, SyncError> {
         let response = self
             .client
             .get(self.endpoint(Some(key))?)
@@ -191,6 +207,13 @@ impl SilverBulletClient {
         }))
     }
     pub async fn put(&self, operation: &PendingMutation) -> Result<MutationAck, SyncError> {
+        let timer = crate::diagnostics::OperationTimer::with_id(
+            crate::diagnostics::Operation::RemoteWrite,
+            operation.id.0,
+        );
+        timer.sync(self.put_inner(operation).await)
+    }
+    async fn put_inner(&self, operation: &PendingMutation) -> Result<MutationAck, SyncError> {
         let MutationKind::Put(body) = &operation.kind else {
             return Err(SyncError::Incompatible);
         };
@@ -203,6 +226,13 @@ impl SilverBulletClient {
         })
     }
     pub async fn delete(&self, operation: &PendingMutation) -> Result<MutationAck, SyncError> {
+        let timer = crate::diagnostics::OperationTimer::with_id(
+            crate::diagnostics::Operation::RemoteDelete,
+            operation.id.0,
+        );
+        timer.sync(self.delete_inner(operation).await)
+    }
+    async fn delete_inner(&self, operation: &PendingMutation) -> Result<MutationAck, SyncError> {
         if operation.kind != MutationKind::Delete
             || !matches!(operation.condition, WriteCondition::Match(_))
         {

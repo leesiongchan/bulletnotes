@@ -24,3 +24,6 @@ pub mod recovery_ui;
 
 #[cfg(target_os = "macos")]
 pub mod native_ui;
+
+#[cfg(target_os = "macos")]
+pub mod diagnostics_ui;

@@ -1,0 +1,42 @@
+{
+  "app_version": "0.1.0",
+  "cached_open_p95_ms": 18.734125000000002,
+  "cached_search_p95_ms": 17.192791999999997,
+  "catalogue_pages_reached": 10000,
+  "catalogue_reachable": true,
+  "cpu": "Apple M4 Pro",
+  "frame_boundary": "Slint AfterRendering; native GPU submission",
+  "hardware": "Mac16,11",
+  "initial_visible_pages": 200,
+  "large_load_p95_ms": 149.368042,
+  "large_note_bytes": 1048576,
+  "large_open_p95_ms": 155.2075,
+  "large_render_p95_ms": 7.311125000000004,
+  "memory_bytes": "51539607552",
+  "os": "27.0.1",
+  "os_build": "26A434",
+  "pages": 10000,
+  "performance_pass": false,
+  "profile": "release",
+  "renderer": "winit-femtovg",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "samples": 20,
+  "schema": 1,
+  "slint": "1.18.1",
+  "stages_p95_ms": {
+    "cached_open": 5.577,
+    "cached_search": 7.75,
+    "editor_focus": 0.001,
+    "editor_presentation": 142.149,
+    "editor_source_update": 0.302,
+    "selection_restoration": 145.908,
+    "storage": 10.104
+  },
+  "thresholds_ms": {
+    "cached_open": 100,
+    "cached_search": 100,
+    "large_open": 100,
+    "warm_activation": 150
+  },
+  "warm_activation_p95_ms": 15.830416999999999
+}
