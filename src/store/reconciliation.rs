@@ -256,6 +256,20 @@ fn commit_observation(
     prepared: PreparedResolution,
     guard: Option<ObservationGuard>,
 ) -> Result<StoredPage, StoreError> {
+    let timer = prepared.recovery_reason.map(|_| {
+        crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::AutomaticRecovery)
+    });
+    let result = commit_observation_transaction(db, prepared, guard);
+    match timer {
+        Some(timer) => timer.store(result),
+        None => result,
+    }
+}
+fn commit_observation_transaction(
+    db: &mut Connection,
+    prepared: PreparedResolution,
+    guard: Option<ObservationGuard>,
+) -> Result<StoredPage, StoreError> {
     let tx = db.transaction()?;
     let context = &prepared.context;
     let key = &context.token.key;

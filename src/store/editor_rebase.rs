@@ -222,6 +222,22 @@ fn commit(
     input: PageSnapshot,
     result: crate::sync::text_merge::TextMergeResult,
 ) -> Result<StoredPage, StoreError> {
+    let timer = (result.disposition != MergeDisposition::Clean).then(|| {
+        crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::AutomaticRecovery)
+    });
+    let result = commit_transaction(db, captured, baseline, input, result);
+    match timer {
+        Some(timer) => timer.store(result),
+        None => result,
+    }
+}
+fn commit_transaction(
+    db: &mut Connection,
+    captured: Context,
+    baseline: String,
+    input: PageSnapshot,
+    result: crate::sync::text_merge::TextMergeResult,
+) -> Result<StoredPage, StoreError> {
     let tx = db.transaction()?;
     let key = &captured.token.key;
     let current = context(&tx, key)?;

@@ -1,6 +1,9 @@
 //! Supervised generated-data acceptance. Parent owns server/relay across native restarts.
 #[path = "acceptance_relay.rs"]
 mod acceptance_relay;
+#[path = "child_process.rs"]
+mod child_process;
+use child_process::ChildGuard;
 #[path = "../../tests/support/space_fixture.rs"]
 mod space_fixture;
 use bulletnotes::{
@@ -440,14 +443,16 @@ pub fn supervise(live: bool) -> Result<()> {
         if phase != "typing" {
             command.arg(phase);
         }
-        let mut child = command
-            .env("BULLETNOTES_ACCEPTANCE_CONFIG", config.id().as_str())
-            .env("BULLETNOTES_ACCEPTANCE_RELAY", base.as_str())
-            .env("BULLETNOTES_ACCEPTANCE_PAGE", page.path.as_str())
-            .env("BULLETNOTES_ACCEPTANCE_PROBE", probe.path.as_str())
-            .stdout(log.try_clone()?)
-            .stderr(log)
-            .spawn()?;
+        let mut child = ChildGuard::new(
+            command
+                .env("BULLETNOTES_ACCEPTANCE_CONFIG", config.id().as_str())
+                .env("BULLETNOTES_ACCEPTANCE_RELAY", base.as_str())
+                .env("BULLETNOTES_ACCEPTANCE_PAGE", page.path.as_str())
+                .env("BULLETNOTES_ACCEPTANCE_PROBE", probe.path.as_str())
+                .stdout(log.try_clone()?)
+                .stderr(log)
+                .spawn()?,
+        );
         let deadline = Instant::now() + Duration::from_secs(100);
         loop {
             for stage in ["independent", "overlap", "delete"] {
@@ -505,8 +510,7 @@ pub fn supervise(live: bool) -> Result<()> {
                 break;
             }
             if Instant::now() >= deadline {
-                child.kill()?;
-                child.wait()?;
+                child.terminate_and_reap()?;
                 failure = Some("native child deadline");
                 break;
             }

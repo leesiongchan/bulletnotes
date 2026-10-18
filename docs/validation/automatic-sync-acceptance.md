@@ -137,3 +137,21 @@ as passing. The new native/live supervised example routes were executed directly
 as described above. Rust 1.92.0 `cargo check --all-targets --locked` passed without
 warnings. `git diff --check` passed. Runtime notices were regenerated and the
 unchanged lockfile matched the dated zero-vulnerability/five-warning audit.
+
+
+## Scoped review correction
+
+The full 281/0/23 integration check above belongs to commit `4827892`. Its scoped
+review found preservation timers covering only a test-used wrapper and missing
+child cleanup on early supervisor errors. Actual HTTP/editor preservation
+transactions now report success only after commit, and report finite storage
+failure on rollback. A nonce-owned headless regression proves that filesystem
+and validation errors terminate and reap the supervisor's child before returning;
+unsafe cleanup still retains its owned journal.
+
+Covering checks after these fixes passed 83 tests with zero failures and three
+explicit child-helper ignores across six targets, plus formatting, affected
+all-feature strict Clippy and diff whitespace checks. No full/native/live run was
+repeated for these instrumentation/ownership fixes. Deferred review minors remain:
+browser completion markers are not nonce-bound across invocations, and benchmark
+compiler metadata hardcodes 1.99.1 (the actual compiler of the recorded samples).

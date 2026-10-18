@@ -119,60 +119,65 @@ fn merge_telemetry_records_finite_operation_and_outcome_without_source() {
 #[test]
 fn recovery_and_replay_boundaries_emit_typed_operations_without_sources() {
     use bulletnotes::{
-        domain::{connection::ConnectionConfig, page::*, reconciliation::*},
+        domain::{connection::ConnectionConfig, page::*},
         store::StoreHandle,
     };
     let _serial = SERIAL.lock().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let logs = dir.path().join("logs");
-    let guard = diagnostics::init(&logs).unwrap();
+    let guard = diagnostics::init(&dir.path().join("logs")).unwrap();
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let store = StoreHandle::open(&dir.path().join("owned.sqlite"))
-            .await
-            .unwrap();
-        let key = PageKey {
-            connection: ConnectionConfig::parse("https://source-sentinel.example/")
-                .unwrap()
-                .id()
-                .clone(),
-            path: PagePath::parse("PATH_SENTINEL.md").unwrap(),
-        };
-        store.create_draft(key.clone()).await.unwrap();
-        store
-            .save_local(
-                key.clone(),
-                "LOCAL_SOURCE_SENTINEL".into(),
-                LocalRevision(1),
-            )
-            .await
-            .unwrap();
-        let local = store.load_page(&key).await.unwrap().unwrap();
-        store
-            .register_automatic_recovery(AutomaticRecoveryInput {
-                local,
-                base: None,
-                remote: Some(RemoteRead::Present(RemoteFile {
-                    key: key.clone(),
-                    body: "REMOTE_SOURCE_SENTINEL".into(),
-                    revision: Some(RemoteRevision("validator-sentinel".into())),
-                    modified_ms: None,
-                    permission: Permission::ReadWrite,
-                })),
-                editor: None,
-                draft: None,
-                kept_body: "REMOTE_SOURCE_SENTINEL".into(),
-                reason: AutomaticRecoveryReason::NoCommonBase,
-            })
-            .await
-            .unwrap();
-        assert!(store.replay_editor_handoff(&key).await.unwrap().is_none());
-        store.shutdown().await.unwrap();
+        for editor_replay in [false, true] {
+            let path = dir.path().join(if editor_replay { "editor.sqlite" } else { "http.sqlite" });
+            let store = StoreHandle::open(&path).await.unwrap();
+            let key = PageKey {
+                connection: ConnectionConfig::parse("https://source-sentinel.example/").unwrap().id().clone(),
+                path: PagePath::parse("PATH_SENTINEL.md").unwrap(),
+            };
+            let observation = |body: &str, revision: &str| RemoteRead::Present(RemoteFile {
+                key: key.clone(), body:body.into(), revision:Some(RemoteRevision(revision.into())),
+                modified_ms:None, permission:Permission::ReadWrite,
+            });
+            store.apply_remote(observation("BASE_SOURCE_SENTINEL", "base-validator-sentinel")).await.unwrap();
+            if editor_replay {
+                store.save_local(key.clone(), "REMOTE_SOURCE_SENTINEL".into(), LocalRevision(1)).await.unwrap();
+                store.save_local_from_base_outcome(key.clone(), "LOCAL_SOURCE_SENTINEL".into(), LocalRevision(2), EditorBaseline {
+                    body:"BASE_SOURCE_SENTINEL".into(),
+                    remote_base:store.load_page(&key).await.unwrap().unwrap().remote_base,
+                }).await.unwrap();
+            } else {
+                store.save_local(key.clone(), "LOCAL_SOURCE_SENTINEL".into(), LocalRevision(1)).await.unwrap();
+            }
+            let injector = rusqlite::Connection::open(&path).unwrap();
+            // Register the immutable event first, then fail canonical publication in the same transaction.
+            injector.execute_batch("CREATE TRIGGER fail_after_registration BEFORE UPDATE OF body ON pages WHEN NEW.path NOT LIKE 'Bulletnotes Recovery/%' BEGIN SELECT RAISE(ABORT,'injected post-registration failure'); END;").unwrap();
+            if editor_replay {
+                assert!(store.replay_editor_handoff(&key).await.is_err());
+                assert_eq!(store.load_editor_page(&key).await.unwrap().unwrap().presented().body,"LOCAL_SOURCE_SENTINEL");
+            } else {
+                assert!(store.apply_remote(observation("REMOTE_SOURCE_SENTINEL", "remote-validator-sentinel")).await.is_err());
+                assert_eq!(store.load_page(&key).await.unwrap().unwrap().body,"LOCAL_SOURCE_SENTINEL");
+            }
+            assert!(store.recovery_uploads(&key.connection, 10).await.unwrap().is_empty());
+            assert_eq!(injector.query_row("SELECT count(*) FROM automatic_events", [], |row|row.get::<_,i64>(0)).unwrap(),0);
+            injector.execute_batch("DROP TRIGGER fail_after_registration").unwrap();
+            if editor_replay { store.replay_editor_handoff(&key).await.unwrap().unwrap(); }
+            else { store.apply_remote(observation("REMOTE_SOURCE_SENTINEL", "remote-validator-sentinel")).await.unwrap(); }
+            assert_eq!(store.load_page(&key).await.unwrap().unwrap().body,"REMOTE_SOURCE_SENTINEL");
+            assert_eq!(store.recovery_uploads(&key.connection,10).await.unwrap().len(),1);
+            store.shutdown().await.unwrap();
+        }
     });
     drop(guard);
     let destination = dir.path().join("typed.jsonl");
     diagnostics::export(&destination).unwrap();
     let output = std::fs::read_to_string(destination).unwrap();
-    assert!(output.contains("automatic_recovery"));
+    let outcomes: Vec<_> = output
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|record| record["event"]["operation"] == "automatic_recovery")
+        .map(|record| record["event"]["outcome"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(outcomes, ["storage", "success", "storage", "success"]);
     assert!(output.contains("editor_replay"));
     for sentinel in [
         "SOURCE_SENTINEL",

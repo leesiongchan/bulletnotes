@@ -126,6 +126,28 @@
       "regenerated": true,
       "custom_slint_licenses_hash_verified": 9
     },
-    "audit_lock_hash_verified": true
+    "audit_lock_hash_verified": true,
+    "source_commit": "48278926734a1e11d3a2e444b4b3782869bac880"
+  },
+  "scoped_review_fix_round_1": {
+    "source_base": "48278926734a1e11d3a2e444b4b3782869bac880",
+    "important_findings": [
+      "AutomaticRecovery timers now wrap actual HTTP/editor checked preservation transactions and finish after commit/rollback result",
+      "supervisor ChildGuard kills/reaps children on every scope exit; retained journal remains on early error"
+    ],
+    "covering": {
+      "passed": 83,
+      "failed": 0,
+      "ignored_helpers": 3,
+      "test_targets": 6
+    },
+    "affected_all_feature_strict_clippy": "passed",
+    "formatting": "passed",
+    "diff_check": "passed",
+    "new_native_live_or_full_suite_runs": false,
+    "deferred_minors": [
+      "browser-done marker is not nonce-bound across repeated invocations",
+      "benchmark compiler metadata hardcodes rustup1.99.1; current measured run used that actual compiler"
+    ]
   }
 }
