@@ -122,7 +122,7 @@ pub(super) fn resolve(
         return Err(StoreError::StaleRevision);
     }
     let leased: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM outbox WHERE page_id=?1 AND state='leased')",
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE page_id=?1 AND state IN ('leased','unknown'))",
         [pages::id(&tx, &key)?],
         |row| row.get(0),
     )?;

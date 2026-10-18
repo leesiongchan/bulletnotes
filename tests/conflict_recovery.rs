@@ -29,10 +29,16 @@ async fn conflict(store: &StoreHandle, remote: RemoteRead) -> ConflictRecord {
         .save_local(key("one.md"), "local\r\n中文🙂".into(), LocalRevision(1))
         .await
         .unwrap();
-    let ReconcileDecision::Conflict(record) = store.apply_remote(remote).await.unwrap() else {
-        panic!("expected conflict")
+    let local = store.load_page(&key("one.md")).await.unwrap().unwrap();
+    let record = ConflictRecord {
+        id: uuid::Uuid::new_v4(),
+        key: key("one.md"),
+        base: local.remote_base.clone(),
+        local,
+        remote,
     };
-    *record
+    store.save_conflict(record.clone()).await.unwrap();
+    record
 }
 fn resolution(record: &ConflictRecord, choice: ResolutionChoice) -> ConflictResolution {
     ConflictResolution {
@@ -49,7 +55,10 @@ async fn resolution_races_back_to_review_and_keeps_all_three_versions() {
         .unwrap();
     let first = conflict(&store, RemoteRead::Present(file("remote", "b"))).await;
     store
-        .apply_remote(RemoteRead::Present(file("newer remote", "c")))
+        .save_conflict(ConflictRecord {
+            remote: RemoteRead::Present(file("newer remote", "c")),
+            ..first.clone()
+        })
         .await
         .unwrap();
     assert!(matches!(
@@ -499,7 +508,7 @@ mod network {
         identical_recreation(true).await;
     }
     #[tokio::test]
-    async fn resolved_page_resumes_while_unrelated_pages_keep_syncing() {
+    async fn automatic_recovery_stays_pending_while_unrelated_pages_keep_syncing() {
         let dir = tempfile::tempdir().unwrap();
         let store = StoreHandle::open(&dir.path().join("notes.sqlite"))
             .await
@@ -519,43 +528,57 @@ mod network {
             .await
             .unwrap();
         f.put("one.md", "remote");
+        store
+            .apply_remote(c.read(&key("one.md")).await.unwrap())
+            .await
+            .unwrap();
         let sync = SyncHandle::start(store.clone(), c, Some(evidence)).unwrap();
-        until(|| sync.snapshot().page_errors.contains_key(&key("one.md"))).await;
         store.create_draft(key("two.md")).await.unwrap();
         store
             .save_local(key("two.md"), "unrelated".into(), LocalRevision(1))
             .await
             .unwrap();
         until(|| f.body("two.md").as_deref() == Some("unrelated")).await;
-        let record = store
-            .conflicts(&key("one.md").connection)
+        assert_eq!(
+            store.load_page(&key("one.md")).await.unwrap().unwrap().body,
+            "remote"
+        );
+        assert_eq!(f.body("one.md").as_deref(), Some("remote"));
+        assert!(
+            store
+                .conflicts(&key("one.md").connection)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let jobs = store
+            .recovery_uploads(&key("one.md").connection, 10)
             .await
-            .unwrap()
-            .pop()
             .unwrap();
-        store
-            .resolve_conflict(resolution(
-                &record,
-                ResolutionChoice::Merge("merged".into()),
-            ))
+        assert_eq!(jobs.len(), 1);
+        let event = store
+            .automatic_recovery_event(jobs[0].event_id)
             .await
             .unwrap();
-        until(|| f.body("one.md").as_deref() == Some("merged")).await;
-        until(|| sync.snapshot().pending == 0 && sync.snapshot().conflicts == 0).await;
+        assert_eq!(event.input.local.body, "local");
+        assert_eq!(event.input.kept_body, "remote");
+        let pending = store
+            .read_recovery_upload(jobs[0].event_id, 0, jobs[0].operation_id)
+            .await
+            .unwrap();
+        assert_eq!(pending.operation.kind, MutationKind::Put("local".into()));
+        until(|| sync.snapshot().pending == 1 && sync.snapshot().conflicts == 0).await;
         sync.shutdown().await.unwrap();
         store.shutdown().await.unwrap();
     }
     #[tokio::test]
-    async fn another_server_change_after_resolution_returns_to_review() {
+    async fn another_server_change_after_resolution_preserves_the_chosen_local_source() {
         let dir = tempfile::tempdir().unwrap();
         let store = StoreHandle::open(&dir.path().join("notes.sqlite"))
             .await
             .unwrap();
         let f = space_fixture::SpaceFixture::start().await;
         let c = client(&f);
-        let evidence = verify_write_guards(&c, new_probe_key(key("one.md").connection))
-            .await
-            .unwrap();
         f.put("one.md", "base");
         store
             .apply_remote(c.read(&key("one.md")).await.unwrap())
@@ -566,16 +589,15 @@ mod network {
             .await
             .unwrap();
         f.put("one.md", "reviewed remote");
-        store
-            .apply_remote(c.read(&key("one.md")).await.unwrap())
-            .await
-            .unwrap();
-        let record = store
-            .conflicts(&key("one.md").connection)
-            .await
-            .unwrap()
-            .pop()
-            .unwrap();
+        let local = store.load_page(&key("one.md")).await.unwrap().unwrap();
+        let record = ConflictRecord {
+            id: uuid::Uuid::new_v4(),
+            key: key("one.md"),
+            base: local.remote_base.clone(),
+            local,
+            remote: c.read(&key("one.md")).await.unwrap(),
+        };
+        store.save_conflict(record.clone()).await.unwrap();
         store
             .resolve_conflict(resolution(
                 &record,
@@ -584,16 +606,38 @@ mod network {
             .await
             .unwrap();
         f.put("one.md", "newer remote");
-        let sync = SyncHandle::start(store.clone(), c, Some(evidence)).unwrap();
-        until(|| sync.snapshot().conflicts == 1).await;
+        store
+            .apply_remote(c.read(&key("one.md")).await.unwrap())
+            .await
+            .unwrap();
         assert_eq!(f.body("one.md").as_deref(), Some("newer remote"));
         assert_eq!(
-            store.conflicts(&key("one.md").connection).await.unwrap()[0]
-                .local
-                .body,
-            "merged"
+            store.load_page(&key("one.md")).await.unwrap().unwrap().body,
+            "newer remote"
         );
-        sync.shutdown().await.unwrap();
+        assert!(
+            store
+                .conflicts(&key("one.md").connection)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let jobs = store
+            .recovery_uploads(&key("one.md").connection, 10)
+            .await
+            .unwrap();
+        assert_eq!(jobs.len(), 1);
+        let event = store
+            .automatic_recovery_event(jobs[0].event_id)
+            .await
+            .unwrap();
+        assert_eq!(event.input.local.body, "merged");
+        assert_eq!(event.input.kept_body, "newer remote");
+        let pending = store
+            .read_recovery_upload(jobs[0].event_id, 0, jobs[0].operation_id)
+            .await
+            .unwrap();
+        assert_eq!(pending.operation.kind, MutationKind::Put("merged".into()));
         store.shutdown().await.unwrap();
     }
 }
@@ -630,8 +674,24 @@ async fn a_late_unsynced_create_meets_a_retained_trash_tombstone() {
             .apply_remote(RemoteRead::Present(file("uncertain source", "late")))
             .await
             .unwrap(),
-        ReconcileDecision::Conflict(_)
+        ReconcileDecision::InstallRemote(_)
     ));
+    assert_eq!(
+        store
+            .load_active_page(&key("one.md"))
+            .await
+            .unwrap()
+            .unwrap()
+            .body,
+        "uncertain source"
+    );
+    assert!(
+        store
+            .claim_pending(&key("one.md").connection, 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     store.shutdown().await.unwrap();
 }
 #[tokio::test]
@@ -720,7 +780,7 @@ async fn unapplied_merged_drafts_survive_restart_and_resolution_keeps_their_sour
 }
 
 #[tokio::test]
-async fn even_identical_content_at_a_reused_restore_path_requires_review() {
+async fn identical_content_at_a_reused_restore_path_adopts_the_current_validator() {
     let dir = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&dir.path().join("notes.sqlite"))
         .await
@@ -749,15 +809,30 @@ async fn even_identical_content_at_a_reused_restore_path_requires_review() {
         .await
         .unwrap();
     store.restore_trash(id, None).await.unwrap();
+    assert!(matches!(
+        store
+            .apply_remote(RemoteRead::Present(file("original", "replacement")))
+            .await
+            .unwrap(),
+        ReconcileDecision::InstallRemote(_)
+    ));
+    assert_eq!(
+        store
+            .load_page(&key("one.md"))
+            .await
+            .unwrap()
+            .unwrap()
+            .remote_base
+            .unwrap()
+            .revision,
+        Some(RemoteRevision("\"replacement\"".into()))
+    );
     assert!(
-        matches!(
-            store
-                .apply_remote(RemoteRead::Present(file("original", "replacement")))
-                .await
-                .unwrap(),
-            ReconcileDecision::Conflict(_)
-        ),
-        "a restored page must not silently adopt a reused path"
+        store
+            .claim_pending(&key("one.md").connection, 1)
+            .await
+            .unwrap()
+            .is_empty()
     );
     store.shutdown().await.unwrap();
 }

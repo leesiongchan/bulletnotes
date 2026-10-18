@@ -1,8 +1,8 @@
 //! Atomic remote observations, editor-base checks, and durable conflict capture.
-use super::{outbox, pages};
+use super::pages;
 use crate::{
     domain::{connection::ConnectionId, error::StoreError, page::*},
-    sync::reconcile::{reconcile, same_base},
+    sync::reconcile::same_base,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
@@ -171,7 +171,7 @@ fn install(db: &Connection, file: &RemoteFile) -> Result<(), StoreError> {
     )?;
     Ok(())
 }
-pub(super) fn apply(
+pub(super) fn apply_uncached(
     db: &mut Connection,
     remote: RemoteRead,
 ) -> Result<ReconcileDecision, StoreError> {
@@ -180,82 +180,25 @@ pub(super) fn apply(
         RemoteRead::Present(file) => &file.key,
         RemoteRead::Missing(key) => key,
     };
-    let local = pages::load(&tx, key)?;
-    let decision = if let Some(local) = &local {
-        if let Some(existing) = read_conflict(&tx, key)? {
-            ReconcileDecision::Conflict(Box::new(ConflictRecord {
-                local: local.clone(),
-                remote: remote.clone(),
-                ..existing
-            }))
-        } else {
-            let (trashed, explicit_create): (bool, bool) = tx.query_row(
-                "SELECT trashed,explicit_create FROM pages WHERE id=?1",
-                [pages::id(&tx, key)?],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
-            if match &remote {
-                RemoteRead::Present(file) => {
-                    trashed && !same_base(local.remote_base.as_ref(), Some(file))
-                        || explicit_create && local.remote_base.is_none()
-                }
-                RemoteRead::Missing(_) => false,
-            } {
-                ReconcileDecision::Conflict(Box::new(ConflictRecord {
-                    id: uuid::Uuid::new_v4(),
-                    key: key.clone(),
-                    base: local.remote_base.clone(),
-                    local: local.clone(),
-                    remote: remote.clone(),
-                }))
-            } else {
-                reconcile(local, &remote)
-            }
-        }
-    } else {
-        match &remote {
-            RemoteRead::Present(file) => ReconcileDecision::InstallRemote(file.clone()),
-            RemoteRead::Missing(_) => ReconcileDecision::RetainDeletedSnapshot,
-        }
-    };
-    let decision = match decision {
-        ReconcileDecision::InstallRemote(file) => {
+    // A save or another observation may have filled the cache after the context lookup.
+    if pages::load(&tx, key)?.is_some() {
+        return Err(StoreError::StaleRevision);
+    }
+    let result = match remote {
+        RemoteRead::Present(file) => {
             install(&tx, &file)?;
             ReconcileDecision::InstallRemote(file)
         }
-        ReconcileDecision::KeepPending => {
-            if let RemoteRead::Present(file) = &remote {
-                set_base(&tx, key, Some(file))?;
-                let snapshot = pages::load(&tx, key)?.ok_or(StoreError::PageMissing)?;
-                outbox::queue_put(&tx, pages::id(&tx, key)?, &snapshot)?;
-            }
-            ReconcileDecision::KeepPending
-        }
-        ReconcileDecision::Conflict(record) => {
-            ReconcileDecision::Conflict(Box::new(capture(&tx, *record)?))
-        }
-        ReconcileDecision::RetainDeletedSnapshot => {
-            let already: bool = tx
-                .query_row(
-                    "SELECT remote_deleted FROM pages WHERE connection=?1 AND path=?2",
-                    [key.connection.as_str(), key.path.as_str()],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .unwrap_or(false);
-            if !already && let Some(local) = &local {
-                super::restoration::preserve(&tx, local.clone(), RecoveryReason::RemoteDeletion)?;
-            }
+        RemoteRead::Missing(key) => {
             tx.execute(
                 "UPDATE pages SET remote_deleted=1,catalogued=0 WHERE connection=?1 AND path=?2",
                 [key.connection.as_str(), key.path.as_str()],
             )?;
             ReconcileDecision::RetainDeletedSnapshot
         }
-        ReconcileDecision::Unchanged => ReconcileDecision::Unchanged,
     };
     tx.commit()?;
-    Ok(decision)
+    Ok(result)
 }
 pub(super) fn save_from_base(
     db: &mut Connection,
@@ -263,7 +206,7 @@ pub(super) fn save_from_base(
     body: String,
     revision: LocalRevision,
     expected: EditorBaseline,
-) -> Result<SavedRevision, StoreError> {
+) -> Result<crate::domain::reconciliation::LocalSaveOutcome, StoreError> {
     if expected
         .remote_base
         .as_ref()
@@ -278,15 +221,18 @@ pub(super) fn save_from_base(
         [key.connection.as_str(), key.path.as_str()],
         |row| row.get::<_, bool>(0),
     )?;
-    let changed = deleted && expected.remote_base.is_some()
-        || before.permission == Permission::ReadOnly
-            && expected
-                .remote_base
-                .as_ref()
-                .is_none_or(|base| base.permission == Permission::ReadWrite)
-        || !same_base(expected.remote_base.as_ref(), before.remote_base.as_ref())
-            && expected.body != before.body;
+    let changed = revision != before.local_revision
+        && (deleted && expected.remote_base.is_some()
+            || before.permission == Permission::ReadOnly
+                && expected
+                    .remote_base
+                    .as_ref()
+                    .is_none_or(|base| base.permission == Permission::ReadWrite)
+            || expected.body != before.body);
     if changed {
+        if before.body != body {
+            super::restoration::preserve(&tx, before.clone(), RecoveryReason::LocalVersion)?;
+        }
         set_base(&tx, &key, expected.remote_base.as_ref())?;
         if deleted {
             tx.execute(
@@ -320,8 +266,12 @@ pub(super) fn save_from_base(
         conflict.local = local;
         capture(&tx, conflict)?;
     }
+    let stored = pages::load_stored(&tx, &saved.key)?.ok_or(StoreError::PageMissing)?;
     tx.commit()?;
-    Ok(saved)
+    Ok(crate::domain::reconciliation::LocalSaveOutcome {
+        attempt: saved,
+        stored,
+    })
 }
 
 pub(super) fn save_conflict(

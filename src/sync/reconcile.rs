@@ -68,3 +68,74 @@ pub fn reconcile(local: &PageSnapshot, remote: &RemoteRead) -> ReconcileDecision
         })),
     }
 }
+
+/// Prepare source outside the SQLite owner; the commit must recheck the captured context.
+pub async fn prepare_reconciliation(
+    context: crate::domain::reconciliation::ReconcileContext,
+    executor: &super::merge_executor::MergeExecutor,
+) -> crate::domain::reconciliation::PreparedResolution {
+    use super::text_merge::MergeDisposition;
+    use crate::domain::reconciliation::{
+        AutomaticRecoveryReason as Reason, PreparedResolution, ResolutionDisposition as Disposition,
+    };
+
+    let mut disposition = Disposition::Install;
+    let mut reason = None;
+    let mut preserve_history = context.token.conflict_id.is_some();
+    let body = match &context.remote {
+        RemoteRead::Present(file) if context.token.trashed => {
+            if same_base(context.base.as_ref(), Some(file)) && !context.token.explicit_create {
+                disposition = Disposition::KeepDeletion;
+                context.local.body.clone()
+            } else {
+                preserve_history = true;
+                file.body.clone()
+            }
+        }
+        RemoteRead::Present(file) if context.local.body == file.body => file.body.clone(),
+        RemoteRead::Present(file) => {
+            if let Some(base) = &context.base {
+                preserve_history |= base.body != context.local.body && base.body != file.body;
+                let merged = executor
+                    .merge(
+                        base.body.clone(),
+                        context.local.body.clone(),
+                        file.body.clone(),
+                    )
+                    .await;
+                reason = match merged.disposition {
+                    MergeDisposition::Clean => None,
+                    MergeDisposition::PreservedOverlap => Some(Reason::Overlap),
+                    MergeDisposition::BudgetFallback => Some(Reason::BudgetFallback),
+                };
+                merged.body
+            } else {
+                reason = Some(Reason::NoCommonBase);
+                file.body.clone()
+            }
+        }
+        RemoteRead::Missing(_) => {
+            if context.token.trashed
+                || context
+                    .base
+                    .as_ref()
+                    .is_some_and(|base| base.body == context.local.body)
+            {
+                disposition = Disposition::RetainDeleted;
+            }
+            preserve_history |= context.base.is_some() && !context.token.remote_deleted;
+            context.local.body.clone()
+        }
+    };
+    if context.draft.is_some() {
+        reason = reason.or(Some(Reason::AuthoredDraft));
+    }
+    preserve_history |= reason.is_some();
+    PreparedResolution {
+        context,
+        body,
+        disposition,
+        recovery_reason: reason,
+        preserve_history,
+    }
+}

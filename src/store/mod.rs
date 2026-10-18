@@ -2,6 +2,7 @@
 mod outbox;
 mod pages;
 mod probes;
+mod reconciliation;
 pub mod recovery;
 mod recovery_uploads;
 mod remote;
@@ -26,6 +27,7 @@ pub use worker::{Durability, owner_process_id};
 pub struct StoreHandle {
     sender: mpsc::Sender<Command>,
     local_changes: watch::Sender<()>,
+    merge_executor: crate::sync::merge_executor::MergeExecutor,
 }
 impl StoreHandle {
     pub async fn open(path: &Path) -> Result<Self, StoreError> {
@@ -49,6 +51,7 @@ impl StoreHandle {
         Ok(Self {
             sender,
             local_changes,
+            merge_executor: Default::default(),
         })
     }
     async fn call<R: Send + 'static>(
@@ -352,8 +355,38 @@ impl StoreHandle {
         &self,
         observation: RemoteRead,
     ) -> Result<ReconcileDecision, StoreError> {
-        self.call(move |w| remote::apply(&mut w.db, observation))
-            .await
+        let key = match &observation {
+            RemoteRead::Present(file) => &file.key,
+            RemoteRead::Missing(key) => key,
+        };
+        let context = self.load_reconcile_context(key, observation.clone()).await;
+        let context = match context {
+            Ok(context) => context,
+            Err(StoreError::PageMissing) => {
+                return self
+                    .call(move |w| remote::apply_uncached(&mut w.db, observation))
+                    .await;
+            }
+            Err(error) => return Err(error),
+        };
+        let prepared =
+            crate::sync::reconcile::prepare_reconciliation(context, &self.merge_executor).await;
+        let disposition = prepared.disposition;
+        let stored = self.commit_reconciliation(prepared).await?;
+        Ok(match disposition {
+            crate::domain::reconciliation::ResolutionDisposition::RetainDeleted => {
+                ReconcileDecision::RetainDeletedSnapshot
+            }
+            crate::domain::reconciliation::ResolutionDisposition::KeepDeletion => {
+                ReconcileDecision::KeepPending
+            }
+            crate::domain::reconciliation::ResolutionDisposition::Install => match observation {
+                RemoteRead::Present(file) if file.body == stored.page.body => {
+                    ReconcileDecision::InstallRemote(file)
+                }
+                _ => ReconcileDecision::KeepPending,
+            },
+        })
     }
     pub async fn record_catalogue(
         &self,
@@ -380,6 +413,19 @@ impl StoreHandle {
         revision: LocalRevision,
         expected: EditorBaseline,
     ) -> Result<SavedRevision, StoreError> {
+        Ok(self
+            .save_local_from_base_outcome(key, body, revision, expected)
+            .await?
+            .attempt)
+    }
+    /// Acknowledges the authored attempt immediately after its durable transaction.
+    pub async fn save_local_from_base_outcome(
+        &self,
+        key: PageKey,
+        body: String,
+        revision: LocalRevision,
+        expected: EditorBaseline,
+    ) -> Result<crate::domain::reconciliation::LocalSaveOutcome, StoreError> {
         let saved = self
             .call_timed(crate::diagnostics::Operation::LocalSave, move |w| {
                 remote::save_from_base(&mut w.db, key, body, revision, expected)

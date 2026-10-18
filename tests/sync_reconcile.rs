@@ -124,7 +124,7 @@ async fn catalogue_failure_does_not_delete_pages_and_partial_index_is_visible() 
     store.shutdown().await.unwrap();
 }
 #[tokio::test]
-async fn a_remote_change_against_a_durable_local_edit_is_preserved_as_a_conflict() {
+async fn a_remote_overlap_is_installed_with_a_durable_local_recovery() {
     let dir = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&dir.path().join("test.sqlite"))
         .await
@@ -142,11 +142,11 @@ async fn a_remote_change_against_a_durable_local_edit_is_preserved_as_a_conflict
             .apply_remote(RemoteRead::Present(remote("one.md", "remote", "b")))
             .await
             .unwrap(),
-        ReconcileDecision::Conflict(_)
+        ReconcileDecision::InstallRemote(_)
     ));
     assert_eq!(
         store.load_page(&key("one.md")).await.unwrap().unwrap().body,
-        "local"
+        "remote"
     );
     assert!(
         store
@@ -156,8 +156,22 @@ async fn a_remote_change_against_a_durable_local_edit_is_preserved_as_a_conflict
             .is_empty()
     );
     let conflicts = store.conflicts(&key("one.md").connection).await.unwrap();
-    assert_eq!(conflicts.len(), 1);
-    assert_eq!(conflicts[0].local.body, "local");
+    assert!(conflicts.is_empty());
+    let jobs = store
+        .recovery_uploads(&key("one.md").connection, 10)
+        .await
+        .unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(
+        store
+            .automatic_recovery_event(jobs[0].event_id)
+            .await
+            .unwrap()
+            .input
+            .local
+            .body,
+        "local"
+    );
     store.shutdown().await.unwrap();
 }
 #[tokio::test]
