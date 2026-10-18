@@ -99,7 +99,7 @@ pub(super) fn carry_order(
     if !member(&destination.path) {
         return Ok(());
     }
-    db.execute("INSERT INTO scratchpad_order(connection,path,created_ms,order_ms) SELECT ?1,?2,created_ms,order_ms FROM scratchpad_order WHERE connection=?3 AND path=?4 ON CONFLICT(connection,path) DO NOTHING",params![destination.connection.as_str(),destination.path.as_str(),source.connection.as_str(),source.path.as_str()])?;
+    db.execute("INSERT INTO scratchpad_order(connection,path,created_ms,order_ms) SELECT ?1,?2,created_ms,order_ms FROM scratchpad_order WHERE connection=?3 AND path=?4 ON CONFLICT(connection,path) DO UPDATE SET created_ms=excluded.created_ms,order_ms=excluded.order_ms",params![destination.connection.as_str(),destination.path.as_str(),source.connection.as_str(),source.path.as_str()])?;
     Ok(())
 }
 pub(super) fn backfill(db: &mut Connection) -> Result<(), StoreError> {

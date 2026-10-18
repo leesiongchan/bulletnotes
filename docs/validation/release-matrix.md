@@ -245,3 +245,5 @@ passed 184 tests with zero failures and 20 explicit ignores; the new native
 regression was run explicitly. Three generated pages were cleaned up with guarded
 deletion and confirmed absence. Review found no blocking macOS issue. Human
 keyboard, IME, VoiceOver and the remaining release gates retain their own status.
+
+The Antinote follow-up full suite passes with 326 tests. A fresh signed LaunchServices lifecycle rerun in this session stops before the first rendered frame; the unchanged `1c90b58` base fails the same startup check. This unresolved current-session gate is recorded in [the validation report](antinote-ui-ux.md#independent-review); earlier lifecycle successes above are historical evidence.

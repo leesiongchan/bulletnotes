@@ -101,6 +101,9 @@ pub enum AppEvent {
     },
 }
 pub enum AppEffect {
+    RecoveryCancelled {
+        connection: ConnectionId,
+    },
     LoadScratchpads {
         request_id: u64,
         connection: ConnectionId,
@@ -470,7 +473,7 @@ impl Coordinator {
                 self.after_delete = None;
                 self.transition_id = self.transition_id.saturating_add(1);
                 self.pending_load = None;
-                self.pending_transition = None;
+                self.cancel_transition(&mut effects);
                 if self.selected_uncached.take().is_some() {
                     self.notice = None;
                 }
@@ -481,7 +484,7 @@ impl Coordinator {
                         Ok(true) => {
                             self.pending_load = None;
                             if !self.barrier_waiting {
-                                self.pending_transition = None;
+                                self.cancel_transition(&mut effects);
                             }
                             self.stack_cursor = None;
                             self.notice = None;
@@ -509,7 +512,7 @@ impl Coordinator {
                 self.after_delete = None;
                 self.transition_id = self.transition_id.saturating_add(1);
                 self.pending_load = None;
-                self.pending_transition = None;
+                self.cancel_transition(&mut effects);
                 if view != View::AllPages && self.selected_uncached.take().is_some() {
                     self.notice = None;
                 }
@@ -527,6 +530,7 @@ impl Coordinator {
                             .as_ref()
                             .is_some_and(|editor| editor.key() == &key)
                     {
+                        self.cancel_transition(&mut effects);
                         self.navigation.set_view(View::Note);
                         self.flush(&mut effects);
                     } else {
@@ -598,6 +602,15 @@ impl Coordinator {
                         self.notice = Some("Editing position could not be recorded.");
                     }
                 }
+                if let Some(request) = self.pending_load.take() {
+                    self.pending_transition = Some(Transition::Open(request.key, request.history));
+                }
+                if self.pending_transition.is_some() {
+                    self.transition_id = self.transition_id.saturating_add(1);
+                    self.barrier_waiting = false;
+                    self.barrier_ready = false;
+                    self.finish_transition(&mut effects);
+                }
             }
             AppAction::Flush => {
                 self.flush_target = self.editor.as_ref().map(|editor| editor.revision());
@@ -628,6 +641,7 @@ impl Coordinator {
                 }
                 self.barrier_waiting = false;
                 if result.is_err() {
+                    self.cancel_transition(&mut effects);
                     self.stack_cursor = None;
                     self.notice = Some(METADATA_FAILURE);
                     return effects;
@@ -776,7 +790,8 @@ impl Coordinator {
                     .is_some_and(|editor| editor.key() == &key)
                 {
                     self.stack_cursor = None;
-                    self.pending_transition = None;
+                    self.cancel_transition(&mut effects);
+                    self.pending_load = None;
                     self.barrier_waiting = false;
                     self.notice = Some(METADATA_FAILURE);
                 }
@@ -839,7 +854,7 @@ impl Coordinator {
                     .as_mut()
                     .is_some_and(|editor| editor.fail(&expected, revision))
                 {
-                    self.pending_transition = None;
+                    self.cancel_transition(&mut effects);
                     self.pending_load = None;
                     self.notice = Some(
                         "Local save failed. Your text is still here; retry saving or copy it.",
@@ -994,7 +1009,20 @@ impl Coordinator {
             });
         }
     }
+    fn cancel_transition(&mut self, effects: &mut Vec<AppEffect>) {
+        if matches!(
+            self.pending_transition.take(),
+            Some(Transition::Recovery(_))
+        ) {
+            effects.push(AppEffect::RecoveryCancelled {
+                connection: self.connection.clone(),
+            });
+        }
+        self.barrier_waiting = false;
+        self.barrier_ready = false;
+    }
     fn transition(&mut self, transition: Transition, effects: &mut Vec<AppEffect>) {
+        self.cancel_transition(effects);
         self.after_delete = None;
         self.stack_intent = None;
         self.transition_id = self.transition_id.saturating_add(1);

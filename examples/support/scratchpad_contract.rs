@@ -24,6 +24,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .id()
         .clone();
     let local = local_ui::bind(&window, store.clone(), connection.clone(), appearance)?;
+    let _recovery = bulletnotes::app::recovery_ui::bind(&window, local.clone(), store.clone())?;
     let passed = Rc::new(Cell::new(false));
     let result = passed.clone();
     let weak = window.as_weak();
@@ -52,7 +53,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let ordinary=PageKey {connection:connection.clone(),path:PagePath::parse("ordinary.md")?};store.create_draft(ordinary.clone()).await?;
             local.dispatch(AppAction::OpenPage(ordinary.clone()));local.wait_until_loaded(&ordinary).await?;
             if !window.get_note_counter().is_empty() || window.get_can_go_older() || window.get_can_go_newer() {return Err("ordinary page has stack position".into());}
-            local.flush().await?;store.shutdown().await?;Ok::<(),Box<dyn std::error::Error>>(())
+            local.flush().await?;
+            window.set_recovery_busy(true);
+            local.dispatch(AppAction::EmptyTrash(vec![]));
+            local.dispatch(AppAction::Navigate(bulletnotes::app::model::View::Appearance));
+            if window.get_recovery_busy() {return Err("cancelled recovery retained busy admission".into());}
+            window.invoke_return_to_note();
+            window.invoke_note_edited("editing after cancelled recovery".into());local.flush().await?;
+            if window.get_note_read_only() || window.get_note_text()!="editing after cancelled recovery" {return Err("cancelled recovery blocked editing".into());}
+            window.invoke_request_hide();local.flush().await?;
+            if window.window().is_visible() {return Err("cancelled recovery blocked close admission".into());}
+            store.shutdown().await?;Ok::<(),Box<dyn std::error::Error>>(())
         }.await;
             match check {
                 Ok(()) => {

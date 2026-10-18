@@ -293,3 +293,47 @@ async fn direct_remote_admission_and_original_path_restoration_keep_order() {
     );
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn alternate_restore_replaces_reusable_destinations_historical_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = database(&dir);
+    let store = StoreHandle::open(&path).await.unwrap();
+    for (name, time) in [("old", 100), ("middle", 200), ("reused", 300)] {
+        store
+            .apply_remote(RemoteRead::Present(RemoteFile {
+                key: key(&format!("Quick Notes/{name}.md")),
+                body: name.into(),
+                revision: Some(RemoteRevision("one".into())),
+                permission: Permission::ReadWrite,
+                modified_ms: Some(time),
+            }))
+            .await
+            .unwrap();
+    }
+    let old = key("Quick Notes/old.md");
+    let reused = key("Quick Notes/reused.md");
+    store
+        .apply_remote(RemoteRead::Missing(old.clone()))
+        .await
+        .unwrap();
+    store
+        .apply_remote(RemoteRead::Missing(reused.clone()))
+        .await
+        .unwrap();
+    let copies = store.recovery_copies(&old.connection).await.unwrap();
+    let source = copies.iter().find(|copy| copy.page.key == old).unwrap();
+    store
+        .restore_recovery(source.id, Some(reused.path.clone()))
+        .await
+        .unwrap();
+    let entries = store.scratchpad_stack(&old.connection).await.unwrap();
+    assert_eq!(entries[1].key, reused);
+    assert_eq!(entries[1].created_ms, 100);
+    store.shutdown().await.unwrap();
+    let reopened = StoreHandle::open(&path).await.unwrap();
+    let entries = reopened.scratchpad_stack(&old.connection).await.unwrap();
+    assert_eq!(entries[1].key, reused);
+    assert_eq!(entries[1].created_ms, 100);
+    reopened.shutdown().await.unwrap();
+}
