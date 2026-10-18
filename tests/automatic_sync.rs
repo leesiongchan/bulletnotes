@@ -181,6 +181,34 @@ async fn denied_recovery_is_visible_on_original_and_does_not_block_peer() {
             .1
             .pending
     );
+    let denied_puts = || {
+        f.data
+            .lock()
+            .unwrap()
+            .puts
+            .iter()
+            .filter(|p| p.0 == head.key.path.as_str())
+            .count()
+    };
+    assert_eq!(denied_puts(), 1);
+    tokio::time::sleep(Duration::from_millis(1300)).await;
+    assert_eq!(denied_puts(), 1, "denial must retain bounded retry cadence");
+    sync.refresh();
+    until(|| denied_puts() == 2).await;
+    tokio::time::sleep(Duration::from_millis(1300)).await;
+    assert_eq!(denied_puts(), 2, "repeated denial must back off again");
+    f.data.lock().unwrap().denied_put = None;
+    sync.refresh();
+    until(|| {
+        sync.snapshot().pending == 0
+            && !sync.snapshot().page_errors.contains_key(&key("one.md"))
+            && !sync.snapshot().page_errors.contains_key(&head.key)
+    })
+    .await;
+    assert_eq!(
+        f.body(head.key.path.as_str()).as_deref(),
+        Some("本地\r\n💾")
+    );
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
 }
@@ -964,6 +992,151 @@ async fn worker_persists_guard_rejected_delete_without_retry_or_resurrection() {
         1
     );
     assert!(!f.data.lock().unwrap().puts.iter().any(|p| p.0 == "one.md"));
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn blocked_recovery_restarts_and_settles_after_refresh_or_exact_readback() {
+    for matching in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.sqlite");
+        let store = StoreHandle::open(&path).await.unwrap();
+        let f = SpaceFixture::start().await;
+        let head = recovery(&store, &f).await;
+        f.data.lock().unwrap().denied_put = Some(head.key.path.as_str().into());
+        store.create_draft(key("peer.md")).await.unwrap();
+        store
+            .save_local(key("peer.md"), "peer".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        let sync = start(&store, &f).await;
+        until(|| sync.snapshot().page_errors.get(&key("one.md")) == Some(&SyncError::Permission))
+            .await;
+        until(|| f.body("peer.md").as_deref() == Some("peer")).await;
+        assert!(sync.snapshot().pending > 0);
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+        let store = StoreHandle::open(&path).await.unwrap();
+        let db = rusqlite::Connection::open(&path).unwrap();
+        let state: String = db
+            .query_row(
+                "SELECT state FROM recovery_uploads WHERE operation_id=?1",
+                [head.operation_id.0.to_string()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(state, "blocked");
+        let before = f
+            .data
+            .lock()
+            .unwrap()
+            .puts
+            .iter()
+            .filter(|p| p.0 == head.key.path.as_str())
+            .count();
+        if matching {
+            f.put(head.key.path.as_str(), "本地\r\n💾");
+        }
+        f.data.lock().unwrap().denied_put = None;
+        let sync = start(&store, &f).await;
+        sync.refresh();
+        until(|| {
+            f.body(head.key.path.as_str()).as_deref() == Some("本地\r\n💾")
+                && sync.snapshot().complete
+                && sync.snapshot().pending == 0
+                && !sync.snapshot().page_errors.contains_key(&key("one.md"))
+                && !sync.snapshot().page_errors.contains_key(&head.key)
+        })
+        .await;
+        assert!(sync.snapshot().error.is_none());
+        assert!(
+            !store
+                .load_sync_page(&key("one.md"))
+                .await
+                .unwrap()
+                .unwrap()
+                .1
+                .pending
+        );
+        let after = f
+            .data
+            .lock()
+            .unwrap()
+            .puts
+            .iter()
+            .filter(|p| p.0 == head.key.path.as_str())
+            .count();
+        assert_eq!(after - before, usize::from(!matching));
+        assert_eq!(
+            store
+                .read_recovery_upload(head.event_id, head.ordinal, head.operation_id)
+                .await
+                .unwrap()
+                .operation
+                .kind,
+            MutationKind::Put("本地\r\n💾".into())
+        );
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn uncached_readonly_recovery_occupant_relocates_after_initial_put_denial() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = SpaceFixture::start().await;
+    let head = recovery(&store, &f).await;
+    f.put(head.key.path.as_str(), "protected occupant");
+    {
+        let mut data = f.data.lock().unwrap();
+        data.denied_put = Some(head.key.path.as_str().into());
+        data.delay_put = Some(head.key.path.as_str().into());
+    }
+    assert_eq!(
+        store
+            .load_page(&head.key)
+            .await
+            .unwrap()
+            .unwrap()
+            .permission,
+        Permission::ReadWrite
+    );
+    let sync = start(&store, &f).await;
+    until(|| f.data.lock().unwrap().delay_put.is_none()).await;
+    {
+        let mut data = f.data.lock().unwrap();
+        data.read_only = Some(head.key.path.as_str().into());
+        data.release.notify_one();
+    }
+    until(|| sync.snapshot().complete && sync.snapshot().pending == 0).await;
+    assert_eq!(
+        f.body(head.key.path.as_str()).as_deref(),
+        Some("protected occupant")
+    );
+    assert_eq!(
+        f.data
+            .lock()
+            .unwrap()
+            .puts
+            .iter()
+            .filter(|p| p.0 == head.key.path.as_str())
+            .count(),
+        1
+    );
+    assert!(
+        f.data
+            .lock()
+            .unwrap()
+            .files
+            .values()
+            .any(|f| f.body == "本地\r\n💾")
+    );
+    assert!(!sync.snapshot().page_errors.contains_key(&key("one.md")));
+    assert!(!sync.snapshot().page_errors.contains_key(&head.key));
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
 }

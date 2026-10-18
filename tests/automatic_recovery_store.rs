@@ -1121,3 +1121,90 @@ async fn captured_recovery_head_cannot_lease_a_relocated_destination() {
     );
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn blocked_recovery_remains_discoverable_and_can_retry_or_acknowledge_exact_attempt() {
+    for acknowledge in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StoreHandle::open(&database(&directory)).await.unwrap();
+        let input = observation(&store, key("blocked-retry.md"), "immutable").await;
+        let event = store.register_automatic_recovery(input).await.unwrap();
+        let attempt = store
+            .claim_recovery_upload(event.id, 0)
+            .await
+            .unwrap()
+            .unwrap();
+        store
+            .mark_recovery_unknown(event.id, 0, attempt.operation.id)
+            .await
+            .unwrap();
+        store
+            .block_recovery_upload(event.id, 0, attempt.operation.id)
+            .await
+            .unwrap();
+        let heads = store
+            .recovery_uploads(&key("blocked-retry.md").connection, 10)
+            .await
+            .unwrap();
+        assert_eq!(heads.len(), 1);
+        assert_eq!(heads[0].state, RecoveryUploadState::Blocked);
+        assert!(
+            store
+                .claim_recovery_upload_attempt(event.id, 0, attempt.operation.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        if acknowledge {
+            let pending = store
+                .cache_progress(&key("blocked-retry.md").connection)
+                .await
+                .unwrap()
+                .pending;
+            store
+                .acknowledge_recovery_upload(
+                    event.id,
+                    0,
+                    attempt.operation.id,
+                    MutationAck {
+                        remote_revision: Some(RemoteRevision("readback".into())),
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                store
+                    .cache_progress(&key("blocked-retry.md").connection)
+                    .await
+                    .unwrap()
+                    .pending,
+                pending - 1
+            );
+        } else {
+            store
+                .retry_recovery_upload(event.id, 0, OperationId::new())
+                .await
+                .unwrap();
+            assert!(
+                store
+                    .claim_recovery_upload_attempt(event.id, 0, attempt.operation.id)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            store
+                .retry_recovery_upload(event.id, 0, attempt.operation.id)
+                .await
+                .unwrap();
+            assert_eq!(
+                store
+                    .claim_recovery_upload_attempt(event.id, 0, attempt.operation.id)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                attempt
+            );
+        }
+        store.shutdown().await.unwrap();
+    }
+}

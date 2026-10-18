@@ -102,7 +102,7 @@ impl StoreHandle {
         expected: OperationId,
     ) -> Result<(), StoreError> {
         self.call(move |w| {
-            w.db.execute("UPDATE recovery_uploads SET state='pending' WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND current=1 AND state='unknown'", params![event_id.to_string(),ordinal,expected.0.to_string()])?;
+            w.db.execute("UPDATE recovery_uploads SET state='pending' WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND current=1 AND state IN ('unknown','blocked')", params![event_id.to_string(),ordinal,expected.0.to_string()])?;
             Ok(())
         }).await
     }
@@ -306,7 +306,7 @@ fn heads(
     limit: usize,
 ) -> Result<Vec<RecoveryUploadHead>, StoreError> {
     let limit = i64::try_from(limit).map_err(|_| StoreError::InvalidQuery)?;
-    let mut query = db.prepare("SELECT u.event_id,u.ordinal,u.operation_id,u.path,u.state,u.current FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND u.state IN ('pending','unknown') ORDER BY u.current DESC,u.rowid LIMIT ?2")?;
+    let mut query = db.prepare("SELECT u.event_id,u.ordinal,u.operation_id,u.path,u.state,u.current FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND (u.state IN ('pending','unknown') OR u.current=1 AND u.state='blocked') ORDER BY u.current DESC,u.rowid LIMIT ?2")?;
     query
         .query_map(params![connection.as_str(), limit], |row| {
             Ok((
@@ -384,7 +384,7 @@ fn acknowledge(
     ack: MutationAck,
 ) -> Result<(), StoreError> {
     let tx = db.transaction()?;
-    let current: bool = tx.query_row("SELECT current FROM recovery_uploads WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND state IN ('leased','unknown')", params![event_id.to_string(), ordinal, expected.0.to_string()], |row| row.get(0)).optional()?.ok_or(StoreError::UnknownOperation)?;
+    let current: bool = tx.query_row("SELECT current FROM recovery_uploads WHERE event_id=?1 AND ordinal=?2 AND operation_id=?3 AND (state IN ('leased','unknown') OR current=1 AND state='blocked')", params![event_id.to_string(), ordinal, expected.0.to_string()], |row| row.get(0)).optional()?.ok_or(StoreError::UnknownOperation)?;
     let upload = read(&tx, event_id, ordinal, expected)?;
     tx.execute(
         "UPDATE recovery_uploads SET state='acknowledged' WHERE operation_id=?1",

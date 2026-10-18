@@ -84,6 +84,7 @@ impl SyncHandle {
             notify: Notify::new(),
             active: Mutex::new(HashSet::new()),
             deferred: Mutex::new(std::collections::HashMap::new()),
+            recovery_errors: Mutex::new(HashSet::new()),
             passive: AtomicUsize::new(0),
             retry: Mutex::new(Retry {
                 attempt: 0,
@@ -146,6 +147,7 @@ struct Shared {
     retry: Mutex<Retry>,
     active: Mutex<HashSet<PageKey>>,
     deferred: Mutex<std::collections::HashMap<PageKey, Retry>>,
+    recovery_errors: Mutex<HashSet<PageKey>>,
     passive: AtomicUsize,
 }
 impl Shared {
@@ -198,6 +200,35 @@ impl Shared {
     }
     fn page_blocked(&self, key: &PageKey) -> bool {
         self.deferred(key) || self.snapshot.borrow().page_errors.contains_key(key)
+    }
+    fn recovery_blocked(&self, key: &PageKey) -> bool {
+        self.deferred(key)
+            || self
+                .snapshot
+                .borrow()
+                .page_errors
+                .get(key)
+                .is_some_and(|error| *error != SyncError::Permission)
+    }
+    fn settle_recovery_error(&self, origin: &PageKey, key: &PageKey) {
+        let removed: Vec<_> = {
+            let mut errors = self
+                .recovery_errors
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            [origin, key]
+                .into_iter()
+                .filter(|key| errors.remove(*key))
+                .cloned()
+                .collect()
+        };
+        self.snapshot.send_modify(|snapshot| {
+            for key in removed {
+                if snapshot.page_errors.get(&key) == Some(&SyncError::Permission) {
+                    snapshot.page_errors.remove(&key);
+                }
+            }
+        });
     }
     fn ready(&self) -> bool {
         !self.blocked()
@@ -257,8 +288,16 @@ impl Shared {
             .blocked_recovery_pages(&connection)
             .await
             .map_err(|_| SyncError::LocalStorage)?;
+        let recovery_errors = {
+            let mut errors = self
+                .recovery_errors
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            errors.extend(blocked);
+            errors.iter().cloned().collect::<Vec<_>>()
+        };
         self.snapshot.send_modify(|snapshot| {
-            for key in blocked {
+            for key in recovery_errors {
                 snapshot.page_errors.insert(key, SyncError::Permission);
             }
         });
@@ -521,7 +560,7 @@ async fn recover(
     shared: &Shared,
     head: &RecoveryUploadHead,
     claimed: Option<RecoveryUpload>,
-) -> Result<(), SyncError> {
+) -> Result<bool, SyncError> {
     let upload = match &claimed {
         Some(upload) => upload.clone(),
         None => storage(
@@ -533,21 +572,22 @@ async fn recover(
     let operation = &upload.operation;
     let read_only = storage(store.load_page(&head.key).await)?
         .is_some_and(|page| page.permission == Permission::ReadOnly);
+    let mut denied = false;
     if claimed.is_some() {
         if !storage(
             store
                 .recovery_upload_is_leased(head.event_id, head.ordinal, operation.id)
                 .await,
         )? {
-            return Ok(());
+            return Ok(false);
         }
-        if shared.blocked() || shared.page_blocked(&head.key) {
+        if shared.blocked() || shared.recovery_blocked(&head.key) {
             storage(
                 store
                     .mark_recovery_unknown(head.event_id, head.ordinal, operation.id)
                     .await,
             )?;
-            return Ok(());
+            return Ok(false);
         }
         let result = if read_only {
             Err(SyncError::Conflict)
@@ -562,7 +602,7 @@ async fn recover(
                         .await,
                 )?;
                 shared.online();
-                return Ok(());
+                return Ok(true);
             }
             Err(error) => {
                 storage(
@@ -576,11 +616,14 @@ async fn recover(
                             .block_recovery_upload(head.event_id, head.ordinal, operation.id)
                             .await,
                     )?;
-                    return Err(error);
+                    denied = true;
                 }
                 if !matches!(
                     error,
-                    SyncError::Conflict | SyncError::Missing | SyncError::UnknownMutationOutcome
+                    SyncError::Conflict
+                        | SyncError::Missing
+                        | SyncError::UnknownMutationOutcome
+                        | SyncError::Permission
                 ) {
                     return Err(error);
                 }
@@ -611,10 +654,14 @@ async fn recover(
                         .relocate_recovery_upload(head.event_id, head.ordinal, operation.id, file)
                         .await,
                 )?;
+            } else {
+                return Ok(false);
             }
+            shared.online();
+            return Ok(head.current);
         }
         RemoteRead::Missing(_) => {
-            if head.current && read_only {
+            if head.current && (read_only || denied) {
                 storage(
                     store
                         .block_recovery_upload(head.event_id, head.ordinal, operation.id)
@@ -632,7 +679,7 @@ async fn recover(
         }
     }
     shared.online();
-    Ok(())
+    Ok(false)
 }
 async fn perform(
     work: Work,
@@ -652,7 +699,16 @@ async fn perform(
         None
     };
     let result = match work {
-        Work::Recovery(head, claimed) => recover(store, client, shared, &head, claimed).await,
+        Work::Recovery(head, claimed) => match recover(store, client, shared, &head, claimed).await
+        {
+            Ok(settled) => {
+                if settled && let Some(origin) = &recovery_origin {
+                    shared.settle_recovery_error(origin, &key);
+                }
+                Ok(())
+            }
+            Err(error) => Err(error),
+        },
         Work::Read(key) | Work::Watch(key) => observe(store, client, shared, &key).await,
         Work::Cleanup(key) => {
             // A historical probe may reappear after an uncertain create. Only
@@ -714,6 +770,13 @@ async fn perform(
     };
     if let Err(error) = result {
         if let Some(origin) = &recovery_origin {
+            if error == SyncError::Permission {
+                shared
+                    .recovery_errors
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend([origin.clone(), key.clone()]);
+            }
             shared.fail(error, Some(origin));
         }
         shared.fail(error, Some(&key));
@@ -794,7 +857,7 @@ async fn supervise(
         let mut poll=Instant::now();let mut last_refresh=0;
         let mut listing:Option<JoinHandle<Result<Vec<RemoteMetadata>,SyncError>>>=None;
         let mut heads=Vec::<PendingHead>::new();let mut rescan=true;
-        let mut recovery_due=std::collections::HashMap::<OperationId,Instant>::new();
+        let mut recovery_due=std::collections::HashMap::<OperationId,(RecoveryUploadState,Instant)>::new();
         let mut prefer_watch=false;
         shared.publish(&store).await?;
         loop {
@@ -843,20 +906,25 @@ async fn supervise(
                 }
                 if writable {
                     let mut uploads=storage(store.recovery_uploads(&connection,i64::MAX as usize).await)?;
-                    uploads.sort_by_key(|head|(!head.current,recovery_due.get(&head.operation_id).copied()));
+                    uploads.sort_by_key(|head|(!head.current,recovery_due.get(&head.operation_id).map(|(_,due)|*due)));
                     let mut passive=false;
                     for head in uploads {
                         if !head.current && (passive || shared.passive.load(Ordering::Relaxed)>0 || (prefer_watch && watches.len()>0)) {continue;}
-                        if recovery_due.get(&head.operation_id).is_some_and(|due|*due>Instant::now()) {continue;}
+                        if let Some((prior,due))=recovery_due.get_mut(&head.operation_id) {
+                            if *prior!=RecoveryUploadState::Blocked && head.state==RecoveryUploadState::Blocked {
+                                *prior=head.state;*due=Instant::now()+Duration::from_secs(30);
+                            }
+                            if !(*prior==RecoveryUploadState::Blocked && head.state==RecoveryUploadState::Pending) && *due>Instant::now() {continue;}
+                        }
                         let writing=head.current;
-                        if !shared.page_blocked(&head.key)
+                        if !shared.recovery_blocked(&head.key)
                             && let Some(index)=available_lane(&lanes,writing)
                             && shared.reserve(&head.key) {
                             let claimed=if head.state==RecoveryUploadState::Pending {
                                 storage(store.claim_recovery_upload_attempt(head.event_id,head.ordinal,head.operation_id).await)?
                             } else {None};
                             if head.state==RecoveryUploadState::Pending && claimed.is_none() {shared.release(&head.key);continue;}
-                            recovery_due.insert(head.operation_id,Instant::now()+Duration::from_secs(if head.current {1}else{30}));
+                            recovery_due.insert(head.operation_id,(head.state,Instant::now()+Duration::from_secs(if head.current && head.state!=RecoveryUploadState::Blocked {1}else{30})));
                             passive|=!head.current;
                             if !head.current {prefer_watch=true;}
                             enqueue(&lanes[index],Work::Recovery(head,claimed),writing,&shared)?;
@@ -910,7 +978,7 @@ async fn supervise(
                 for retry in shared.deferred.lock().unwrap_or_else(|e|e.into_inner()).values().filter(|retry|retry.until>Instant::now()) {
                     wake=Some(wake.map_or(retry.until,|current:Instant|current.min(retry.until)));
                 }
-                for deadline in recovery_due.values().filter(|deadline|**deadline>Instant::now()) {
+                for (_,deadline) in recovery_due.values().filter(|(_,deadline)|*deadline>Instant::now()) {
                     wake=Some(wake.map_or(*deadline,|current:Instant|current.min(*deadline)));
                 }
             }
