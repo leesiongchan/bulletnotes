@@ -77,9 +77,17 @@ The first full run found lifecycle model fixtures that still assumed synchronous
 
 ## Independent review
 
-A fresh read-only review found three Important defects and no Critical defects. The consolidated fix pass explicitly completes cancelled or failed pending recovery requests, invalidates page-load readiness when outgoing position changes, and replaces historical destination ordering only after restoration validates destination reuse. Each finding reproduced before its fix and passed afterward. The native generated scratchpad contract also verifies recovery cancellation clears the busy state, allows editing, and admits close. The complete suite then passed with 326 tests.
+A fresh read-only review found three Important defects and no Critical defects. The consolidated fix pass explicitly completes cancelled or failed pending recovery requests, invalidates page-load readiness when outgoing position changes, and replaces historical destination ordering only after restoration validates destination reuse. Each finding reproduced before its fix and passed afterward. The native generated scratchpad contract also verifies recovery cancellation clears the busy state, allows editing, and admits close. Its loop stays alive until explicit quit so hiding the last window cannot truncate the check; the final contract passed twice consecutively. The complete suite then passed with 326 tests.
 
 The additional signed LaunchServices lifecycle check failed before the first rendered frame (`frames=0`), before note admission. The unchanged base commit `1c90b58` also fails the same fixture at startup on this host in this session. This check is **not passing** and does not establish a full-application Metal/startup regression caused by this change; it remains an unresolved validation gate. Widget-level native UI fixtures pass. Temporary diagnostic instrumentation was removed after the baseline comparison; no renderer or startup policy was changed.
+
+## Local preview
+
+An ad-hoc signed development bundle was built and verified at:
+
+`/Users/leesiongchan/Projects/bulletnotes/target/local-preview/build.gD92le/Bulletnotes Local.app`
+
+The bundle was not launched against the user's store. Changes are committed in the managed detached worktree `/Users/leesiongchan/.codex/worktrees/8b11/bulletnotes`; `main` still requires an explicit integration choice. The unresolved full-application first-frame validation gate above also applies to this handoff.
 
 ## Implementation decisions
 
