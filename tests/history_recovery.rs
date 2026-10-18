@@ -1,3 +1,6 @@
+use transitions::ReadyTransitions;
+#[path = "support/transitions.rs"]
+mod transitions;
 use bulletnotes::{
     app::coordinator::*,
     domain::{connection::ConnectionConfig, error::StoreError, page::*},
@@ -30,7 +33,7 @@ fn complete(app: &mut Coordinator, request: (u64, PageKey)) {
         position: Default::default(),
         permission: Permission::ReadWrite,
     };
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id,
         key,
         result: Ok(Some(page.into())),
@@ -39,7 +42,7 @@ fn complete(app: &mut Coordinator, request: (u64, PageKey)) {
 fn visited() -> Coordinator {
     let mut app = Coordinator::new(key("a.md").connection, || key("draft.md"));
     for path in ["a.md", "b.md", "c.md", "d.md"] {
-        let request = load(app.dispatch(AppAction::OpenPage(key(path))));
+        let request = load(app.dispatch_ready(AppAction::OpenPage(key(path))));
         complete(&mut app, request);
     }
     app
@@ -50,19 +53,19 @@ fn deleted_history_entries_are_skipped_in_both_directions() {
         let mut app = visited();
         if step > 0 {
             for _ in 0..3 {
-                let request = load(app.dispatch(AppAction::StepHistory(-1)));
+                let request = load(app.dispatch_ready(AppAction::StepHistory(-1)));
                 complete(&mut app, request);
             }
         }
         let original = app.editor().unwrap().key().clone();
-        let (mut request_id, mut missing) = load(app.dispatch(AppAction::StepHistory(step)));
+        let (mut request_id, mut missing) = load(app.dispatch_ready(AppAction::StepHistory(step)));
         for expected in if step < 0 {
             ["c.md", "b.md"]
         } else {
             ["b.md", "c.md"]
         } {
             assert_eq!(missing, key(expected));
-            let next = load(app.receive(AppEvent::PageLoaded {
+            let next = load(app.receive_ready(AppEvent::PageLoaded {
                 request_id,
                 key: missing,
                 result: Err(StoreError::PageMissing),
@@ -81,11 +84,11 @@ fn deleted_history_entries_are_skipped_in_both_directions() {
 #[test]
 fn transient_history_load_failures_leave_the_entry_available_for_retry() {
     let mut app = visited();
-    let (request_id, key) = load(app.dispatch(AppAction::StepHistory(-1)));
-    app.receive(AppEvent::PageLoaded {
+    let (request_id, key) = load(app.dispatch_ready(AppAction::StepHistory(-1)));
+    app.receive_ready(AppEvent::PageLoaded {
         request_id,
         key: key.clone(),
         result: Err(StoreError::Closed),
     });
-    assert_eq!(load(app.dispatch(AppAction::StepHistory(-1))).1, key);
+    assert_eq!(load(app.dispatch_ready(AppAction::StepHistory(-1))).1, key);
 }
