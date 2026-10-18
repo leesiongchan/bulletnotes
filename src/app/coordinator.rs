@@ -36,6 +36,10 @@ pub enum AppAction {
     Tick(Duration),
 }
 pub enum AppEvent {
+    SelectedPageStatus {
+        key: PageKey,
+        error: Option<crate::domain::error::SyncError>,
+    },
     RecoveryFinished {
         connection: ConnectionId,
         result: Result<RecoveryOutcome, StoreError>,
@@ -90,7 +94,7 @@ pub enum AppEffect {
 }
 enum Transition {
     Recovery(RecoveryIntent),
-    Open(PageKey, Option<NavigationState>),
+    Open(PageKey, Option<(NavigationState, i8)>),
     New,
     Quit,
     Hide,
@@ -98,7 +102,7 @@ enum Transition {
 struct PendingLoad {
     id: u64,
     key: PageKey,
-    history: Option<NavigationState>,
+    history: Option<(NavigationState, i8)>,
 }
 pub struct Coordinator {
     connection: ConnectionId,
@@ -117,6 +121,7 @@ pub struct Coordinator {
     notice: Option<&'static str>,
     make_draft: Box<dyn FnMut() -> PageKey>,
     selected_uncached: Option<PageKey>,
+    selected_page_error: Option<(PageKey, crate::domain::error::SyncError)>,
     catalogue_progress: Option<(usize, usize, bool)>,
     remote_state: crate::domain::status::SyncState,
     active_conflict: Option<(PageKey, LocalRevision, uuid::Uuid)>,
@@ -141,6 +146,7 @@ impl Coordinator {
             notice: None,
             make_draft: Box::new(make_draft),
             selected_uncached: None,
+            selected_page_error: None,
             catalogue_progress: None,
             remote_state: Default::default(),
             active_conflict: None,
@@ -185,7 +191,36 @@ impl Coordinator {
             .map(|(_, _, id)| *id)
     }
     fn uncached_notice(&mut self) {
-        if self.selected_uncached.is_some() {
+        if let Some(selected) = &self.selected_uncached {
+            if let Some((_, error)) = self
+                .selected_page_error
+                .as_ref()
+                .filter(|(key, _)| key == selected)
+            {
+                use crate::domain::error::SyncError;
+                self.notice = Some(match error {
+                    SyncError::Permission => {
+                        "Access to this page was denied. Your current note is still here."
+                    }
+                    SyncError::ResponseTooLarge => {
+                        "This page exceeds client resource limits. Your current note is still here."
+                    }
+                    SyncError::Authentication => {
+                        "Sign in to download this page. Your current note is still here."
+                    }
+                    SyncError::Network | SyncError::UnknownMutationOutcome => {
+                        "Page is not cached. Connect to download it; your current note is still here."
+                    }
+                    SyncError::Missing => {
+                        "This page is no longer available remotely. Your current note is still here."
+                    }
+                    SyncError::InvalidResponse | SyncError::Incompatible => {
+                        "This page returned invalid or unsupported data. Your current note is still here."
+                    }
+                    _ => "This page could not be downloaded. Your current note is still here.",
+                });
+                return;
+            }
             self.notice = Some(
                 if matches!(
                     self.remote_state,
@@ -327,6 +362,9 @@ impl Coordinator {
                 self.transition(Transition::New, &mut effects);
             }
             AppAction::StepHistory(step) => {
+                self.selected_uncached = None;
+                self.selected_page_error = None;
+                self.notice = None;
                 let mut history = self.navigation.clone();
                 let key = if step < 0 {
                     history.back()
@@ -336,7 +374,7 @@ impl Coordinator {
                     None
                 };
                 if let Some(key) = key {
-                    self.transition(Transition::Open(key, Some(history)), &mut effects);
+                    self.transition(Transition::Open(key, Some((history, step))), &mut effects);
                 }
             }
             AppAction::Search(request) => {
@@ -394,6 +432,12 @@ impl Coordinator {
     pub fn receive(&mut self, event: AppEvent) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match event {
+            AppEvent::SelectedPageStatus { key, error } => {
+                if self.selected_uncached.as_ref() == Some(&key) {
+                    self.selected_page_error = error.map(|error| (key, error));
+                    self.uncached_notice();
+                }
+            }
             AppEvent::RecoveryFinished { connection, result } => {
                 if connection != self.connection {
                     return effects;
@@ -535,7 +579,9 @@ impl Coordinator {
                 };
                 match result {
                     Ok(Some(mut page)) if page.key == key => {
-                        if let Some(history) = request.history {
+                        self.selected_uncached = None;
+                        self.selected_page_error = None;
+                        if let Some((history, _)) = request.history {
                             if let Some(position) = history
                                 .position()
                                 .filter(|position| position.validate(&page.body).is_ok())
@@ -554,6 +600,11 @@ impl Coordinator {
                     Ok(None) => {
                         self.selected_uncached = Some(key);
                         self.uncached_notice();
+                    }
+                    Err(StoreError::PageMissing) if request.history.is_some() => {
+                        let (_, step) = request.history.expect("guarded history request");
+                        self.navigation.remove_unavailable(&key);
+                        effects.extend(self.dispatch(AppAction::StepHistory(step)));
                     }
                     _ => {
                         self.notice = Some(

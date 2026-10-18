@@ -64,6 +64,7 @@ struct State {
     appearance: AppearanceUi,
     store: StoreHandle,
     quitting: Cell<bool>,
+    lifecycle_dispatched: Cell<bool>,
     changing_connection: Cell<bool>,
     sync: RefCell<Option<SyncHandle>>,
     sync_snapshot: RefCell<Option<SyncSnapshot>>,
@@ -114,6 +115,7 @@ impl LocalUi {
         self.0
             .receive(AppEvent::SyncStateChanged { connection, state });
         self.0.sync_snapshot.replace(Some(snapshot));
+        self.0.update_selected_status();
         self.0.render();
         self.0.refresh_remote();
         if self.0.coordinator.borrow().view() == View::Recovery
@@ -153,7 +155,7 @@ impl LocalUi {
             .0
             .window
             .upgrade()
-            .is_some_and(|window| window.get_recovery_busy())
+            .is_some_and(|window| window.get_recovery_busy() || window.get_lifecycle_pending())
         {
             return Err(LocalUiError::SaveFailed);
         }
@@ -303,7 +305,39 @@ impl LocalUi {
     }
 }
 impl State {
+    fn finish_lifecycle(&self) {
+        self.lifecycle_dispatched.set(false);
+        if let Some(window) = self.window.upgrade() {
+            window.set_lifecycle_pending(false);
+        }
+    }
+    fn update_selected_status(self: &Rc<Self>) {
+        let selected = self.coordinator.borrow().selected_uncached().cloned();
+        if let Some(key) = selected {
+            let error =
+                self.sync_snapshot.borrow().as_ref().and_then(|snapshot| {
+                    snapshot.page_errors.get(&key).copied().or(snapshot.error)
+                });
+            self.coordinator
+                .borrow_mut()
+                .receive(AppEvent::SelectedPageStatus { key, error });
+        }
+    }
     fn dispatch(self: &Rc<Self>, action: AppAction) {
+        if self
+            .window
+            .upgrade()
+            .is_some_and(|window| window.get_lifecycle_pending())
+            && !matches!(
+                &action,
+                AppAction::Tick(_)
+                    | AppAction::Flush
+                    | AppAction::RequestHide
+                    | AppAction::RequestQuit
+            )
+        {
+            return;
+        }
         if self.quitting.get() {
             return;
         }
@@ -321,6 +355,12 @@ impl State {
         if matches!(&action, AppAction::EditText(_)) {
             self.sync_facts.borrow_mut().take();
         }
+        if matches!(&action, AppAction::RequestHide | AppAction::RequestQuit) {
+            self.lifecycle_dispatched.set(true);
+            if let Some(window) = self.window.upgrade() {
+                window.set_lifecycle_pending(true);
+            }
+        }
         let tick = matches!(&action, AppAction::Tick(_));
         let mut app = self.coordinator.borrow_mut();
         let mut effects = if tick {
@@ -335,6 +375,7 @@ impl State {
         self.arm_save();
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
+        let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
         let recovery = match &event {
             AppEvent::RecoveryFinished { connection, result }
                 if connection == self.coordinator.borrow().connection() =>
@@ -373,6 +414,10 @@ impl State {
         let mut effects = app.dispatch(AppAction::Tick(self.started.elapsed()));
         effects.extend(app.receive(event));
         drop(app);
+        if save_failed && self.lifecycle_dispatched.get() {
+            self.finish_lifecycle();
+        }
+        self.update_selected_status();
         self.execute(effects);
         self.render();
         self.arm_save();
@@ -541,6 +586,7 @@ impl State {
                         window.invoke_window_will_hide();
                         let _ = window.hide();
                     }
+                    self.finish_lifecycle();
                 }
                 effect => {
                     if let Err(error) = self.writes.try_send(Work::Effect(effect))
@@ -826,6 +872,8 @@ impl State {
                 let _ = slint::quit_event_loop();
             } else {
                 state.quitting.set(false);
+                state.finish_lifecycle();
+                state.render();
                 if let Some(window) = state.window.upgrade() {
                     window.set_status_text(
                         "Quit could not finish saving. Your note is still here.".into(),
@@ -836,6 +884,7 @@ impl State {
         .is_err()
         {
             self.quitting.set(false);
+            self.finish_lifecycle();
         }
     }
 }
@@ -879,6 +928,7 @@ pub fn bind(
         appearance,
         store: store.clone(),
         quitting: Cell::new(false),
+        lifecycle_dispatched: Cell::new(false),
         changing_connection: Cell::new(false),
         sync: RefCell::new(None),
         sync_snapshot: RefCell::new(None),

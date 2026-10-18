@@ -432,6 +432,72 @@ mod network {
         sync.shutdown().await.unwrap();
         store.shutdown().await.unwrap();
     }
+    async fn identical_recreation(restart: bool) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.sqlite");
+        let mut store = StoreHandle::open(&path).await.unwrap();
+        let f = space_fixture::SpaceFixture::start().await;
+        f.data.lock().unwrap().content_addressed = true;
+        let c = client(&f);
+        let evidence = verify_write_guards(&c, new_probe_key(key("one.md").connection))
+            .await
+            .unwrap();
+        f.put("one.md", "identical generated content");
+        let original = c.read(&key("one.md")).await.unwrap();
+        store.apply_remote(original.clone()).await.unwrap();
+        store
+            .move_to_trash(key("one.md"), LocalRevision(0))
+            .await
+            .unwrap();
+        let sync = if restart {
+            let sent = store
+                .claim_pending(&key("one.md").connection, 1)
+                .await
+                .unwrap()
+                .pop()
+                .unwrap();
+            store.mark_unknown(sent.id).await.unwrap();
+            f.data.lock().unwrap().files.remove("one.md");
+            f.put("one.md", "identical generated content");
+            store.shutdown().await.unwrap();
+            store = StoreHandle::open(&path).await.unwrap();
+            SyncHandle::start(store.clone(), c.clone(), Some(evidence)).unwrap()
+        } else {
+            f.data.lock().unwrap().lost_delete = Some("one.md".into());
+            let sync = SyncHandle::start(store.clone(), c.clone(), Some(evidence)).unwrap();
+            until(|| f.data.lock().unwrap().deleted).await;
+            f.put("one.md", "identical generated content");
+            f.data.lock().unwrap().release.notify_one();
+            sync
+        };
+        assert_eq!(c.read(&key("one.md")).await.unwrap(), original);
+        until(|| sync.snapshot().conflicts > 0 || f.body("one.md").is_none()).await;
+        assert_eq!(
+            f.body("one.md").as_deref(),
+            Some("identical generated content"),
+            "unknown delete removed a same-content recreation"
+        );
+        assert_eq!(sync.snapshot().conflicts, 1);
+        let deletes = f
+            .data
+            .lock()
+            .unwrap()
+            .deletes
+            .iter()
+            .filter(|(path, _)| path == "one.md")
+            .count();
+        assert_eq!(deletes, if restart { 0 } else { 1 });
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+    #[tokio::test]
+    async fn identical_content_recreation_survives_unknown_delete() {
+        identical_recreation(false).await;
+    }
+    #[tokio::test]
+    async fn identical_content_recreation_survives_unknown_delete_after_restart() {
+        identical_recreation(true).await;
+    }
     #[tokio::test]
     async fn resolved_page_resumes_while_unrelated_pages_keep_syncing() {
         let dir = tempfile::tempdir().unwrap();

@@ -29,3 +29,5 @@ The Task 7 checkpoint passed 95 tests, with 12 native/manual tests explicitly ig
 - [SilverBullet filesystem handler](https://github.com/silverbulletmd/silverbullet/blob/main/server/src/handlers/fs.rs)
 - [reqwest ClientBuilder](https://docs.rs/reqwest/0.13.5/reqwest/struct.ClientBuilder.html)
 - [axum serve](https://docs.rs/axum/0.8.9/axum/fn.serve.html)
+
+Unknown DELETE outcomes are deliberately conservative. A missing readback acknowledges completion; any present page requires conflict review, including identical content and an equal strong revision. SilverBullet [documents content-derived SHA-256 validators](https://docs.silverbullet.md/HTTP%20API); these establish content equality, not file incarnation. Automatic retry would risk deleting a same-content recreation. Generated content-addressed fixtures cover both live readback and restart reconciliation.

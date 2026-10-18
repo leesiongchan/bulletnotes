@@ -316,3 +316,133 @@ fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
             .any(|effect| matches!(effect, AppEffect::Recovery(_)))
     );
 }
+
+fn select_uncached(app: &mut Coordinator, path: &str) -> PageKey {
+    let selected = PageKey {
+        connection: key("https://one.example/").connection,
+        path: PagePath::parse(path).unwrap(),
+    };
+    let id = app
+        .dispatch(AppAction::OpenPage(selected.clone()))
+        .into_iter()
+        .find_map(|effect| match effect {
+            AppEffect::LoadPage { request_id, .. } => Some(request_id),
+            _ => None,
+        })
+        .unwrap();
+    app.receive(AppEvent::PageLoaded {
+        request_id: id,
+        key: selected.clone(),
+        result: Ok(None),
+    });
+    selected
+}
+#[test]
+fn uncached_permission_and_resource_failures_explain_the_selected_page() {
+    use bulletnotes::domain::error::SyncError;
+    for (error, message) in [
+        (SyncError::Permission, "denied"),
+        (SyncError::ResponseTooLarge, "resource"),
+        (SyncError::InvalidResponse, "invalid"),
+    ] {
+        let mut app = app();
+        let selected = select_uncached(&mut app, "uncached.md");
+        app.receive(AppEvent::SelectedPageStatus {
+            key: selected,
+            error: Some(error),
+        });
+        assert!(
+            app.notice().unwrap().contains(message),
+            "{}",
+            app.notice().unwrap()
+        );
+        assert_eq!(app.editor().unwrap().body(), "base");
+    }
+}
+#[test]
+fn uncached_errors_are_key_scoped_and_clear_after_download() {
+    use bulletnotes::domain::error::SyncError;
+    let mut app = app();
+    let old = select_uncached(&mut app, "old.md");
+    let selected = select_uncached(&mut app, "new.md");
+    app.receive(AppEvent::SyncStateChanged {
+        connection: selected.connection.clone(),
+        state: SyncState::Synced,
+    });
+    app.receive(AppEvent::SelectedPageStatus {
+        key: selected.clone(),
+        error: Some(SyncError::Permission),
+    });
+    assert!(app.notice().unwrap().contains("denied"));
+    app.receive(AppEvent::SelectedPageStatus {
+        key: old,
+        error: Some(SyncError::ResponseTooLarge),
+    });
+    assert!(app.notice().unwrap().contains("denied"));
+    app.receive(AppEvent::SelectedPageStatus {
+        key: selected.clone(),
+        error: None,
+    });
+    assert!(app.notice().unwrap().contains("Downloading"));
+    let id = app
+        .dispatch(AppAction::OpenPage(selected.clone()))
+        .into_iter()
+        .find_map(|effect| match effect {
+            AppEffect::LoadPage { request_id, .. } => Some(request_id),
+            _ => None,
+        })
+        .unwrap();
+    let mut downloaded = snapshot("downloaded");
+    downloaded.key = selected.clone();
+    downloaded.remote_base = None;
+    app.receive(AppEvent::PageLoaded {
+        request_id: id,
+        key: selected,
+        result: Ok(Some(downloaded)),
+    });
+    assert_eq!(app.editor().unwrap().body(), "downloaded");
+    assert!(app.selected_uncached().is_none());
+    assert!(app.notice().is_none());
+}
+
+#[test]
+fn successful_history_navigation_cancels_an_uncached_download() {
+    use bulletnotes::domain::error::SyncError;
+    let mut app = app();
+    let mut second = snapshot("second");
+    second.key.path = PagePath::parse("second.md").unwrap();
+    let id = app
+        .dispatch(AppAction::OpenPage(second.key.clone()))
+        .into_iter()
+        .find_map(|effect| match effect {
+            AppEffect::LoadPage { request_id, .. } => Some(request_id),
+            _ => None,
+        })
+        .unwrap();
+    app.receive(AppEvent::PageLoaded {
+        request_id: id,
+        key: second.key.clone(),
+        result: Ok(Some(second)),
+    });
+    let abandoned = select_uncached(&mut app, "uncached.md");
+    let id = app
+        .dispatch(AppAction::StepHistory(-1))
+        .into_iter()
+        .find_map(|effect| match effect {
+            AppEffect::LoadPage { request_id, .. } => Some(request_id),
+            _ => None,
+        })
+        .unwrap();
+    app.receive(AppEvent::PageLoaded {
+        request_id: id,
+        key: snapshot("base").key,
+        result: Ok(Some(snapshot("base"))),
+    });
+    app.receive(AppEvent::SelectedPageStatus {
+        key: abandoned,
+        error: Some(SyncError::Permission),
+    });
+    assert!(app.selected_uncached().is_none());
+    assert!(app.notice().is_none());
+    assert_eq!(app.editor().unwrap().body(), "base");
+}

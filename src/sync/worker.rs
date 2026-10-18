@@ -361,13 +361,17 @@ async fn resolve(
         shared.online();
         return Ok(());
     }
-    let unchanged = match (&operation.condition, &remote) {
-        (WriteCondition::CreateOnly, RemoteRead::Missing(_)) => true,
-        (WriteCondition::Match(expected), RemoteRead::Present(file)) => {
-            file.revision.as_ref() == Some(expected)
-        }
-        _ => false,
-    };
+    // A content validator cannot prove that this is the same incarnation.
+    // A lost DELETE acknowledgement followed by identical-content recreation
+    // must be reviewed, even if its validator equals the original precondition.
+    let unchanged = operation.kind != MutationKind::Delete
+        && match (&operation.condition, &remote) {
+            (WriteCondition::CreateOnly, RemoteRead::Missing(_)) => true,
+            (WriteCondition::Match(expected), RemoteRead::Present(file)) => {
+                file.revision.as_ref() == Some(expected)
+            }
+            _ => false,
+        };
     if unchanged {
         if let RemoteRead::Present(file) = &remote
             && file.permission == Permission::ReadOnly

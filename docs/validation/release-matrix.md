@@ -93,3 +93,7 @@ zero connect/TLS time; this does not establish the remote server's health.
 Automatic offline retry behavior is covered by local/native fixtures. No resolver,
 proxy, TLS policy or server setting was changed to work around that observation.
 The user's existing note bodies and live preview processes remain untouched.
+
+## Final review verification
+
+The [independent branch review and fix record](final-review.md) documents four behavioral fixes and one deferred presentation minor. Final automated verification: 171 passed, zero failed, 18 explicit ignores; strict Clippy/fmt and Rust 1.92.0 production check passed. Generated native merge-shutdown/restart, two-client offline sync/restart, and lifecycle checks passed; the signed LaunchServices lifecycle check also passed. Closing freezes authoring through the complete durability transition and restores it after failure. No manual gate above is waived.

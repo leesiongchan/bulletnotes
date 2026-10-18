@@ -110,6 +110,13 @@ impl State {
         }
     }
     fn edit_draft(self: &Rc<Self>, key: PageKey, body: String) {
+        if self
+            .window
+            .upgrade()
+            .is_some_and(|window| window.get_lifecycle_pending())
+        {
+            return;
+        }
         self.draft_generation
             .set(self.draft_generation.get().wrapping_add(1));
         self.drafts.borrow_mut().insert(key.clone(), body.clone());
@@ -233,7 +240,7 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        if window.get_recovery_busy() {
+        if window.get_recovery_busy() || window.get_lifecycle_pending() {
             return;
         }
         window.set_recovery_busy(true);

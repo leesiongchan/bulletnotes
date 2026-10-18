@@ -57,6 +57,22 @@ impl NavigationState {
         self.view = View::Note;
         self.current().cloned()
     }
+    pub(crate) fn remove_unavailable(&mut self, key: &PageKey) {
+        let Some(cursor) = self.cursor else {
+            return;
+        };
+        let removed_before = self.history[..cursor]
+            .iter()
+            .filter(|entry| *entry == key)
+            .count();
+        self.history.retain(|entry| entry != key);
+        self.cursor = (!self.history.is_empty()).then(|| {
+            cursor
+                .saturating_sub(removed_before)
+                .min(self.history.len() - 1)
+        });
+        self.positions.remove(key);
+    }
     pub fn set_view(&mut self, view: View) {
         self.view = view;
     }

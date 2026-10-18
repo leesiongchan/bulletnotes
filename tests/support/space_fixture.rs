@@ -23,6 +23,7 @@ pub struct Entry {
 pub struct Data {
     pub files: BTreeMap<String, Entry>,
     pub revision: u64,
+    pub content_addressed: bool,
     pub lost_delete: Option<String>,
     pub deleted: bool,
     pub release: Arc<tokio::sync::Notify>,
@@ -47,7 +48,11 @@ impl SpaceFixture {
     pub fn put(&self, path: &str, body: &str) {
         let mut data = self.data.lock().unwrap();
         data.revision += 1;
-        let revision = data.revision;
+        let revision = if data.content_addressed {
+            content_revision(body)
+        } else {
+            data.revision
+        };
         data.files.insert(
             path.into(),
             Entry {
@@ -69,6 +74,14 @@ impl Drop for SpaceFixture {
     fn drop(&mut self) {
         self.task.abort();
     }
+}
+fn content_revision(body: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    // Content identity, deliberately not an incarnation counter. The algorithm
+    // is immaterial to the equality contract exercised by the fixture.
+    let mut hash = std::hash::DefaultHasher::new();
+    body.hash(&mut hash);
+    hash.finish()
 }
 fn reply(status: u16, body: impl Into<Body>, revision: Option<u64>) -> Response<Body> {
     let mut response = Response::builder()
@@ -144,10 +157,15 @@ async fn handle(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) -
                     return reply(412, "", None);
                 }
                 data.revision += 1;
-                let revision = data.revision;
+                let mut revision = data.revision;
                 if parts.method == Method::PUT {
                     let Ok(body) = String::from_utf8(body.to_vec()) else {
                         return reply(400, "", None);
+                    };
+                    revision = if data.content_addressed {
+                        content_revision(&body)
+                    } else {
+                        revision
                     };
                     data.files.insert(path.into(), Entry { body, revision });
                 } else {

@@ -17,7 +17,7 @@ use bulletnotes::{
 };
 use slint::ComponentHandle;
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     path::Path,
     rc::Rc,
     time::{Duration, Instant},
@@ -188,6 +188,8 @@ fn draft_contract() -> Result<()> {
     let weak = app.window().as_weak();
     let passed = Rc::new(Cell::new(false));
     let observed = passed.clone();
+    let expected_draft = Rc::new(RefCell::new(MERGE.to_owned()));
+    let expected_after_typing = expected_draft.clone();
     slint::spawn_local(async move {
         let result: Result<()> = async {
             until(|| local.current_key() == Some(key("one.md"))).await?;
@@ -204,7 +206,25 @@ fn draft_contract() -> Result<()> {
             until(||window.get_status_text().contains("Merged draft could not be saved")).await?;
             if window.get_recovery_merge()!=MERGE || retained_store.durability().await.is_err(){return Err("failed draft save lost the buffer or exited".into());}
             injector.execute_batch("DROP TRIGGER fail_merge")?;
-            observed.set(true);window.invoke_request_quit();
+            // Reach the merge TextInput through normal keyboard focus, and prove
+            // authoring resumes after a failed close before testing the race.
+            let press = |text: slint::SharedString| {
+                window.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: text.clone() });
+                window.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text });
+            };
+            window.invoke_focus_recovery_merge();
+            press("Q".into());
+            if window.get_recovery_merge() == MERGE { return Err("merge did not accept keyboard input after failed close".into()); }
+            window.set_recovery_merge(MERGE.into()); window.invoke_recovery_merge_edited();
+            pause(Duration::from_millis(350)).await?;
+            if retained_store.merge_draft(&key("one.md")).await?.as_deref() != Some(MERGE) { return Err("merge baseline was not durable before metadata contention".into()); }
+            injector.execute_batch("BEGIN IMMEDIATE")?;
+            window.invoke_request_quit();
+            pause(Duration::from_millis(40)).await?;
+            press("Z".into());
+            *expected_after_typing.borrow_mut() = window.get_recovery_merge().to_string();
+            injector.execute_batch("ROLLBACK")?;
+            observed.set(true);
             Ok(())
         }
         .await;
@@ -229,8 +249,8 @@ fn draft_contract() -> Result<()> {
     let reopened = runtime.block_on(StoreHandle::open(&path))?;
     let retained = runtime.block_on(reopened.merge_draft(&key("one.md")))?;
     runtime.block_on(reopened.shutdown())?;
-    if retained.as_deref() != Some(MERGE) {
-        return Err("immediate quit lost unapplied merged source".into());
+    if retained.as_deref() != Some(expected_draft.borrow().as_str()) {
+        return Err("quit lost merge input accepted while settings were pending".into());
     }
     let child = std::process::Command::new(std::env::current_exe()?)
         .arg("--draft-restart")
