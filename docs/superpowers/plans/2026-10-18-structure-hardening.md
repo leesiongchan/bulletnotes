@@ -45,9 +45,9 @@ Interfaces: private lifecycle model carries explicit Hide/Quit intent and Editin
 
 Files: app/local_ui.rs and private child modules effects.rs, presentation.rs, search.rs, synchronization.rs, lifecycle.rs, bindings.rs.
 Interfaces: public LocalUi preserved; child functions/methods private to controller; store worker effects return existing AppEvent.
-- [ ] Preserve existing behavioral regression baseline; add coverage only for an uncovered boundary discovered during extraction.
-- [ ] Extract worker creation/execution, projection, search/find, sync adaptation, lifecycle and binding functions by responsibility; preserve queue limits, weak references and error propagation.
-- [ ] Run strict all-feature checks and generated local/editor/sync/theme/recovery/lifecycle fixtures; commit.
+- [x] Preserve existing behavioral regression baseline; add coverage only for an uncovered boundary discovered during extraction.
+- [x] Extract worker creation/execution, projection, search/find, sync adaptation, lifecycle and binding functions by responsibility; preserve queue limits, weak references and error propagation.
+- [x] Run strict all-feature checks and generated local/editor/sync/theme/recovery/lifecycle fixtures; commit.
 
 ### Task 4: Callback readability
 
