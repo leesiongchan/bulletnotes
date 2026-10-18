@@ -108,14 +108,22 @@ fn align_buttons(window: &NSWindow) {
         // SAFETY: the live window and retained standard buttons are accessed on the main thread.
         if let Some(parent) = unsafe { button.superview() } {
             let frame = button.frame();
+            let bounds = parent.convertRect_toView(frame, None);
+            let delta =
+                window.frame().size.height - 22.0 - bounds.origin.y - bounds.size.height / 2.0;
             button.setFrameOrigin(objc2_foundation::NSPoint::new(
                 frame.origin.x,
-                parent.frame().size.height - 22.0 - frame.size.height / 2.0,
+                frame.origin.y + if parent.isFlipped() { -delta } else { delta },
             ));
         }
     }
 }
-fn animate_buttons(window: &NSWindow, visible: bool, immediate: bool, generation: &Rc<Cell<u64>>) {
+fn animate_buttons(
+    window: &Retained<NSWindow>,
+    visible: bool,
+    immediate: bool,
+    generation: &Rc<Cell<u64>>,
+) {
     let current = generation.get().wrapping_add(1);
     generation.set(current);
     if immediate {
@@ -146,7 +154,11 @@ fn animate_buttons(window: &NSWindow, visible: bool, immediate: bool, generation
         }
     });
     let generation = generation.clone();
+    let native = window.clone();
     let completion = RcBlock::new(move || {
+        if visible && generation.get() == current {
+            align_buttons(&native);
+        }
         if !visible && generation.get() == current {
             for button in &buttons {
                 button.setHidden(true);
