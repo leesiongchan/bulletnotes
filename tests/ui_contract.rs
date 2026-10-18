@@ -163,6 +163,30 @@ fn native_palette_and_view_changes_preserve_source() {
 }
 
 #[test]
+#[ignore = "opens generated-text native shortcut fixture; build ui_review first"]
+fn command_shortcuts_dispatch_actions_without_editing_note_source() {
+    let executable = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples/ui_review");
+    let output = std::process::Command::new(executable)
+        .arg("--shortcut-contract")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("native_shortcut_contract_passed: true")
+    );
+}
+
+#[test]
 #[ignore = "opens generated-text native fixture; build ui_review first"]
 fn native_appearance_actions_persist_and_roll_back_on_failure() {
     let executable = std::env::current_exe()

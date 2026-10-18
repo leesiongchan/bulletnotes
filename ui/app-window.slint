@@ -138,7 +138,8 @@ export component AppWindow inherits Window {
     public function focus-editor() { editor.focus-editor(); }
     public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
     function shortcut(event: KeyEvent) -> EventResult {
-        if (event.modifiers.meta) {
+        // Slint maps the macOS Command key to control.
+        if (event.modifiers.control) {
             if (event.text == "f" || event.text == "F") { root.show-find(); return accept; }
             if ((event.text == "g" || event.text == "G") && root.active-view == "note") { root.find-step(event.modifiers.shift ? -1 : 1); return accept; }
             if (event.text == "q" || event.text == "Q") { root.request-quit(); return accept; }

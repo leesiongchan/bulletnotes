@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-18",
+  "branch": "fix/macos-command-shortcuts",
+  "scope": "Apple Silicon macOS 14+",
+  "production_change": "Use Slint control modifier for Command shortcuts",
+  "regression": {
+    "red": "Command K: no Browse action on the original meta guard",
+    "green": "All 11 Command chords dispatch their expected callback and preserve exact CRLF/Unicode source; physical Control+comma does not dispatch an app action",
+    "test": "command_shortcuts_dispatch_actions_without_editing_note_source",
+    "default_test_policy": "explicitly ignored native test, exercised separately"
+  },
+  "full_checks": {
+    "passed": 184,
+    "failed": 0,
+    "ignored": 20
+  },
+  "formatting": "passed",
+  "strict_clippy": "passed",
+  "review": "No blocking findings for supported macOS; no product code changed after review",
+  "packaged_smoke": {
+    "binary_sha256": "9f3d690234bd5ae9451814d058a1de2f6a0b0897f005b1f5c92156585fa38c66",
+    "checks": [
+      "Command K opens search without inserting text",
+      "Command comma opens appearance without inserting text",
+      "Command F G and Shift G navigate matches without changing source",
+      "Command brackets navigate history",
+      "Command N from search creates an editable new note",
+      "Command S preserves source and saves",
+      "Command W hides and ordinary reopen restores text",
+      "Command Q quits and restart preserves source"
+    ],
+    "cleanup_confirmed": true,
+    "generated_pages": 3,
+    "original_selection_restored": true,
+    "input": "Public CGEvent.postToPid with modifier-change events; executable identity verified",
+    "physical_human_keyboard": "not claimed"
+  },
+  "manual_ime_and_voiceover": "remain unobserved",
+  "evidence_directory": ".superpowers/sdd/2026-10-18-command-shortcuts"
+}

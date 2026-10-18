@@ -10,6 +10,9 @@ use bulletnotes::{
 use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc, time::Duration};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--shortcut-contract") {
+        return shortcut_contract();
+    }
     let window = AppWindow::new()?;
     let mut settings = AppSettings {
         appearance: bulletnotes::theme::AppearanceSettings {
@@ -274,6 +277,113 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window.run()?;
     if std::env::args().any(|arg| arg == "--contract") && !passed.get() {
         return Err("native UI contract failed".into());
+    }
+    Ok(())
+}
+
+fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
+    use slint::platform::{Key, WindowEvent};
+    use std::cell::RefCell;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Action {
+        Browse,
+        New,
+        Appearance,
+        Find,
+        FindStep(i32),
+        Save,
+        History(i32),
+        Hide,
+        Quit,
+    }
+    fn record(actions: &Rc<RefCell<Vec<Action>>>, action: Action) -> impl Fn() + 'static {
+        let actions = actions.clone();
+        move || actions.borrow_mut().push(action)
+    }
+    fn chord(window: &AppWindow, modifier: Key, text: &str, shift: bool) {
+        let event = |key: slint::SharedString, pressed| {
+            window.window().dispatch_event(if pressed {
+                WindowEvent::KeyPressed { text: key }
+            } else {
+                WindowEvent::KeyReleased { text: key }
+            });
+        };
+        event(modifier.into(), true);
+        if shift {
+            event(Key::Shift.into(), true);
+        }
+        event(text.into(), true);
+        event(text.into(), false);
+        if shift {
+            event(Key::Shift.into(), false);
+        }
+        event(modifier.into(), false);
+    }
+
+    bulletnotes::platform::renderer::select()?;
+    let window = AppWindow::new()?;
+    present_settings(&window, &AppSettings::default(), SystemAppearance::Light)?;
+    let source = "Generated shortcut note\r\n日本語 café 👩🏽‍💻\r\n";
+    window.set_note_text(source.into());
+    let actions = Rc::new(RefCell::new(Vec::new()));
+    window.on_browse_pages(record(&actions, Action::Browse));
+    window.on_new_note(record(&actions, Action::New));
+    window.on_show_appearance(record(&actions, Action::Appearance));
+    window.on_find_opened(record(&actions, Action::Find));
+    window.on_save_now(record(&actions, Action::Save));
+    window.on_request_hide(record(&actions, Action::Hide));
+    window.on_request_quit(record(&actions, Action::Quit));
+    let observed = actions.clone();
+    window.on_find_step(move |step| observed.borrow_mut().push(Action::FindStep(step)));
+    let observed = actions.clone();
+    window.on_history_step(move |step| observed.borrow_mut().push(Action::History(step)));
+    let passed = Rc::new(Cell::new(false));
+    let result = passed.clone();
+    let weak = window.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(300), move || {
+        let window = weak.upgrade().unwrap();
+        for (key, shift, expected) in [
+            ("k", false, Action::Browse),
+            ("n", false, Action::New),
+            (",", false, Action::Appearance),
+            ("f", false, Action::Find),
+            ("g", false, Action::FindStep(1)),
+            ("G", true, Action::FindStep(-1)),
+            ("s", false, Action::Save),
+            ("[", false, Action::History(-1)),
+            ("]", false, Action::History(1)),
+            ("w", false, Action::Hide),
+            ("q", false, Action::Quit),
+        ] {
+            window.invoke_close_find();
+            window.invoke_focus_editor();
+            actions.borrow_mut().clear();
+            // Slint's public Control key represents macOS Command after Winit mapping.
+            chord(&window, Key::Control, key, shift);
+            assert_eq!(*actions.borrow(), [expected], "Command shortcut: {key}");
+            assert_eq!(
+                window.get_note_text(),
+                source,
+                "shortcut changed source: {key}"
+            );
+            if expected == Action::Find {
+                assert!(window.get_find_visible());
+            }
+        }
+        actions.borrow_mut().clear();
+        chord(&window, Key::Meta, ",", false);
+        assert!(
+            actions.borrow().is_empty(),
+            "physical Control is not Command"
+        );
+        result.set(true);
+        println!("native_shortcut_contract_passed: true");
+        let _ = slint::quit_event_loop();
+    });
+    window.run()?;
+    if !passed.get() {
+        return Err("native shortcut contract failed".into());
     }
     Ok(())
 }

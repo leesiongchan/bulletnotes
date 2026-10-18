@@ -24,8 +24,10 @@ to the deployed space, inspect existing notes, or synthesize physical key events
 | Second launch refuses a second writer and reopens the verified owner | Passed terminal and ad-hoc signed LaunchServices fixtures |
 | Appearance changes update the theme without altering source | Passed own-application Aqua/Dark Aqua KVO observation |
 | Off-screen placement is clamped; font and placement persist together | Passed native fixture |
-| Edge/corner resize and full top hover/drag strip | User confirmed in Preview 2; latest production composition needs manual repeat |
-| Physical shortcut delivery, previous-app focus, full-screen/Spaces, pinning | Manual observation open |
+| Edge/corner resize and full top hover/drag strip | User confirmed in the packaged build `build-20261018T040718Z` |
+| Physical Option+A hide/show, previous-app focus, pinning | User confirmed in the packaged build `build-20261018T040718Z` |
+| Physical full-screen/Spaces behavior | Manual observation open |
+| Four built-in themes, font sizes and paper styles | User confirmed in the packaged build `build-20261018T040718Z`; physical system appearance switching and restart persistence remain unobserved |
 | Real IME, clipboard/undo behavior, VoiceOver selection and editing | Manual observation open |
 | High contrast palette and minimum-size layout | Palette regressions passed; native Paper/Graphite captures inspected; physical OS toggle still open |
 | Reduced transparency/motion | Policy flags observed via public API; opaque/static UI; physical preference change still open |
@@ -130,3 +132,91 @@ lock and an observed About/activation reopening race were fixed. Verification:
 184 passed, zero failed, 19 explicit ignored gates, strict Clippy/fmt, Rust1.92
 checking, nine generated-data native contracts and signed LaunchServices lifecycle.
 These checks do not waive the broader release gates above.
+
+## Packaged UI acceptance — 2026-10-18
+
+The user reported “all good” for the requested hover controls, dragging,
+edge/corner resizing, pinning, Option+A hide/show and previous-app focus,
+four built-in themes, font sizes and paper styles in `build-20261018T040718Z`.
+This Apple Silicon development package was built from `063b935`; fresh checks
+passed 184 tests with 19 explicit ignores, formatting and strict Clippy.
+Packaging verified its ad-hoc signature and isolated Metal startup.
+
+The report covers those requested checks only. Physical IME, clipboard/undo,
+VoiceOver, full-screen/Spaces, system appearance switching, restart persistence
+and deployed-server acceptance remain open.
+
+## Sync acceptance recheck — 2026-10-18
+
+The current-source native `sync_review` example was rebuilt with all features.
+The explicitly selected
+`native_two_client_offline_reconnect_and_restart_preserve_source` check passed
+(one passed, zero failed). It exercised generated loopback data and a temporary
+SQLite store, including offline editing, remote updates, reconnect and
+separate-process restart. It did not open the user's store or use Keychain.
+
+The deployed `.ping` check failed before HTTP with curl error 6 (hostname
+resolution). This Mac's configured DNS resolver returned `NXDOMAIN` for both A
+and AAAA queries for `notes.harflix.lol`; a control A query for `github.com`
+succeeded. The system host lookup also returned no address. No deployed write
+probe was started. Private-network/VPN access or a changed endpoint remains to
+be clarified before live-server acceptance; this result does not establish the
+server's health or protocol compatibility. No DNS or app configuration changed.
+
+After the user reported restored connectivity, a retry returned HTTP 200 from
+`.ping`. The current-source
+`official_or_deployed_server_verifies_and_cleans_an_owned_page` check then passed
+(one passed, zero failed) against `https://notes.harflix.lol`. It verified readable
+catalogue access, guarded creation/update, rejection of stale updates/deletes and
+create collisions, exact owned-page readback, guarded deletion and confirmed
+absence. The separate local probe journal contained zero pending rows afterward.
+Only the generated probe page was mutated; no existing note bodies or real
+Keychain entries were accessed by this check. The earlier DNS observation is
+superseded for connectivity; no DNS or app configuration was changed here.
+This verifies the deployed protocol and write guards. A packaged-app/browser
+round trip and offline/reconnect acceptance against the real space remain open.
+
+## Live packaged-app round trip — 2026-10-18
+
+The exact ARM64 development package `build-20261018T040718Z` from `063b935`
+was exercised on macOS 27.0.1 against the deployed space and the real SilverBullet
+browser editor. [Structured evidence](live-sync-evidence.json) identifies the
+binary and results. Native editing used macOS accessibility actions; browser
+editing used the agent-browser skill in an isolated named browser session.
+
+| Check | Observed result |
+| --- | --- |
+| Native edit reaches the browser automatically | Passed, exact generated Japanese/emoji source |
+| Browser edit reaches the packaged app through automatic polling | Passed, exact source and Synced status |
+| App is offline while browser/server remain online | Passed; scoped HTTPS CONNECT tunnel disconnected only this app; upstream TLS validation remained enabled |
+| Offline edit is saved locally without changing the server | Passed, native local-save acknowledgement and independent server/browser readback |
+| Normal quit and restart while still offline restore the edit | Passed, exact generated source before reconnecting |
+| Reconnection automatically uploads the restored edit | Passed, server/browser exact readback and native Synced status without manual Save or Connect |
+| Cleanup and normal launch | Passed; guarded deletion and 404 confirmed, owned browser closed, proxy stopped, normal app reopened with original note selected and Synced |
+
+The production binary has no alternate-store option, so this pass used its normal
+application store with a uniquely named test page, rather than the isolated
+database used by the earlier native fixture. The disposable driver's first two
+attempts exposed browser text-replacement and initial accessibility-action timing
+issues; corrected automation completed the full sequence. Its logs and generated
+sources remain in the ignored evidence directory recorded by the JSON file.
+
+An additional product defect was found: Command+K inserted `k` instead of
+opening All Pages. The single temporary character was immediately removed and
+the restored text reached Synced before testing continued on the generated page.
+At this checkpoint the shared handler in `ui/app-window.slint` checked `event.modifiers.meta`, while
+the pinned Slint source maps macOS Command to `control` and Control to `meta`.
+The subsequent correction below resolves this finding. These observations do
+not establish physical IME composition or VoiceOver behavior.
+
+## Command shortcut correction — 2026-10-18
+
+The shared handler now uses Slint's `control` modifier for macOS Command.
+The [regression and native verification record](command-shortcuts.md) documents
+the observed failing-then-passing test, 11 Command combinations with exact source
+preservation, negative physical-Control routing, and a fresh packaged-app smoke
+check covering every Command combination with OS-delivered events. Full checks
+passed 184 tests with zero failures and 20 explicit ignores; the new native
+regression was run explicitly. Three generated pages were cleaned up with guarded
+deletion and confirmed absence. Review found no blocking macOS issue. Human
+keyboard, IME, VoiceOver and the remaining release gates retain their own status.
