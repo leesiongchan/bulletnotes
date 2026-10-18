@@ -16,7 +16,7 @@ F1–F20 with at least one modifier. A failed change keeps the working shortcut.
 Hover near the top or bottom edge to reveal the matching header or footer.
 F6 moves keyboard focus through header, footer and the active view; Escape returns
 to that view. Revealing controls does not move or rewrap the note. The header
-includes native window controls and the drag area. Resize from edges/corners; Pin keeps the note above ordinary windows. Closing
+includes native window controls, Settings, Search, New scratchpad, Pin, and the drag area. The capsule footer contains Trash, the note date/position, Older, Newer, Jump to Newest, and Changes. Resize from edges/corners; Pin keeps the note above ordinary windows. Closing
 hides the window after local saves finish. **BN → Quit Bulletnotes** drains local
 writes and cancels network work. A failed local save retains the editable buffer;
 retry or copy the source using normal editing commands.
@@ -24,10 +24,32 @@ retry or copy the source using normal editing commands.
 All pages searches the local catalogue by literal phrase and optional folder.
 **More pages** loads the next result batch, including pages beyond the initial
 batch. Cached pages open offline. Online-only pages require a successful download;
-index progress indicates when full content search is incomplete. Back/forward
-returns to visited notes. The current-note find bar searches exact source text.
+index progress indicates when full content search is incomplete. Command+K opens
+all-page search; Command+F searches exact source within the current note.
+
+Command+N creates a scratchpad that saves locally and automatically syncs under
+`Quick Notes/` once it contains text. Older/Newer (Command+[ / Command+]) traverse
+this folder's stack in durable creation order; edits, visits, and sync do not
+reorder it. Command+1 jumps to newest. The footer shows `1 of N` at newest, and a
+small accent dot marks it while controls are hidden. Ordinary SilverBullet pages
+have no stack position; Jump to Newest returns to scratchpads.
+
+Existing generated filenames supply their creation time. Manually named legacy
+scratchpads use their modification time once, or first local observation when
+unknown. Ordering metadata is local to the selected connection and survives
+restart. Catalogue-only entries count too; opening one needs a download. A failed
+save or metadata check retains the current note. Delete moves a note to recoverable
+Trash and selects an older neighbor, a newer neighbor, or a fresh blank when the
+stack is empty. There is no automatic expiry. Command+P toggles Pin.
+
+Known selection targets can be restored, and auxiliary views retain the editor.
+Exact live directional selection capture across page changes/relaunch remains an
+open supported-API requirement; see the [selection investigation](validation/selection-api.md).
 
 ## Appearance
+
+Text size and paper controls appear before the theme collection. Command+comma
+opens these settings.
 
 Paper, Graphite, Matcha and Rose are built in. Light and Dark assignments are
 independent; System follows macOS appearance notifications. Font size (11–24
