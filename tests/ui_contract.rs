@@ -215,7 +215,7 @@ fn native_appearance_actions_persist_and_roll_back_on_failure() {
 
 #[test]
 #[ignore = "captures the generated native review window; build ui_review first"]
-fn floating_chrome_keeps_paper_edges_and_inset_surfaces_at_maximum_text_size() {
+fn floating_chrome_header_meets_top_edge_at_maximum_text_size() {
     let executable = std::env::current_exe()
         .unwrap()
         .parent()
@@ -256,7 +256,7 @@ fn floating_chrome_keeps_paper_edges_and_inset_surfaces_at_maximum_text_size() {
         } else {
             [252, 250, 244]
         };
-        for y in [40, frame.height as usize - 30] {
+        for y in [4, 20, frame.height as usize - 30] {
             let mut surface_pixels = 0;
             for x in 40..frame.width as usize - 40 {
                 let offset = (y * frame.width as usize + x) * channels;

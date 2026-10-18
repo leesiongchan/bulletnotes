@@ -108,7 +108,7 @@ fn restart(path: &Path, nonce: &str) -> Result<()> {
             let _ = slint::quit_event_loop();
         }
     })?;
-    app.run()?;
+    app.run(&runtime)?;
     if !passed.get()
         || !matches!(
             runtime.block_on(store.durability()),
@@ -318,7 +318,7 @@ fn main() -> Result<()> {
         eprintln!("native sync fixture deadline");
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     if !passed.get()
         || !matches!(
             runtime.block_on(store.durability()),

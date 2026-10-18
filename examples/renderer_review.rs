@@ -95,7 +95,7 @@ fn main() -> Result<()> {
     slint::Timer::single_shot(Duration::from_secs(20), || {
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     outcome
         .borrow_mut()
         .take()

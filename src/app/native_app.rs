@@ -204,7 +204,9 @@ impl LocalApplication {
         self.integration.show()?;
         Ok(())
     }
-    pub fn run(&self) -> AppResult<()> {
+    pub fn run(&self, runtime: &tokio::runtime::Runtime) -> AppResult<()> {
+        // Slint polls local reconciliation futures on the main thread outside Tokio's executor.
+        let _entered = runtime.enter();
         self.tray.show()?;
         self.show()?;
         slint::run_event_loop_until_quit()?;

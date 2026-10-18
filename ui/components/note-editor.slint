@@ -6,7 +6,7 @@ export component NoteEditor inherits Rectangle {
     in property <float> font-size-px:15;
     in property <string> paper-style:"plain";
     in property <bool> read-only:false;
-    in property <length> top-clearance:64px;
+    in property <length> top-clearance:16px;
     out property <float> scroll-y:-scroll.content-y / 1px;
     out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
     callback edited(string);
@@ -111,9 +111,9 @@ export component NoteEditor inherits Rectangle {
             content-width: self.visible-width;
             content-height: max(self.visible-height,input.preferred-height + root.top-clearance + 64px);
             input := TextInput {
-                x: 26px;
+                x: 40px;
                 y: root.top-clearance;
-                width: max(1px,scroll.visible-width - 52px);
+                width: max(1px,scroll.visible-width - 80px);
                 height: max(scroll.visible-height - root.top-clearance - 64px,self.preferred-height);
                 text <=> root.text;
                 single-line: false;

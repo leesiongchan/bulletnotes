@@ -34,6 +34,7 @@ impl LocalUi {
             .sync
             .snapshot
             .replace(sync.as_ref().map(SyncHandle::snapshot));
+        self.0.update_sync_selection();
         self.0.render();
         previous
     }
@@ -99,6 +100,17 @@ impl LocalUi {
 }
 
 impl State {
+    pub(super) fn update_sync_selection(&self) {
+        if let Some(sync) = self.sync.handle.borrow().as_ref() {
+            let app = self.coordinator.borrow();
+            let selected = if app.view() == View::Note {
+                app.editor().map(|editor| editor.key().clone())
+            } else {
+                None
+            };
+            sync.set_selected_page(selected);
+        }
+    }
     pub(super) fn update_selected_status(self: &Rc<Self>) {
         let selected = self.coordinator.borrow().selected_uncached().cloned();
         if let Some(key) = selected {

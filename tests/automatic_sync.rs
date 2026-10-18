@@ -1073,6 +1073,28 @@ async fn legacy_unknown_delete_is_discovered_and_preserves_authored_draft() {
         store.retired_delete_keys(config().id()).await.unwrap(),
         vec![key("one.md")]
     );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let reads = f
+        .data
+        .lock()
+        .unwrap()
+        .reads
+        .get("one.md")
+        .copied()
+        .unwrap_or(0);
+    sync.set_selected_page(Some(key("one.md")));
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert_eq!(
+        f.data
+            .lock()
+            .unwrap()
+            .reads
+            .get("one.md")
+            .copied()
+            .unwrap_or(0),
+        reads,
+        "foreground selection must preserve the retired-delete watch cadence"
+    );
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
 }

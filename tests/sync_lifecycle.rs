@@ -33,7 +33,7 @@ async fn until(mut predicate: impl FnMut() -> bool) {
     .unwrap();
 }
 #[tokio::test]
-async fn write_waits_for_local_commit_and_750ms_then_preserves_newer_edits() {
+async fn write_waits_for_local_commit_and_250ms_then_preserves_newer_edits() {
     let dir = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&dir.path().join("test.sqlite"))
         .await
@@ -52,10 +52,14 @@ async fn write_waits_for_local_commit_and_750ms_then_preserves_newer_edits() {
         .save_local(key(), "revision one".into(), LocalRevision(1))
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(650)).await;
+    tokio::time::sleep(Duration::from_millis(180)).await;
     assert!(!f.seen().iter().any(|r| r.method == reqwest::Method::PUT));
     f.fault(Fault::TimeoutAfterWrite);
-    until(|| f.body().as_deref() == Some(b"revision one")).await;
+    tokio::time::timeout(Duration::from_millis(400), async {
+        until(|| f.body().as_deref() == Some(b"revision one")).await;
+    })
+    .await
+    .expect("a quiet committed edit must upload after 250ms");
     store
         .save_local(key(), "revision two".into(), LocalRevision(2))
         .await
@@ -71,6 +75,322 @@ async fn write_waits_for_local_commit_and_750ms_then_preserves_newer_edits() {
             .filter(|r| r.method == reqwest::Method::PUT)
             .count(),
         2
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn continuous_local_commits_upload_within_one_second_without_waiting_for_quiet() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(None).await;
+    let c = client(&f, Duration::from_secs(2));
+    let evidence = verify_write_guards(&c, new_probe_key(config().id().clone()))
+        .await
+        .unwrap();
+    f.data.lock().unwrap().seen.clear();
+    store.create_draft(key()).await.unwrap();
+    let sync = SyncHandle::start(store.clone(), c, Some(evidence)).unwrap();
+    let started = tokio::time::Instant::now();
+    for revision in 1..=8 {
+        store
+            .save_local(
+                key(),
+                format!("revision {revision}"),
+                LocalRevision(revision),
+            )
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        if f.body().is_some() {
+            break;
+        }
+    }
+    assert!(
+        f.body().is_some(),
+        "continuous saves starved the first upload"
+    );
+    assert!(started.elapsed() < Duration::from_millis(1250));
+    assert_eq!(
+        f.seen()
+            .iter()
+            .filter(|request| request.method == reqwest::Method::PUT)
+            .count(),
+        1
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn selected_cached_page_detects_remote_edits_without_a_catalogue_refresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"original source")).await;
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().complete).await;
+    sync.set_selected_page(Some(key()));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    {
+        let mut data = f.data.lock().unwrap();
+        data.seen.clear();
+        data.body = Some(b"remote edit".to_vec());
+        data.revision += 1;
+    }
+    let fresh = tokio::time::timeout(Duration::from_millis(1500), async {
+        loop {
+            if store.load_page(&key()).await.unwrap().unwrap().body == "remote edit" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+    assert!(
+        fresh.is_ok(),
+        "the selected cached page waited for the 30-second catalogue poll"
+    );
+    let requests = f.seen();
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.uri.ends_with("/sample.md")),
+        "foreground refresh listed the whole catalogue"
+    );
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request.method == reqwest::Method::GET)
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn selected_page_idle_checks_use_head_and_stop_when_hidden_or_cleared() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"unchanged source")).await;
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().complete).await;
+    f.data.lock().unwrap().seen.clear();
+    sync.set_selected_page(Some(key()));
+    until(|| !f.seen().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(2200)).await;
+    let requests = f.seen();
+    assert!(
+        (2..=3).contains(&requests.len()),
+        "idle checks were not bounded to approximately once per second: {}",
+        requests.len()
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.method == reqwest::Method::HEAD
+                && request.uri.ends_with("/sample.md"))
+    );
+
+    sync.set_active(false);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    f.data.lock().unwrap().seen.clear();
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    assert!(
+        f.seen().is_empty(),
+        "a hidden note kept its foreground heartbeat"
+    );
+
+    sync.set_active(true);
+    until(|| !f.seen().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    sync.set_selected_page(None);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    f.data.lock().unwrap().seen.clear();
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    assert!(
+        f.seen().is_empty(),
+        "clearing selection kept the old heartbeat"
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn changing_selected_cached_page_immediately_checks_the_new_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"cached source")).await;
+    f.data.lock().unwrap().catalogue_override = Some(serde_json::json!([
+        {"name":"sample.md"}, {"name":"other.md"}
+    ]));
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().complete).await;
+    sync.set_selected_page(Some(key()));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    f.data.lock().unwrap().seen.clear();
+    let other = PageKey {
+        connection: config().id().clone(),
+        path: PagePath::parse("other.md").unwrap(),
+    };
+    sync.set_selected_page(Some(other));
+    tokio::time::timeout(Duration::from_millis(300), until(|| !f.seen().is_empty()))
+        .await
+        .expect("switching a cached note must check it immediately");
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let requests = f.seen();
+    assert!((2..=3).contains(&requests.len()));
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.method == reqwest::Method::HEAD
+                && request.uri.ends_with("/other.md")),
+        "selection switch retained the previous heartbeat or listed the catalogue"
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn selected_page_permission_failure_does_not_retry_on_each_heartbeat() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"cached source")).await;
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().complete).await;
+    f.data.lock().unwrap().seen.clear();
+    f.fault(Fault::Status(403));
+    sync.set_selected_page(Some(key()));
+    until(|| sync.snapshot().page_errors.contains_key(&key())).await;
+    tokio::time::sleep(Duration::from_millis(2200)).await;
+    assert_eq!(
+        f.seen().len(),
+        1,
+        "foreground checks bypassed the page error gate"
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn changing_selection_preserves_network_backoff() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"cached source")).await;
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().complete).await;
+    f.data.lock().unwrap().seen.clear();
+    f.fault(Fault::Status(500));
+    sync.set_selected_page(Some(key()));
+    until(|| sync.snapshot().error.is_some()).await;
+    for _ in 0..20 {
+        sync.set_selected_page(None);
+        sync.set_selected_page(Some(key()));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert!(
+        (1..=3).contains(&f.seen().len()),
+        "selection changes bypassed network backoff: {} requests",
+        f.seen().len()
+    );
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn selected_cached_page_bypasses_the_remaining_background_downloads() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(Some(b"cached source")).await;
+    let c = client(&f, Duration::from_secs(2));
+    let selected = PageKey {
+        connection: config().id().clone(),
+        path: PagePath::parse("page-099.md").unwrap(),
+    };
+    store
+        .apply_remote(c.read(&selected).await.unwrap())
+        .await
+        .unwrap();
+    f.data.lock().unwrap().catalogue_override = Some(serde_json::Value::Array(
+        (0..100)
+            .map(|n| serde_json::json!({"name":format!("page-{n:03}.md")}))
+            .collect(),
+    ));
+    f.fault(Fault::SlowReads);
+    let sync = SyncHandle::start(store.clone(), c, None).unwrap();
+    until(|| sync.snapshot().catalogue_total == 100).await;
+    {
+        let mut data = f.data.lock().unwrap();
+        data.body = Some(b"new selected source".to_vec());
+        data.revision += 1;
+    }
+    sync.set_selected_page(Some(selected.clone()));
+    let fresh = tokio::time::timeout(Duration::from_millis(1500), async {
+        loop {
+            if store.load_page(&selected).await.unwrap().unwrap().body == "new selected source" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(
+        fresh.is_ok(),
+        "a selected cached page waited behind the entire background download queue"
+    );
+    assert!(!sync.snapshot().complete);
+    sync.shutdown().await.unwrap();
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn selecting_a_local_only_draft_does_not_observe_a_remote_deletion() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+        .await
+        .unwrap();
+    let f = Fixture::start(None).await;
+    store.create_draft(key()).await.unwrap();
+    store
+        .save_local(key(), "unsent draft".into(), LocalRevision(1))
+        .await
+        .unwrap();
+    let sync = SyncHandle::start(store.clone(), client(&f, Duration::from_secs(2)), None).unwrap();
+    until(|| sync.snapshot().generation > 1).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    f.data.lock().unwrap().seen.clear();
+    sync.set_selected_page(Some(key()));
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert!(
+        f.seen().is_empty(),
+        "an unsent local draft was read as a remote page"
+    );
+    assert_eq!(
+        store.load_page(&key()).await.unwrap().unwrap().body,
+        "unsent draft"
+    );
+    assert!(
+        store
+            .recovery_uploads(config().id(), 10)
+            .await
+            .unwrap()
+            .is_empty()
     );
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();

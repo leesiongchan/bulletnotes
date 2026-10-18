@@ -342,7 +342,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         timeout.set(true);
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     if !checked.get() || timed_out.get() {
         return Err("native lifecycle check failed".into());
     }
@@ -423,7 +423,7 @@ fn restart_generated(path: &std::path::Path) -> Result<(), Box<dyn std::error::E
         timeout.set(true);
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     if !checked.get() || timed_out.get() {
         return Err("generated restart check failed".into());
     }

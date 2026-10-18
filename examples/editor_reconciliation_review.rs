@@ -127,6 +127,7 @@ fn main() -> Result<()> {
     let local = app.local().clone();
     let weak = app.window().as_weak();
     let saved = store.clone();
+    let background_runtime = runtime.handle().clone();
     let passed = Rc::new(Cell::new(false));
     let observed = passed.clone();
     slint::spawn_local(async move {
@@ -164,7 +165,7 @@ fn main() -> Result<()> {
             let remote_body = BASE.replace("jumps", "runs");
             let background = saved.clone();
             let observation = remote(&remote_body, "b");
-            tokio::spawn(async move { background.apply_remote(observation).await }).await??;
+            background_runtime.spawn(async move { background.apply_remote(observation).await }).await??;
             eprintln!("fixture phase: remote stored");
             local.receive_sync(snapshot());
             until(|| window.get_note_text() == format!("Q{remote_body}")).await?;
@@ -197,7 +198,7 @@ fn main() -> Result<()> {
             let injector = rusqlite::Connection::open(path)?;
             injector.execute_batch("CREATE TRIGGER fail_native_draft_drain BEFORE INSERT ON merge_drafts BEGIN SELECT RAISE(ABORT,'generated native draft drain failure'); END;")?;
             let background = saved.clone();
-            let failed = tokio::spawn(async move {
+            let failed = background_runtime.spawn(async move {
                 background.apply_remote(remote("later server source", "c")).await
             }).await?;
             assert!(matches!(failed,Err(bulletnotes::domain::error::StoreError::Database(rusqlite::Error::SqliteFailure(_,Some(message)))) if message=="generated native draft drain failure"),"worker must report the exact injected draft drain failure");
@@ -214,7 +215,7 @@ fn main() -> Result<()> {
             window.invoke_recovery_merge_edited();
             assert!(saved.load_stored_merge_draft(&key()).await?.is_none());
             let background = saved.clone();
-            tokio::spawn(async move {
+            background_runtime.spawn(async move {
                 background.apply_remote(remote("later server source", "c")).await
             }).await??;
             eprintln!("fixture phase: worker commit completed after latest draft drain");
@@ -259,8 +260,11 @@ fn main() -> Result<()> {
     slint::Timer::single_shot(Duration::from_secs(25), || {
         let _ = slint::quit_event_loop();
     });
-    let _entered = runtime.enter();
-    app.run()?;
+    assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "the application must enter its runtime without a fixture guard"
+    );
+    app.run(&runtime)?;
     eprintln!("fixture frames: {}", app.rendered_frame_count());
     if !passed.get() {
         return Err("generated native editor reconciliation fixture failed".into());

@@ -161,6 +161,19 @@ pub fn run() -> Result<()> {
                 .standardWindowButton(NSWindowButton::CloseButton)
                 .ok_or("native close button missing")?;
             assert!(close.isHidden());
+            // The first line remains clickable inside the transparent native titlebar area.
+            window.invoke_restore_editor_position(6, 6, 0.0);
+            mouse(&window, 42.0, size.height - 27.0, NSEventType::LeftMouseDown)?;
+            mouse(&window, 42.0, size.height - 27.0, NSEventType::LeftMouseUp)?;
+            pause(40).await?;
+            edges(&window, (false, false))?;
+            key(&window, "X".into());
+            pause(30).await?;
+            assert_eq!(window.get_note_text(), format!("X{source}"));
+            undo(&window);
+            pause(30).await?;
+            assert_eq!(window.get_note_text(), source);
+            println!("native_first_line_pointer_edit_passed: true");
             mouse(
                 &window,
                 size.width / 2.0,
@@ -172,13 +185,13 @@ pub fn run() -> Result<()> {
             println!("reveal_midpoint_opacity: {}", window.get_header_opacity());
             capture(&window, "midpoint")?;
             pause(180).await?;
-            assert!(!close.isHidden() && close.isEnabled());
+            assert!(!close.isHidden() && close.isEnabled(), "native header buttons hidden={},enabled={},revealed={},hovered={},opacity={},key={},unexpected_mouse={}", close.isHidden(), close.isEnabled(), window.get_header_revealed(), window.get_header_hovered(), window.get_header_opacity(), native.isKeyWindow(), unexpected_mouse.get());
             capture(&window, "header")?;
-            // The gap and complete inset surface belong to the same retention region.
+            // The small gap below the header belongs to the same retention region.
             mouse(
                 &window,
                 size.width / 2.0,
-                size.height - 50.0,
+                size.height - 40.0,
                 NSEventType::MouseMoved,
             )?;
             pause(140).await?;
@@ -192,7 +205,7 @@ pub fn run() -> Result<()> {
             edges(&window, (false, false))?;
             assert!(window.get_header_opacity() > 0.0);
             println!("fade_retention_reentry_opacity: {}", window.get_header_opacity());
-            mouse(&window, size.width / 2.0, size.height - 50.0, NSEventType::MouseMoved)?;
+            mouse(&window, size.width / 2.0, size.height - 40.0, NSEventType::MouseMoved)?;
             pause(30).await?;
             edges(&window, (true, false))?;
             mouse(

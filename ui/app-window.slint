@@ -243,7 +243,7 @@ export component AppWindow inherits Window {
                 editor := NoteEditor {
                     width: parent.width;
                     height: parent.height;
-                    top-clearance:root.find-visible ? 100px : 64px;
+                    top-clearance:root.find-visible ? 84px : 16px;
                     theme: root.theme;
                     text <=> root.note-text;
                     font-size-px: root.font-size-px;
@@ -255,7 +255,7 @@ export component AppWindow inherits Window {
                 }
 
                 find := FindBar {
-                    y: 56px; height: 36px; width: parent.width;
+                    y: 40px; height: 36px; width: parent.width;
                     visible: root.find-visible;
                     theme: root.theme; query <=> root.find-query; status: root.find-status;
                     query-changed(query) => { root.find-query-changed(query); }
@@ -337,9 +337,9 @@ export component AppWindow inherits Window {
                 reload => { root.recovery-reload(); }
             }
             header := Rectangle {
-                x:8px; y:8px - (root.prefers-reduced-motion || root.header-revealed ? 0px : 4px);
-                width:parent.width - 16px; height:root.active-view == "note" ? 44px : 28px;
-                border-radius:10px; background:root.theme.surface;
+                x:0px; y:root.prefers-reduced-motion || root.header-revealed ? 0px : -4px;
+                width:parent.width; height:36px;
+                background:root.theme.surface;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
                 opacity:root.header-revealed ? 1 : 0;
                 visible:self.opacity > 0;
@@ -347,17 +347,10 @@ export component AppWindow inherits Window {
                 WindowMoveArea { x:78px; width:parent.width - 118px; height:parent.height; enabled:root.header-revealed; }
                 WindowMoveArea { width:78px; y:28px; height:max(0px,parent.height - 28px); enabled:root.header-revealed; }
                 Text {
-                    x:84px; y:root.active-view == "note" ? 5px : 0px;
-                    width:parent.width - 128px; height:16px;
-                    text:"Bulletnotes"; horizontal-alignment:center;
-                    color:root.theme.muted; font-size:11px;
-                }
-                Text {
-                    x:84px; y:23px; width:parent.width - 128px; height:14px;
-                    visible:root.active-view == "note";
-                    text:!root.native-warning || root.native-message.is-empty ? (root.current-path == "" ? "Quick note" : root.current-path) : root.native-message;
-                    color:root.theme.muted; font-size:10px; overflow:elide;
-                    horizontal-alignment:center;
+                    x:84px; width:parent.width - 128px; height:parent.height;
+                    text:root.active-view != "note" ? "Bulletnotes" : (!root.native-warning || root.native-message.is-empty ? (root.current-path == "" ? "Quick note" : root.current-path) : root.native-message);
+                    color:root.theme.muted; font-size:11px; overflow:elide;
+                    horizontal-alignment:center; vertical-alignment:center;
                 }
                 pin := ActionButton {
                     x:parent.width - 34px; y:(parent.height - self.height) / 2;

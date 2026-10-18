@@ -184,7 +184,7 @@ impl ChromeMonitor {
                             && point.y >= 0.0
                             && point.y <= size.height;
                         let header_depth = if W::FLOATING {
-                            if shown_header { 56.0 } else { 16.0 }
+                            if shown_header { 44.0 } else { 16.0 }
                         } else {
                             36.0
                         };

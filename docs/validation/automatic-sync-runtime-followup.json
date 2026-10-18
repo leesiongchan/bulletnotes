@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-18",
+  "reported_trigger": "app bundle exits after a remote edit",
+  "reproduced": true,
+  "root_cause": "Production Slint event loop had no entered Tokio runtime. Editor rebase and durable editor replay can invoke the blocking merge executor from a Slint local future; spawn_blocking panics without the runtime context. Native fixtures previously supplied their own ambient runtime guard.",
+  "panic": "there is no reactor running, must be called from the context of a Tokio 1.x runtime",
+  "native_red": {
+    "exit_code": 101,
+    "log": "/private/tmp/bulletnotes-native-runtime-rebase-red.log",
+    "path": [
+      "Slint FutureRunner",
+      "local_ui::refresh_remote",
+      "StoreHandle::rebase_editor",
+      "MergeExecutor::merge_with",
+      "tokio::task::spawn_blocking"
+    ]
+  },
+  "correction": "LocalApplication::run requires a borrowed Runtime and enters it for tray/window setup and the full native event loop; the guard drops before runtime shutdown. Production, native fixtures and benchmark pass the existing runtime. Reconciliation and acceptance fixtures assert no ambient runtime before entering the shared runner.",
+  "verification": {
+    "full_checks": {
+      "command": "scripts/check.sh",
+      "exit_code": 0,
+      "binaries": 49,
+      "passed": 289,
+      "failed": 0,
+      "ignored": 24,
+      "format": true,
+      "strict_all_target_all_feature_clippy": true,
+      "log_sha256": "19538627f86886640aa1396b31f0ead3997f8999f7cac0d4a34fd6dc42e7abca"
+    },
+    "msrv": {
+      "command": "rustup run 1.92.0 cargo check --all-targets --locked",
+      "exit_code": 0
+    },
+    "debug_native_reconciliation": {
+      "exit_code": 0,
+      "log": "/private/tmp/bulletnotes-native-runtime-green.log",
+      "exact_reconciled_source": true,
+      "draft_failure_and_retry": true
+    },
+    "release_native_reconciliation": {
+      "exit_code": 0,
+      "log": "/private/tmp/bulletnotes-native-runtime-release-green.log",
+      "exact_reconciled_source": true,
+      "draft_failure_and_retry": true
+    },
+    "native_sync": {
+      "browser_peer": false,
+      "cleaned_paths": 3,
+      "exact_live_selection_ime_voiceover": "unverified",
+      "guarded_cleanup_after_child_exit": true,
+      "live": false,
+      "passed": true,
+      "relay_rejections": 0,
+      "restart_before_reconnect": true,
+      "routing": "exact-path allowlist relay; normal upstream TLS for live; owned catalogue only",
+      "unsaved_at_remote_release": true
+    },
+    "independent_runtime_review": "No blocking findings; full RED stack and guard/shutdown lifetime reviewed read-only.",
+    "top_bar": "Earlier spacing correction preserved; native top-edge pixel test, 30-case hover contract and visual inspection passed before this runtime-only correction."
+  },
+  "source_revision": "c10e26622beb568b82f320df648575bbb3ac1820",
+  "source_dirty": true,
+  "changed_source_sha256": {
+    "benches/interaction.rs": "6533ede5d91697df888e473f65ff69c3579f9412fb98f485ba42a545d7b618a8",
+    "examples/app_lifecycle_review.rs": "274a0b42238da028946f7c58631c87742b7eeaac05aac48413bcf0601d6e3b2d",
+    "examples/editor_reconciliation_review.rs": "a3877f2c9ac954a5a1c2bacc82c26d408c77e8755e7831c6779e1be5cc8bd795",
+    "examples/recovery_review.rs": "19a53750f5d1c47d0e05194a2e0b3b989bd16e0bcc5a22e706314afaefdc6d2d",
+    "examples/renderer_review.rs": "b5dc8a5fd862d296871675e8e44bca94ad5317e8409dd1a859db3bb0531d67ae",
+    "examples/support/floating_chrome.rs": "d79fac7f07417bc52a03f52f86e2ca1e9f6aa6443784a4826fb24bc02a91a563",
+    "examples/support/sync_acceptance.rs": "fded21e88abc50215fd5767ab67621993e11490c1a8e75c6f8806c4ba980b520",
+    "examples/sync_review.rs": "45414da9648436ed2432541aece471a51897b73eb9d11858e62d8e575e3c185a",
+    "src/app/native_app.rs": "783dd648761b7fc1541976daf2bbdafab5773f46c1005a73319172a429af8bd4",
+    "src/main.rs": "b0d4a00aa04417143340484fd338ba77f6f3201cd1d3390bf052a5c53cc374a6",
+    "src/platform/window_chrome.rs": "e563f58157259b78d400cf9ad8dc58e300d8b4dab618766e1efd48343da4b3dc",
+    "tests/ui_contract.rs": "e3c1fad00617b7bf34057331d0f64d30d3c77f93e50770f271c88f5aa5e26ca4",
+    "ui/app-window.slint": "69ba117ef7d46ad8470774c83cb39325f5a4051d36219c9a13f48c81842ac6e5",
+    "ui/components/note-editor.slint": "fd8fcc6e1ea78c94504056f82aadc88a3ca4a46a8d2e3ffa7674e5768e950a05"
+  },
+  "bundle_verification": {
+    "artifact": "/Users/leesiongchan/Projects/bulletnotes/target/packages/remote-edit-runtime-fix-20261018/Bulletnotes-0.1.0-arm64-development.app",
+    "kind": "development",
+    "architecture": "arm64",
+    "minimum_macos": "14.0",
+    "signature": "verified",
+    "launch": "passed (generated UI; no store, credentials, or network)",
+    "graphics_api": "Metal",
+    "source_revision": "c10e26622beb568b82f320df648575bbb3ac1820",
+    "source_dirty": true,
+    "cargo_lock_sha256": "8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b",
+    "binary_sha256": "f9fc8a1f68f5c1eb0527bbcaeb9563b0e3f9646c94f15e47ae3ba06786df1452",
+    "archive_sha256": "130813cc973ae7f2eef5bea658d53cbb7e8e910823e731fcf24f5973e33ec8d1"
+  },
+  "archive": "target/packages/remote-edit-runtime-fix-20261018/Bulletnotes-0.1.0-arm64-development.zip",
+  "supersedes_bundle": "target/packages/top-edge-followup-20261018/Bulletnotes-0.1.0-arm64-development.zip",
+  "scope": "No real app database, Keychain or live upstream modified; no install, publication, commit or push. Existing uncommitted changes and unrelated .DS_Store retained.",
+  "remaining_limits": "Controlled generated-data reproduction and native debug/release regression. Other physical input/native-fidelity and distribution gates remain as previously recorded."
+}

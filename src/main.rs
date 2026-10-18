@@ -71,7 +71,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             window.invoke_test_connection();
         }
     });
-    let result = app.run();
+    let result = app.run(&runtime);
     connection_ui.stop();
     // Normal quit has already drained local storage and cancelled network work.
     // OS credential/DNS jobs may be non-cancellable blocking tasks.

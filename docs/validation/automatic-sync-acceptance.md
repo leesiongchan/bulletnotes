@@ -6,6 +6,45 @@ Pro (Mac16,11, 48 GiB), macOS 27.0.1, Rust 1.99.1. It does not waive the release
 and native-fidelity gates below. Machine-readable observations are in
 [automatic-sync-evidence.json](automatic-sync-evidence.json).
 
+## Foreground latency and note layout follow-up
+
+The selected cached note is now checked immediately on selection and about once
+per second while the window is shown. Unchanged source uses HEAD; changed source
+is downloaded through the existing guarded reconciliation path. Other pages keep
+the 30-second visible / 60-second hidden catalogue cadence. Foreground checks
+stop when hidden or cleared and preserve error backoff, local-only drafts and
+retired-delete watch admission.
+
+Local durability remains 250 ms from the first dirty edit. Upload batching now
+waits 250 ms after a committed revision, capped at one second of continuous
+batching; network, storage and retry time are additional. The editor uses a
+16 px top margin and 40 px side margins. Hover chrome may cover the first line,
+as explicitly selected by the user; native first-line click/type/undo passed.
+The full automated check passed 297 tests, with 24 explicit ignores, and the
+30-case native hover contract passed with its original watchdog unchanged.
+The updated bundle and source hashes are recorded in
+[the responsiveness follow-up](automatic-sync-responsiveness-followup.json).
+
+## Packaged app runtime correction
+
+A subsequent report of an app-bundle crash after a remote edit exposed a gap in
+the earlier native evidence: the fixtures entered Tokio around Slint, while the
+production entry point did not. Removing the fixture guard reproduced a panic
+in `MergeExecutor::merge` through the UI's editor rebase: “there is no reactor
+running.” `LocalApplication::run` now takes the runtime and enters it for the
+native event loop; its guard drops before runtime shutdown. Both reconciliation
+and sync acceptance fixtures start without an ambient runtime guard and use this
+same runner. Their passing results before this correction did not establish the
+packaged app's runtime setup was correct.
+
+The native editor regression now passes in debug and release profiles, and the
+supervised native sync scenario passes without a fixture runtime guard. The full
+check script passes 289 tests, with 24 explicitly ignored native/helper tests;
+the Rust 1.92 all-target check also passes. The replacement development bundle
+and source hashes are recorded in
+[the runtime follow-up](automatic-sync-runtime-followup.json). It also includes
+the compact, full-width top bar and reduced editor top clearance.
+
 ## Process loss and durability
 
 Two parent-supervised integration tests kill only a nonce/PID-verified child,

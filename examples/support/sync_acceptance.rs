@@ -176,7 +176,6 @@ pub fn child(args: &[String]) -> Result<()> {
     };
     let native = NativeApplication::prepare()?;
     let runtime = tokio::runtime::Runtime::new()?;
-    let _runtime_guard = runtime.enter();
     let path = dir.join("owned.sqlite");
     let state = runtime.block_on(startup::open(&path, config.id().clone()))?;
     let store = state.store.clone();
@@ -351,7 +350,11 @@ pub fn child(args: &[String]) -> Result<()> {
         eprintln!("acceptance native deadline");
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "the application must enter its runtime without a fixture guard"
+    );
+    app.run(&runtime)?;
     if !passed.get() {
         return Err("native acceptance failed".into());
     }

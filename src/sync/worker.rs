@@ -26,6 +26,7 @@ use tokio::{
     time::Instant,
 };
 const LANES: usize = 4;
+const SELECTED_POLL: Duration = Duration::from_secs(1);
 use super::{
     catalogue::DownloadQueue,
     schedule::{Retry, WriteDebounce},
@@ -49,6 +50,7 @@ struct Control {
     refresh: u64,
     stop: bool,
     priority: Option<PageKey>,
+    selected: Option<PageKey>,
 }
 struct Inner {
     control: watch::Sender<Control>,
@@ -98,6 +100,7 @@ impl SyncHandle {
             refresh: 0,
             stop: false,
             priority: None,
+            selected: None,
         });
         let task = runtime.spawn(supervise(store, client, shared, controls));
         Ok(Self(Arc::new(Inner {
@@ -126,6 +129,25 @@ impl SyncHandle {
         self.0.control.send_modify(|control| {
             control.priority = Some(key);
             control.refresh = control.refresh.wrapping_add(1);
+        });
+    }
+    pub fn set_selected_page(&self, key: Option<PageKey>) {
+        if key
+            .as_ref()
+            .is_some_and(|key| key.connection != self.0.snapshot.borrow().connection)
+        {
+            return;
+        }
+        self.0.control.send_if_modified(|control| {
+            if control.selected == key {
+                return false;
+            }
+            tracing::debug!(
+                selected = key.is_some(),
+                "foreground sync selection changed"
+            );
+            control.selected = key;
+            true
         });
     }
     pub fn snapshot(&self) -> SyncSnapshot {
@@ -884,6 +906,7 @@ async fn supervise(
         let mut watches=DownloadQueue::default();
         let started=Instant::now();let mut deadlines=WriteDebounce::default();
         let mut poll=Instant::now();let mut last_refresh=0;
+        let mut selected=None;let mut selected_poll=Instant::now();let mut selected_pending=false;let mut was_active=false;
         let mut listing:Option<JoinHandle<Result<Vec<RemoteMetadata>,SyncError>>>=None;
         let mut heads=Vec::<PendingHead>::new();let mut rescan=true;
         let mut recovery_due=std::collections::HashMap::<OperationId,(RecoveryUploadState,Instant)>::new();
@@ -892,6 +915,11 @@ async fn supervise(
         loop {
             let control=controls.borrow_and_update().clone();
             if control.stop {break;}
+            if selected!=control.selected || control.active && !was_active {
+                selected=control.selected.clone();selected_poll=Instant::now();
+                selected_pending=false;
+            }
+            was_active=control.active;
             if control.refresh!=last_refresh {
                 poll=Instant::now();last_refresh=control.refresh;
                 recovery_due.clear();
@@ -931,7 +959,7 @@ async fn supervise(
                             && let Some(index)=available_lane(&lanes,true)
                             && shared.reserve(&head.key) {
                             match storage(store.claim_operation(head.id).await)? {
-                                Some(operation)=>enqueue(&lanes[index],Work::Write(operation),true,&shared)?,
+                                Some(operation)=>{deadlines.sent(&head.key);enqueue(&lanes[index],Work::Write(operation),true,&shared)?;},
                                 None=>{shared.release(&head.key);rescan=true;},
                             }
                         }
@@ -973,6 +1001,28 @@ async fn supervise(
                         } else {cleanup.defer(key);}
                     }
                 }
+                if control.active && Instant::now()>=selected_poll {
+                    selected_poll=Instant::now()+SELECTED_POLL;
+                    selected_pending=selected.is_some();
+                }
+                if control.active && selected_pending
+                        && let Some(key)=&selected
+                        && !shared.page_blocked(key) && !shared.observation_deferred(key)
+                        && let Some(index)=available_lane(&lanes,false)
+                        && shared.reserve(key) {
+                        // Local-only drafts and retained delete watches have different admission rules.
+                        let active=store.load_active_page(key).await;
+                        let remote=match active {
+                            Ok(Some(page))=>page.page.remote_base.is_some(),
+                            Ok(None)|Err(StoreError::PageMissing)=>false,
+                            Err(_)=>{shared.release(key);return Err(SyncError::LocalStorage);},
+                        };
+                        let watched=if remote {storage(store.retired_delete_keys(&connection).await)?.contains(key)} else {false};
+                        if remote && !watched {
+                            enqueue(&lanes[index],Work::Read(key.clone()),false,&shared)?;
+                        } else {shared.release(key);}
+                        selected_pending=false;
+                }
                 let count=reads.len();
                 for _ in 0..count {
                     let Some(key)=reads.pop() else {break;};
@@ -996,6 +1046,9 @@ async fn supervise(
                 if retry>Instant::now() {wake=Some(retry);}
                 else {
                     if listing.is_none() {wake=Some(poll);}
+                    if control.active && selected.as_ref().is_some_and(|key|!shared.page_blocked(key) && !shared.observation_deferred(key)) {
+                        wake=Some(wake.map_or(selected_poll,|current:Instant|current.min(selected_poll)));
+                    }
                     if writable && available_lane(&lanes,true).is_some() {
                         for head in &heads {
                             if !shared.busy(&head.key)&&!shared.page_blocked(&head.key)

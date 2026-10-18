@@ -172,7 +172,7 @@ mod native {
         slint::Timer::single_shot(Duration::from_secs(180), move || {
             deadline_app.request_native_termination()
         });
-        app.run()?;
+        app.run(&runtime)?;
         drop(diagnostics);
         let diagnostic_path = dir.path().join("profile.jsonl");
         bulletnotes::diagnostics::export(&diagnostic_path)?;

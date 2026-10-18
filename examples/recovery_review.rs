@@ -136,7 +136,7 @@ fn restart(path: &Path, nonce: &str, draft: bool) -> Result<()> {
             let _ = slint::quit_event_loop();
         }
     })?;
-    app.run()?;
+    app.run(&runtime)?;
     if !passed.get()
         || !matches!(
             runtime.block_on(store.durability()),
@@ -236,7 +236,7 @@ fn draft_contract() -> Result<()> {
     slint::Timer::single_shot(Duration::from_secs(15), || {
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     if !passed.get()
         || !matches!(
             runtime.block_on(store.durability()),
@@ -438,7 +438,7 @@ fn main() -> Result<()> {
     slint::Timer::single_shot(Duration::from_secs(35), || {
         let _ = slint::quit_event_loop();
     });
-    app.run()?;
+    app.run(&runtime)?;
     if !passed.get()
         || !matches!(
             runtime.block_on(store.durability()),

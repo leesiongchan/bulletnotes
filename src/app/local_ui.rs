@@ -128,6 +128,7 @@ impl State {
         };
         effects.extend(app.dispatch(action));
         drop(app);
+        self.update_sync_selection();
         self.execute(effects);
         self.render();
         self.arm_save();
@@ -172,6 +173,7 @@ impl State {
         let mut effects = app.dispatch(AppAction::Tick(self.started.elapsed()));
         effects.extend(app.receive(event));
         drop(app);
+        self.update_sync_selection();
         if save_failed && self.lifecycle.flushing() {
             self.finish_lifecycle();
         }

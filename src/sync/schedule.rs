@@ -5,29 +5,37 @@ use std::{
     time::Duration,
 };
 use tokio::time::Instant;
-const WRITE_DELAY: Duration = Duration::from_millis(750);
+const WRITE_DELAY: Duration = Duration::from_millis(250);
+const MAX_WRITE_DELAY: Duration = Duration::from_secs(1);
 #[derive(Default)]
 pub(super) struct WriteDebounce {
-    entries: HashMap<PageKey, (LocalRevision, Duration)>,
+    entries: HashMap<PageKey, (LocalRevision, Duration, Duration)>,
 }
 impl WriteDebounce {
     pub(super) fn observe(&mut self, key: &PageKey, revision: LocalRevision, now: Duration) {
-        let entry = self
-            .entries
-            .entry(key.clone())
-            .or_insert((revision, now.saturating_add(WRITE_DELAY)));
+        let entry = self.entries.entry(key.clone()).or_insert((
+            revision,
+            now,
+            now.saturating_add(WRITE_DELAY),
+        ));
         if entry.0 != revision {
-            *entry = (revision, now.saturating_add(WRITE_DELAY));
+            entry.0 = revision;
+            entry.2 = now
+                .saturating_add(WRITE_DELAY)
+                .min(entry.1.saturating_add(MAX_WRITE_DELAY));
         }
     }
     pub(super) fn deadline(&self, key: &PageKey) -> Option<Duration> {
-        self.entries.get(key).map(|(_, deadline)| *deadline)
+        self.entries.get(key).map(|(_, _, deadline)| *deadline)
     }
     pub(super) fn due(&self, key: &PageKey, now: Duration) -> bool {
         self.deadline(key).is_some_and(|deadline| now >= deadline)
     }
     pub(super) fn retain(&mut self, keys: &HashSet<PageKey>) {
         self.entries.retain(|key, _| keys.contains(key));
+    }
+    pub(super) fn sent(&mut self, key: &PageKey) {
+        self.entries.remove(key);
     }
 }
 pub(crate) struct Retry {
@@ -77,12 +85,20 @@ mod tests {
         };
         let mut gate = WriteDebounce::default();
         gate.observe(&key, LocalRevision(1), Duration::ZERO);
-        assert!(!gate.due(&key, Duration::from_millis(749)));
-        assert!(gate.due(&key, Duration::from_millis(750)));
-        gate.observe(&key, LocalRevision(1), Duration::from_millis(500));
-        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(750)));
-        gate.observe(&key, LocalRevision(2), Duration::from_millis(700));
-        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(1450)));
+        assert!(!gate.due(&key, Duration::from_millis(249)));
+        assert!(gate.due(&key, Duration::from_millis(250)));
+        gate.observe(&key, LocalRevision(1), Duration::from_millis(100));
+        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(250)));
+        gate.observe(&key, LocalRevision(2), Duration::from_millis(200));
+        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(450)));
+        gate.observe(&key, LocalRevision(3), Duration::from_millis(400));
+        gate.observe(&key, LocalRevision(4), Duration::from_millis(600));
+        gate.observe(&key, LocalRevision(5), Duration::from_millis(800));
+        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(1000)));
+        assert!(gate.due(&key, Duration::from_millis(1000)));
+        gate.sent(&key);
+        gate.observe(&key, LocalRevision(6), Duration::from_millis(1100));
+        assert_eq!(gate.deadline(&key), Some(Duration::from_millis(1350)));
         gate.retain(&std::collections::HashSet::new());
         assert!(gate.deadline(&key).is_none());
     }
