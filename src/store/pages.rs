@@ -89,7 +89,7 @@ pub(super) fn load_stored(
 pub(super) fn load_active(
     db: &Connection,
     key: &PageKey,
-) -> Result<Option<PageSnapshot>, StoreError> {
+) -> Result<Option<crate::domain::reconciliation::StoredPage>, StoreError> {
     let hidden: Option<bool> = db
         .query_row(
             "SELECT trashed OR remote_deleted FROM pages WHERE connection=?1 AND path=?2",
@@ -100,7 +100,7 @@ pub(super) fn load_active(
     if hidden == Some(true) {
         return Err(StoreError::PageMissing);
     }
-    load(db, key)
+    load_stored(db, key)
 }
 pub(super) fn id(db: &Connection, key: &PageKey) -> Result<i64, StoreError> {
     db.query_row(

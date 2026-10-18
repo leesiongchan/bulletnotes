@@ -1,5 +1,8 @@
 //! A bounded async handle to one blocking SQLite owner.
 mod delete_watches;
+mod draft_admission;
+mod editor_rebase;
+pub use draft_admission::DraftAdmissionRequest;
 mod outbox;
 mod pages;
 mod probes;
@@ -29,6 +32,7 @@ pub struct StoreHandle {
     sender: mpsc::Sender<Command>,
     local_changes: watch::Sender<()>,
     merge_executor: crate::sync::merge_executor::MergeExecutor,
+    draft_admission: draft_admission::SharedAdmission,
 }
 impl StoreHandle {
     pub async fn open(path: &Path) -> Result<Self, StoreError> {
@@ -53,6 +57,7 @@ impl StoreHandle {
             sender,
             local_changes,
             merge_executor: Default::default(),
+            draft_admission: Default::default(),
         })
     }
     async fn call<R: Send + 'static>(
@@ -103,17 +108,40 @@ impl StoreHandle {
     pub async fn load_active_page(
         &self,
         key: &PageKey,
-    ) -> Result<Option<PageSnapshot>, StoreError> {
+    ) -> Result<Option<crate::domain::reconciliation::StoredPage>, StoreError> {
         let key = key.clone();
         self.call_timed(crate::diagnostics::Operation::CachedOpen, move |w| {
             pages::load_active(&w.db, &key)
         })
         .await
     }
+    pub async fn load_editor_page(
+        &self,
+        key: &PageKey,
+    ) -> Result<Option<crate::domain::reconciliation::EditorRestore>, StoreError> {
+        let key = key.clone();
+        self.call(move |w| editor_rebase::load_editor(&w.db, &key))
+            .await
+    }
     pub async fn create_draft(&self, key: PageKey) -> Result<SavedRevision, StoreError> {
         let saved = self.call(move |w| pages::create(&mut w.db, key)).await?;
         self.local_changes.send_replace(());
         Ok(saved)
+    }
+    pub async fn create_draft_outcome(
+        &self,
+        key: PageKey,
+    ) -> Result<crate::domain::reconciliation::LocalSaveOutcome, StoreError> {
+        let outcome = self
+            .call(move |w| {
+                let attempt = pages::create(&mut w.db, key)?;
+                let stored =
+                    pages::load_stored(&w.db, &attempt.key)?.ok_or(StoreError::PageMissing)?;
+                Ok(crate::domain::reconciliation::LocalSaveOutcome { attempt, stored })
+            })
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(outcome)
     }
     pub async fn save_local(
         &self,
@@ -195,7 +223,8 @@ impl StoreHandle {
     pub async fn load_sync_page(
         &self,
         key: &PageKey,
-    ) -> Result<Option<(PageSnapshot, PageSyncFacts)>, StoreError> {
+    ) -> Result<Option<(crate::domain::reconciliation::StoredPage, PageSyncFacts)>, StoreError>
+    {
         let key = key.clone();
         self.call(move |w| sync_queue::page_facts(&w.db, &key))
             .await
@@ -368,6 +397,10 @@ impl StoreHandle {
             RemoteRead::Present(file) => &file.key,
             RemoteRead::Missing(key) => key,
         };
+        match self.replay_editor_handoff(key).await {
+            Ok(_) | Err(StoreError::PageMissing) => {}
+            Err(error) => return Err(error),
+        }
         let prepared = self
             .prepare_observation(key, observation.clone(), None)
             .await;

@@ -8,7 +8,7 @@ use crate::{
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     time::Duration,
 };
@@ -19,6 +19,8 @@ struct State {
     selected: RefCell<Option<RecoveryItem>>,
     rows: RefCell<Vec<RecoverySummary>>,
     drafts: RefCell<HashMap<PageKey, String>>,
+    closed_drafts: RefCell<HashMap<PageKey, (uuid::Uuid, uuid::Uuid)>>,
+    resolved_conflicts: RefCell<HashSet<(PageKey, uuid::Uuid)>>,
     pending_drafts: RefCell<HashMap<PageKey, (u64, String)>>,
     draft_generation: Cell<u64>,
     draft_writing: Cell<bool>,
@@ -28,6 +30,13 @@ struct State {
     loading: Cell<bool>,
     again: Cell<bool>,
     timer: slint::Timer,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum RecoveryUiError {
+    #[error(transparent)]
+    Store(#[from] StoreError),
+    #[error(transparent)]
+    EventLoop(#[from] slint::EventLoopError),
 }
 #[derive(Clone)]
 pub struct RecoveryUi(Rc<State>);
@@ -74,13 +83,22 @@ fn item_id(item: &RecoveryItem) -> uuid::Uuid {
 }
 impl State {
     async fn flush_drafts(&self) -> Result<(), StoreError> {
+        self.flush_draft_key(None).await
+    }
+    async fn flush_draft_key(&self, target: Option<&PageKey>) -> Result<(), StoreError> {
         let mut updates = self.draft_updates.subscribe();
         loop {
             if self.draft_writing.get() {
                 updates.changed().await.map_err(|_| StoreError::Closed)?;
                 continue;
             }
-            let pending = self.pending_drafts.borrow().clone();
+            let pending: HashMap<_, _> = self
+                .pending_drafts
+                .borrow()
+                .iter()
+                .filter(|(key, _)| target.is_none_or(|target| target == *key))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
             if pending.is_empty() {
                 return Ok(());
             }
@@ -109,7 +127,22 @@ impl State {
             }
         }
     }
+    fn draft_closed(&self, key: &PageKey, id: uuid::Uuid) -> bool {
+        self.closed_drafts.borrow().contains_key(key)
+            || self
+                .resolved_conflicts
+                .borrow()
+                .contains(&(key.clone(), id))
+    }
+    fn present_admission(&self) {
+        if let Some(window) = self.window.upgrade() {
+            let closed=self.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if self.draft_closed(&record.key,record.id)));
+            window.set_recovery_draft_closed(closed);
+        }
+    }
     fn edit_draft(self: &Rc<Self>, key: PageKey, body: String) {
+        if self.closed_drafts.borrow().contains_key(&key) || self.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if self.draft_closed(&key,record.id))) {return;}
+
         if self
             .window
             .upgrade()
@@ -117,8 +150,11 @@ impl State {
         {
             return;
         }
-        self.draft_generation
-            .set(self.draft_generation.get().wrapping_add(1));
+        let Some(generation) = self.draft_generation.get().checked_add(1) else {
+            self.message("Draft editing limit reached. Save and restart before editing further.");
+            return;
+        };
+        self.draft_generation.set(generation);
         self.drafts.borrow_mut().insert(key.clone(), body.clone());
         self.pending_drafts
             .borrow_mut()
@@ -230,7 +266,7 @@ impl State {
                         RecoveryItem::Trash(record)=>{window.set_recovery_local(record.page.body.as_str().into());state.message("Restoration creates a page without replacing an existing path. The Trash copy remains until you delete it.");},
                         RecoveryItem::Copy(record)=>{window.set_recovery_local(record.page.body.as_str().into());state.message("This version is retained locally. Choose an unused path to restore it.");},
                     }
-                    state.selected.replace(Some(item));window.set_recovery_selected(true);
+                    state.selected.replace(Some(item));state.present_admission();window.set_recovery_selected(true);
                 },
                 Err(_)=>{window.set_recovery_stale(true);state.message("This review changed. Refresh and select its current version.");state.schedule();}
             }
@@ -243,6 +279,7 @@ impl State {
         if window.get_recovery_busy() || window.get_lifecycle_pending() {
             return;
         }
+        if self.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if self.draft_closed(&record.key,record.id))) {return;}
         window.set_recovery_busy(true);
         self.message("Saving recovery action locally…");
         let weak = Rc::downgrade(self);
@@ -269,6 +306,10 @@ impl State {
                     "Your latest text could not be saved. Return to the note to retry or copy it.",
                 );
                 return;
+            }
+            if state.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if state.draft_closed(&record.key,record.id))) {
+                if let Some(window)=state.window.upgrade() {window.set_recovery_busy(false);}
+                state.draft_updates.send_replace(());return;
             }
             local.dispatch(action);
         })
@@ -303,7 +344,7 @@ pub fn bind(
     window: &AppWindow,
     local: LocalUi,
     store: StoreHandle,
-) -> Result<RecoveryUi, slint::EventLoopError> {
+) -> Result<RecoveryUi, RecoveryUiError> {
     let state = Rc::new(State {
         window: window.as_weak(),
         local,
@@ -311,6 +352,8 @@ pub fn bind(
         selected: RefCell::new(None),
         rows: RefCell::new(Vec::new()),
         drafts: RefCell::new(HashMap::new()),
+        closed_drafts: RefCell::new(HashMap::new()),
+        resolved_conflicts: RefCell::new(HashSet::new()),
         pending_drafts: RefCell::new(HashMap::new()),
         draft_generation: Cell::new(0),
         draft_writing: Cell::new(false),
@@ -321,12 +364,14 @@ pub fn bind(
         again: Cell::new(false),
         timer: slint::Timer::default(),
     });
+    state.install_admission()?;
     {
         let state = state.clone();
         window.on_show_recovery(move || {
             state.selected.borrow_mut().take();
             if let Some(window) = state.window.upgrade() {
                 window.set_recovery_selected(false);
+                window.set_recovery_draft_closed(false);
             }
             state.local.dispatch(AppAction::Navigate(View::Recovery));
             state.schedule();
@@ -376,7 +421,7 @@ pub fn bind(
             let Some(window) = state.window.upgrade() else {
                 return;
             };
-            if window.get_recovery_stale() {
+            if window.get_recovery_stale() || window.get_recovery_draft_closed() {
                 return;
             }
             let Some(RecoveryItem::Conflict(record)) = state.selected.borrow().as_ref().cloned()
@@ -493,4 +538,82 @@ pub fn bind(
         });
     }
     Ok(RecoveryUi(state))
+}
+
+impl State {
+    fn install_admission(self: &Rc<Self>) -> Result<(), RecoveryUiError> {
+        use crate::store::DraftAdmissionRequest;
+        let mut requests = self.store.install_draft_admission()?;
+        let weak = Rc::downgrade(self);
+        slint::spawn_local(async move {
+            while let Some(request) = requests.recv().await {
+                let Some(state) = weak.upgrade() else {
+                    break;
+                };
+                match request {
+                    DraftAdmissionRequest::Close {
+                        key,
+                        conflict_id,
+                        lease_id,
+                        reply,
+                    } => {
+                        let manual = state.window.upgrade().is_none_or(|window| {
+                            window.get_recovery_busy()
+                                && state
+                                    .selected
+                                    .borrow()
+                                    .as_ref()
+                                    .is_some_and(|item| item_key(item) == &key)
+                        });
+                        if manual {
+                            let _ = reply.send(Err(StoreError::UnknownOperation));
+                            continue;
+                        }
+                        state
+                            .closed_drafts
+                            .borrow_mut()
+                            .insert(key.clone(), (lease_id, conflict_id));
+                        state.present_admission();
+                        let drain = Rc::downgrade(&state);
+                        let _ = slint::spawn_local(async move {
+                            let Some(state) = drain.upgrade() else {
+                                return;
+                            };
+                            let result = state.flush_draft_key(Some(&key)).await;
+                            let _ = reply.send(result);
+                        });
+                    }
+                    DraftAdmissionRequest::Release {
+                        key,
+                        conflict_id,
+                        lease_id,
+                        committed,
+                    } => {
+                        if state.closed_drafts.borrow().get(&key) != Some(&(lease_id, conflict_id))
+                        {
+                            continue;
+                        }
+                        state.closed_drafts.borrow_mut().remove(&key);
+                        if committed {
+                            state
+                                .resolved_conflicts
+                                .borrow_mut()
+                                .insert((key.clone(), conflict_id));
+                            state.drafts.borrow_mut().remove(&key);
+                            // The lease drained the complete accepted generation for this key.
+                            state.pending_drafts.borrow_mut().remove(&key);
+                            if state.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if record.key==key && record.id==conflict_id)) {
+                                if let Some(window)=state.window.upgrade() {window.set_recovery_stale(true);}
+                                state.message("Changes reconciled automatically. Your draft remains in Kept versions.");
+                            }
+                        }
+                        state.present_admission();
+                        state.draft_updates.send_replace(());
+                        state.schedule();
+                    }
+                }
+            }
+        })?;
+        Ok(())
+    }
 }

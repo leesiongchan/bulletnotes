@@ -135,7 +135,7 @@ pub(super) fn reconciliation_keys(
     db: &Connection,
     connection: &ConnectionId,
 ) -> Result<Vec<PageKey>, StoreError> {
-    let mut query = db.prepare("SELECT c.path FROM conflicts c WHERE c.connection=?1 AND NOT EXISTS(SELECT 1 FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=c.connection AND p.path=c.path AND o.state IN ('leased','unknown')) ORDER BY c.path")?;
+    let mut query = db.prepare("SELECT c.path FROM conflicts c WHERE c.connection=?1 AND NOT EXISTS(SELECT 1 FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=c.connection AND p.path=c.path AND o.state IN ('leased','unknown')) UNION SELECT h.path FROM editor_handoffs h WHERE h.connection=?1 ORDER BY path")?;
     query
         .query_map([connection.as_str()], |row| row.get::<_, String>(0))?
         .map(|row| {
@@ -165,7 +165,7 @@ pub(super) fn progress(
         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     )?;
     let pending = db.query_row(
-        "SELECT (SELECT count(*) FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1) + (SELECT count(*) FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND (u.current=1 AND u.state!='acknowledged'))",
+        "SELECT (SELECT count(*) FROM editor_handoffs WHERE connection=?1) + (SELECT count(*) FROM outbox o JOIN pages p ON p.id=o.page_id WHERE p.connection=?1) + (SELECT count(*) FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=?1 AND (u.current=1 AND u.state!='acknowledged'))",
         [connection.as_str()],
         |row| row.get::<_, i64>(0),
     )?;
@@ -203,11 +203,11 @@ pub struct PageSyncFacts {
 pub(super) fn page_facts(
     db: &Connection,
     key: &PageKey,
-) -> Result<Option<(PageSnapshot, PageSyncFacts)>, StoreError> {
-    let Some(page) = pages::load(db, key)? else {
+) -> Result<Option<(crate::domain::reconciliation::StoredPage, PageSyncFacts)>, StoreError> {
+    let Some(page) = pages::load_stored(db, key)? else {
         return Ok(None);
     };
-    let (pending,conflict,deleted,id)=db.query_row("SELECT (EXISTS(SELECT 1 FROM outbox o WHERE o.page_id=p.id) OR EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=p.connection AND (e.path=p.path OR u.path=p.path) AND (u.current=1 AND u.state!='acknowledged'))),EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path),remote_deleted,(SELECT id FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p WHERE connection=?1 AND path=?2",[key.connection.as_str(),key.path.as_str()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get::<_,Option<String>>(3)?)))?;
+    let (pending,conflict,deleted,id)=db.query_row("SELECT (EXISTS(SELECT 1 FROM editor_handoffs h WHERE h.connection=p.connection AND h.path=p.path) OR EXISTS(SELECT 1 FROM outbox o WHERE o.page_id=p.id) OR EXISTS(SELECT 1 FROM recovery_uploads u JOIN automatic_events e ON e.id=u.event_id WHERE e.connection=p.connection AND (e.path=p.path OR u.path=p.path) AND (u.current=1 AND u.state!='acknowledged'))),EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path),remote_deleted,(SELECT id FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p WHERE connection=?1 AND path=?2",[key.connection.as_str(),key.path.as_str()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get::<_,Option<String>>(3)?)))?;
     let conflict_id = id
         .map(|id| uuid::Uuid::parse_str(&id).map_err(|_| StoreError::InvalidData))
         .transpose()?;

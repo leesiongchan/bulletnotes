@@ -33,7 +33,7 @@ fn complete(app: &mut Coordinator, request: (u64, PageKey)) {
     app.receive(AppEvent::PageLoaded {
         request_id,
         key,
-        result: Ok(Some(page)),
+        result: Ok(Some(page.into())),
     });
 }
 fn visited() -> Coordinator {

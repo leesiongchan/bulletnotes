@@ -160,7 +160,7 @@ impl State {
         };
         let refresh = matches!(
             &event,
-            AppEvent::LocalSaved(_) | AppEvent::PageLoaded { .. }
+            AppEvent::LocalSaved { .. } | AppEvent::PageLoaded { .. }
         );
         if refresh {
             self.sync.facts.borrow_mut().take();
@@ -195,7 +195,7 @@ impl State {
         {
             sync.request_page(key);
         }
-        if refresh && self.sync.snapshot.borrow().is_some() {
+        if refresh {
             self.refresh_remote();
         }
     }

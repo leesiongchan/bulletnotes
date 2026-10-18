@@ -49,8 +49,10 @@ impl StoreHandle {
         observed: RemoteRead,
         retired: Option<(OperationId, bool)>,
     ) -> Result<(PreparedResolution, ObservationGuard), StoreError> {
+        let mut lease = self.legacy_admission(key).await?;
+        let target = key.clone();
         let key = key.clone();
-        let (context, watch) = self
+        let (mut context, mut watch) = self
             .call(move |w| {
                 delete_watches::restore_missing(&mut w.db, &key)?;
                 Ok((
@@ -59,6 +61,32 @@ impl StoreHandle {
                 ))
             })
             .await?;
+        if context.token.conflict_id.is_some() && lease.is_none() {
+            lease = self
+                .close_draft_admission(
+                    &target,
+                    context.token.conflict_id.ok_or(StoreError::StaleRevision)?,
+                )
+                .await?;
+            let key = target;
+            let remote = context.remote;
+            (context, watch) = self
+                .call(move |w| {
+                    Ok((
+                        load(&w.db, &key, remote)?,
+                        delete_watches::authority(&w.db, &key)?,
+                    ))
+                })
+                .await?;
+        }
+        if lease.as_ref().is_some_and(|lease| {
+            context
+                .token
+                .conflict_id
+                .is_some_and(|id| id != lease.conflict_id())
+        }) {
+            return Err(StoreError::StaleRevision);
+        }
         let mut policy = context.clone();
         if retired.is_some_and(|(_, delete)| delete) {
             policy.token.trashed = false;
@@ -76,22 +104,40 @@ impl StoreHandle {
             prepared.disposition = ResolutionDisposition::Install;
             prepared.preserve_history = true;
         }
-        Ok((prepared, ObservationGuard { retired, watch }))
+        Ok((
+            prepared,
+            ObservationGuard {
+                retired,
+                watch,
+                lease,
+            },
+        ))
     }
     pub(super) async fn commit_observation(
         &self,
         prepared: (PreparedResolution, ObservationGuard),
     ) -> Result<StoredPage, StoreError> {
-        self.call(move |w| commit_observation(&mut w.db, prepared.0, Some(prepared.1)))
-            .await
+        self.call(move |w| {
+            let mut guard = prepared.1;
+            let mut lease = guard.lease.take();
+            let result = commit_observation(&mut w.db, prepared.0, Some(guard));
+            if result.is_ok()
+                && let Some(lease) = &mut lease
+            {
+                lease.committed();
+            }
+            result
+        })
+        .await
     }
     /// Commands already admitted to this store are drained before the context is captured.
-    /// The editor coordinator must also drain admitted in-memory draft writes before calling.
+    /// An installed draft owner closes and drains this record; commit reacquires and rechecks.
     pub async fn load_reconcile_context(
         &self,
         key: &PageKey,
         remote: RemoteRead,
     ) -> Result<ReconcileContext, StoreError> {
+        let _lease = self.legacy_admission(key).await?;
         let key = key.clone();
         self.call(move |w| load(&w.db, &key, remote)).await
     }
@@ -101,7 +147,22 @@ impl StoreHandle {
         &self,
         prepared: PreparedResolution,
     ) -> Result<StoredPage, StoreError> {
-        self.call(move |w| commit(&mut w.db, prepared)).await
+        let mut lease = if let Some(id) = prepared.context.token.conflict_id {
+            self.close_draft_admission(&prepared.context.token.key, id)
+                .await?
+        } else {
+            None
+        };
+        self.call(move |w| {
+            let result = commit(&mut w.db, prepared);
+            if result.is_ok()
+                && let Some(lease) = &mut lease
+            {
+                lease.committed();
+            }
+            result
+        })
+        .await
     }
 }
 
@@ -117,6 +178,28 @@ pub(super) fn load(
     if remote_key != key {
         return Err(StoreError::InvalidData);
     }
+    let (stored, token, conflict, draft) = load_inputs(db, key)?;
+    Ok(ReconcileContext {
+        token,
+        base: conflict.map_or_else(|| stored.page.remote_base.clone(), |record| record.base),
+        local: stored.page,
+        remote,
+        draft,
+    })
+}
+
+pub(super) fn load_inputs(
+    db: &Connection,
+    key: &PageKey,
+) -> Result<
+    (
+        StoredPage,
+        ReconcileToken,
+        Option<ConflictRecord>,
+        Option<StoredMergeDraft>,
+    ),
+    StoreError,
+> {
     let stored = pages::load_stored(db, key)?.ok_or(StoreError::PageMissing)?;
     let conflict = remote::read_conflict(db, key)?;
     let draft = restoration::stored_merge_draft(db, key)?;
@@ -146,28 +229,24 @@ pub(super) fn load(
             })
         })
         .collect::<Result<Vec<_>, StoreError>>()?;
-    Ok(ReconcileContext {
-        token: ReconcileToken {
-            key: key.clone(),
-            source_generation: stored.source_generation,
-            expected_local: stored.page.local_revision,
-            conflict_id: conflict.as_ref().map(|record| record.id),
-            draft_revision: draft.as_ref().map(|draft| draft.revision),
-            mutations,
-            trashed,
-            remote_deleted,
-            explicit_create,
-        },
-        base: conflict.map_or_else(|| stored.page.remote_base.clone(), |record| record.base),
-        local: stored.page,
-        remote,
-        draft,
-    })
+    let token = ReconcileToken {
+        key: key.clone(),
+        source_generation: stored.source_generation,
+        expected_local: stored.page.local_revision,
+        conflict_id: conflict.as_ref().map(|record| record.id),
+        draft_revision: draft.as_ref().map(|draft| draft.revision),
+        mutations,
+        trashed,
+        remote_deleted,
+        explicit_create,
+    };
+    Ok((stored, token, conflict, draft))
 }
 
 pub(super) struct ObservationGuard {
     retired: Option<(OperationId, bool)>,
     watch: Vec<String>,
+    lease: Option<super::draft_admission::DraftLease>,
 }
 fn commit(db: &mut Connection, prepared: PreparedResolution) -> Result<StoredPage, StoreError> {
     commit_observation(db, prepared, None)
@@ -259,7 +338,8 @@ fn commit_observation(
             AutomaticRecoveryInput {
                 local: context.local.clone(),
                 base: context.base.clone(),
-                remote: context.remote.clone(),
+                remote: Some(context.remote.clone()),
+                editor: None,
                 draft: context.draft.as_ref().map(|draft| draft.body.clone()),
                 kept_body: prepared.body.clone(),
                 reason,

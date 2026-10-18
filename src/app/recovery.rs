@@ -13,7 +13,7 @@ pub enum RecoveryIntent {
 }
 pub struct RecoveryOutcome {
     pub affected: Option<PageKey>,
-    pub page: Option<PageSnapshot>,
+    pub page: Option<crate::domain::reconciliation::StoredPage>,
     pub restored: Option<PageKey>,
 }
 pub async fn execute(
@@ -36,7 +36,7 @@ pub async fn execute(
             };
             let key = record.key.clone();
             store.resolve_conflict(request).await?;
-            outcome.page = store.load_page(&key).await?;
+            outcome.page = store.load_stored_page(&key).await?;
             outcome.affected = Some(key);
         }
         RecoveryIntent::Trash(key, revision) => {

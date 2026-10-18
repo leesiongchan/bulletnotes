@@ -45,6 +45,8 @@ impl State {
         window.set_can_go_forward(app.can_go_forward());
         if let Some(editor) = app.editor() {
             let changed = self.presentation.key.borrow().as_ref() != Some(editor.key());
+            let source_changed = window.get_note_text().as_str() != editor.body();
+            let observed_scroll = window.get_editor_scroll_y();
             if changed
                 || self.presentation.revision.get() != Some(editor.revision())
                 || window.get_note_text().as_str() != editor.body()
@@ -79,6 +81,14 @@ impl State {
                         );
                         window.invoke_restore_editor_position(anchor, caret, position.scroll_y);
                         timing.success();
+                    }
+                } else if source_changed && let Some(mut position) = editor.observed_position() {
+                    position.scroll_y = observed_scroll;
+                    if let (Ok(anchor), Ok(caret)) = (
+                        i32::try_from(position.anchor),
+                        i32::try_from(position.caret),
+                    ) {
+                        window.invoke_restore_editor_position(anchor, caret, position.scroll_y);
                     }
                 }
             }

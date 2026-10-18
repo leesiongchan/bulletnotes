@@ -26,13 +26,14 @@ async fn observation(store: &StoreHandle, page: PageKey, body: &str) -> Automati
     AutomaticRecoveryInput {
         base: local.remote_base.clone(),
         local,
-        remote: RemoteRead::Present(RemoteFile {
+        remote: Some(RemoteRead::Present(RemoteFile {
             key: page,
             body: "remote".into(),
             revision: Some(RemoteRevision("remote-etag".into())),
             modified_ms: None,
             permission: Permission::ReadWrite,
-        }),
+        })),
+        editor: None,
         draft: None,
         kept_body: "chosen main source".into(),
         reason: AutomaticRecoveryReason::Overlap,
@@ -183,7 +184,7 @@ async fn duplicate_observations_reuse_persisted_ids_but_paths_and_connections_do
         store.register_automatic_recovery(other).await.unwrap().id
     );
     let mut changed = input;
-    changed.remote = RemoteRead::Missing(changed.local.key.clone());
+    changed.remote = Some(RemoteRead::Missing(changed.local.key.clone()));
     assert_ne!(
         first.id,
         store.register_automatic_recovery(changed).await.unwrap().id
@@ -760,7 +761,7 @@ async fn stored_snapshots_expose_current_page_and_draft_tokens() {
             key: input.local.key.clone(),
             base: input.base,
             local: next.page,
-            remote: input.remote,
+            remote: input.remote.unwrap(),
         })
         .await
         .unwrap();
@@ -810,7 +811,7 @@ async fn conflict_observation_changes_invalidate_source_generation_even_with_sam
         key: input.local.key.clone(),
         base: input.base.clone(),
         local: input.local.clone(),
-        remote: input.remote.clone(),
+        remote: input.remote.clone().unwrap(),
     };
     store.save_conflict(conflict.clone()).await.unwrap();
     let captured = generation().await;

@@ -123,29 +123,66 @@ impl State {
                     break;
                 };
                 state.sync.refresh_needed.set(false);
+                let dirty = state
+                    .coordinator
+                    .borrow()
+                    .editor()
+                    .is_some_and(|editor| editor.dirty() && !editor.writing());
+                if dirty {
+                    state.dispatch(AppAction::Flush);
+                }
                 let requested = state
                     .coordinator
                     .borrow()
                     .editor()
-                    .map(|editor| (editor.key().clone(), editor.revision()));
-                if let Some((key, revision)) = requested {
-                    let result = state.store.load_sync_page(&key).await;
-                    let current = state.coordinator.borrow().editor().is_some_and(|editor| {
-                        editor.key() == &key && editor.revision() == revision
-                    });
-                    if current
-                        && let Ok(Some((page, facts))) = result
-                        && page.local_revision == revision
-                    {
-                        if let Some(id) = facts.conflict_id {
-                            state.receive(AppEvent::ConflictDetected {
-                                key: key.clone(),
-                                local_revision: revision,
-                                id,
-                            });
+                    .filter(|editor| !editor.writing() && !editor.dirty())
+                    .map(|editor| (editor.rebase_token(), editor.rebase_input()));
+                if let Some((expected, (baseline, input))) = requested {
+                    let replay = state.store.replay_editor_handoff(&expected.key).await;
+                    if replay.is_ok() {
+                        let result = state.store.load_sync_page(&expected.key).await;
+                        if let Ok(Some((stored, facts))) = result {
+                            if let Some(id) = facts.conflict_id {
+                                state.receive(AppEvent::ConflictDetected {
+                                    key: expected.key.clone(),
+                                    local_revision: input.local_revision,
+                                    id,
+                                });
+                            }
+                            state.sync.facts.replace(Some((
+                                expected.key.clone(),
+                                input.local_revision,
+                                facts,
+                            )));
+                            let needs_rebase = stored.source_generation
+                                != expected.source_generation
+                                || stored.page.body != input.body;
+                            if needs_rebase {
+                                match state.store.rebase_editor(baseline, input, stored).await {
+                                    Ok((stored, edits)) => {
+                                        let current =
+                                            state.coordinator.borrow().editor().is_some_and(
+                                                |editor| {
+                                                    editor.rebase_token() == expected
+                                                        && !editor.writing()
+                                                },
+                                            );
+                                        state.receive(AppEvent::RebaseReady {
+                                            expected,
+                                            stored,
+                                            edits,
+                                        });
+                                        if !current {
+                                            state.sync.refresh_needed.set(true);
+                                        }
+                                    }
+                                    Err(crate::domain::error::StoreError::StaleRevision) => {
+                                        state.sync.refresh_needed.set(true)
+                                    }
+                                    Err(_) => {}
+                                }
+                            }
                         }
-                        state.sync.facts.replace(Some((key, revision, facts)));
-                        state.receive(AppEvent::RemoteApplied(page));
                     }
                 }
                 let selected = state.coordinator.borrow().selected_uncached().cloned();

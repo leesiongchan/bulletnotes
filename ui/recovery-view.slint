@@ -42,6 +42,7 @@ export component RecoveryPanel inherits Rectangle {
     in property <bool> stale:false;
     in property <bool> writable:false;
     in property <bool> busy:false;
+    in property <bool> draft-closed:false;
     in property <string> message;
     in-out property <string> merge-text;
     in-out property <string> destination;
@@ -95,13 +96,13 @@ export component RecoveryPanel inherits Rectangle {
             if root.selected && root.section == "conflicts" && root.has-base:Text { text:"Common base"; color:root.theme.ink; font-size:12px; }
             if root.selected && root.section == "conflicts" && root.has-base:SourcePane { theme:root.theme; text:root.base-text; label:"Common base"; }
             if root.selected && root.section == "conflicts":Text { text:"Merged result"; color:root.theme.ink; font-size:12px; }
-            if root.selected && root.section == "conflicts":SourcePane { theme:root.theme; text <=> root.merge-text; label:"Merged result"; focus-generation:root.merge-focus-generation; read-only:root.busy; edited => { root.merge-edited(); } }
+            if root.selected && root.section == "conflicts":SourcePane { theme:root.theme; text <=> root.merge-text; label:"Merged result"; focus-generation:root.merge-focus-generation; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
             if root.selected && root.stale:ChoiceButton { theme:root.theme; text:"Reload changes · keep merged draft"; enabled:!root.busy; clicked => { root.reload(); } }
             if root.selected && root.section == "conflicts":HorizontalLayout {
                 spacing:6px;
-                ChoiceButton { theme:root.theme; text:root.remote-deleted ? "Accept deletion" : "Use remote"; enabled:!root.busy && !root.stale; clicked => { root.apply-choice("remote"); } }
-                ChoiceButton { theme:root.theme; text:root.remote-deleted ? "Recreate local" : "Keep local"; enabled:!root.busy && !root.stale && root.writable; clicked => { root.apply-choice("local"); } }
-                ChoiceButton { theme:root.theme; text:"Use merge"; enabled:!root.busy && !root.stale && root.writable; clicked => { root.apply-choice("merge"); } }
+                ChoiceButton { theme:root.theme; text:root.remote-deleted ? "Accept deletion" : "Use remote"; enabled:!root.busy && !root.draft-closed && !root.stale; clicked => { root.apply-choice("remote"); } }
+                ChoiceButton { theme:root.theme; text:root.remote-deleted ? "Recreate local" : "Keep local"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("local"); } }
+                ChoiceButton { theme:root.theme; text:"Use merge"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("merge"); } }
             }
             if root.selected && root.section != "conflicts":Text { text:"Restore destination · existing pages are preserved"; color:root.theme.ink; font-size:11px; wrap:word-wrap; }
             if root.selected && root.section != "conflicts":Rectangle {

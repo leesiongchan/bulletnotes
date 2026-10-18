@@ -199,7 +199,10 @@ pub(super) fn move_to_trash(
     expected: LocalRevision,
 ) -> Result<TrashId, StoreError> {
     let tx = db.transaction()?;
-    let page = pages::load(&tx, &key)?.ok_or(StoreError::PageMissing)?;
+    let canonical = pages::load_stored(&tx, &key)?.ok_or(StoreError::PageMissing)?;
+    let page = super::editor_rebase::restore(&tx, canonical)?
+        .presented()
+        .clone();
     if page.local_revision != expected {
         return Err(StoreError::StaleRevision);
     }
@@ -241,6 +244,10 @@ pub(super) fn move_to_trash(
         ],
     )?;
     super::delete_watches::supersede(&tx, &key)?;
+    tx.execute(
+        "DELETE FROM editor_handoffs WHERE connection=?1 AND path=?2",
+        [key.connection.as_str(), key.path.as_str()],
+    )?;
     tx.execute("UPDATE pages SET trashed=1 WHERE id=?1", [page_id])?;
     outbox::queue_put(&tx, page_id, &record.page)?;
     tx.commit()?;

@@ -136,12 +136,14 @@ impl State {
                                 connection: self.coordinator.borrow().connection().clone(),
                                 result: Err(StoreError::Closed),
                             },
-                            AppEffect::CreateDraft(key) => {
-                                AppEvent::LocalSaveFailed(key, LocalRevision(0), StoreError::Closed)
-                            }
-                            AppEffect::SaveLocal { key, revision, .. } => {
-                                AppEvent::LocalSaveFailed(key, revision, StoreError::Closed)
-                            }
+                            AppEffect::CreateDraft { expected, .. } => AppEvent::LocalSaveFailed(
+                                expected,
+                                LocalRevision(0),
+                                StoreError::Closed,
+                            ),
+                            AppEffect::SaveLocal {
+                                expected, revision, ..
+                            } => AppEvent::LocalSaveFailed(expected, revision, StoreError::Closed),
                             _ => continue,
                         };
                         self.receive(event);
@@ -199,26 +201,27 @@ impl Workers {
                                     .await,
                             })
                         }
-                        Work::Effect(AppEffect::CreateDraft(key)) => {
-                            Some(match store.create_draft(key.clone()).await {
-                                Ok(saved) => AppEvent::LocalSaved(saved),
+                        Work::Effect(AppEffect::CreateDraft { key, expected }) => {
+                            Some(match store.create_draft_outcome(key).await {
+                                Ok(outcome) => AppEvent::LocalSaved { expected, outcome },
                                 Err(error) => {
-                                    AppEvent::LocalSaveFailed(key, LocalRevision(0), error)
+                                    AppEvent::LocalSaveFailed(expected, LocalRevision(0), error)
                                 }
                             })
                         }
                         Work::Effect(AppEffect::SaveLocal {
+                            expected,
                             key,
                             body,
                             revision,
                             baseline,
                         }) => Some(
                             match store
-                                .save_local_from_base(key.clone(), body, revision, *baseline)
+                                .save_local_from_base_outcome(key, body, revision, *baseline)
                                 .await
                             {
-                                Ok(saved) => AppEvent::LocalSaved(saved),
-                                Err(error) => AppEvent::LocalSaveFailed(key, revision, error),
+                                Ok(outcome) => AppEvent::LocalSaved { expected, outcome },
+                                Err(error) => AppEvent::LocalSaveFailed(expected, revision, error),
                             },
                         ),
                         _ => None,
@@ -238,7 +241,7 @@ impl Workers {
                 while load_requests.changed().await.is_ok() {
                     let request = load_requests.borrow_and_update().clone();
                     if let Some(request) = request {
-                        let result = store.load_active_page(&request.key).await;
+                        let result = store.load_editor_page(&request.key).await;
                         if let Some(state) = weak.upgrade() {
                             state.receive(AppEvent::PageLoaded {
                                 request_id: request.id,

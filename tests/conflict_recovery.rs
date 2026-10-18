@@ -427,6 +427,7 @@ mod network {
                 .await
                 .unwrap()
                 .unwrap()
+                .page
                 .body,
             "replacement"
         );
@@ -503,6 +504,7 @@ mod network {
                 .await
                 .unwrap()
                 .unwrap()
+                .page
                 .body,
             "identical generated content"
         );
@@ -708,6 +710,7 @@ async fn a_late_unsynced_create_meets_a_retained_trash_tombstone() {
             .await
             .unwrap()
             .unwrap()
+            .page
             .body,
         "uncertain source"
     );

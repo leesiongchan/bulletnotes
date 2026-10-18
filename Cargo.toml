@@ -87,3 +87,7 @@ strip = "debuginfo"
 [[example]]
 name = "renderer_review"
 required-features = ["native-validation", "renderer-review"]
+
+[[example]]
+name = "editor_reconciliation_review"
+required-features = ["native-validation"]

@@ -8,7 +8,9 @@ pub(super) fn queue_put(
     page_id: i64,
     snapshot: &PageSnapshot,
 ) -> Result<(), StoreError> {
-    if super::recovery_uploads::fenced(db, &snapshot.key)? {
+    if super::editor_rebase::handoff(db, &snapshot.key)?.is_some()
+        || super::recovery_uploads::fenced(db, &snapshot.key)?
+    {
         return Ok(());
     }
     db.execute(

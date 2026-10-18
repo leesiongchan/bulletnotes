@@ -141,9 +141,26 @@ impl StoreHandle {
 }
 
 fn original_tuple(input: &AutomaticRecoveryInput) -> Result<String, StoreError> {
+    if let Some(editor) = &input.editor {
+        let http = |file: &RemoteFile| (file.body.clone(), file.revision.clone(), file.permission);
+        return serde_json::to_string(&(
+            2_u32,
+            "editor",
+            &input.local.key,
+            editor.remote_missing,
+            &editor.baseline,
+            &input.local.body,
+            &editor.durable.page.body,
+            input.base.as_ref().map(http),
+            editor.durable.page.remote_base.as_ref().map(http),
+            &input.draft,
+        ))
+        .map_err(|_| StoreError::InvalidData);
+    }
     let remote = match &input.remote {
-        RemoteRead::Present(file) => Some((&file.body, &file.revision, file.permission)),
-        RemoteRead::Missing(_) => None,
+        Some(RemoteRead::Present(file)) => Some((&file.body, &file.revision, file.permission)),
+        Some(RemoteRead::Missing(_)) => None,
+        None => return Err(StoreError::InvalidData),
     };
     serde_json::to_string(&(
         1_u32,
@@ -158,9 +175,17 @@ fn original_tuple(input: &AutomaticRecoveryInput) -> Result<String, StoreError> 
 }
 fn validate(input: &AutomaticRecoveryInput) -> Result<(), StoreError> {
     restoration::validate_page(&input.local)?;
-    let key = match &input.remote {
-        RemoteRead::Present(file) => &file.key,
-        RemoteRead::Missing(key) => key,
+    let key = match (&input.remote, &input.editor) {
+        (Some(RemoteRead::Present(file)), None) => &file.key,
+        (Some(RemoteRead::Missing(key)), None) => key,
+        (None, Some(editor)) => {
+            restoration::validate_page(&editor.durable.page)?;
+            if editor.durable.page.key != input.local.key {
+                return Err(StoreError::InvalidData);
+            }
+            &input.local.key
+        }
+        _ => return Err(StoreError::InvalidData),
     };
     if key != &input.local.key || input.base.as_ref().is_some_and(|base| base.key != *key) {
         return Err(StoreError::InvalidData);

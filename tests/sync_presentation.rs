@@ -46,7 +46,7 @@ fn app() -> Coordinator {
     app.receive(AppEvent::PageLoaded {
         request_id: id,
         key: snapshot("base").key,
-        result: Ok(Some(snapshot("base"))),
+        result: Ok(Some(snapshot("base").into())),
     });
     app
 }
@@ -247,7 +247,7 @@ fn returning_to_the_note_cancels_an_older_page_load() {
     app.receive(AppEvent::PageLoaded {
         request_id: id,
         key: selected,
-        result: Ok(Some(late)),
+        result: Ok(Some(late.into())),
     });
     assert_eq!(app.editor().unwrap().body(), "base");
 }
@@ -306,10 +306,21 @@ fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
             .iter()
             .any(|effect| matches!(effect, AppEffect::Recovery(_)))
     );
-    let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
-        key: snapshot("base").key,
-        local_revision: LocalRevision(1),
-    }));
+    let effects = app.receive(AppEvent::LocalSaved {
+        expected: app.editor().unwrap().rebase_token(),
+        outcome: {
+            let attempt = SavedRevision {
+                key: snapshot("base").key,
+                local_revision: LocalRevision(1),
+            };
+            let mut page = app.editor().unwrap().rebase_input().1;
+            page.local_revision = attempt.local_revision;
+            bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt,
+                stored: page.into(),
+            }
+        },
+    });
     assert!(
         effects
             .iter()
@@ -398,7 +409,7 @@ fn uncached_errors_are_key_scoped_and_clear_after_download() {
     app.receive(AppEvent::PageLoaded {
         request_id: id,
         key: selected,
-        result: Ok(Some(downloaded)),
+        result: Ok(Some(downloaded.into())),
     });
     assert_eq!(app.editor().unwrap().body(), "downloaded");
     assert!(app.selected_uncached().is_none());
@@ -422,7 +433,7 @@ fn successful_history_navigation_cancels_an_uncached_download() {
     app.receive(AppEvent::PageLoaded {
         request_id: id,
         key: second.key.clone(),
-        result: Ok(Some(second)),
+        result: Ok(Some(second.into())),
     });
     let abandoned = select_uncached(&mut app, "uncached.md");
     let id = app
@@ -436,7 +447,7 @@ fn successful_history_navigation_cancels_an_uncached_download() {
     app.receive(AppEvent::PageLoaded {
         request_id: id,
         key: snapshot("base").key,
-        result: Ok(Some(snapshot("base"))),
+        result: Ok(Some(snapshot("base").into())),
     });
     app.receive(AppEvent::SelectedPageStatus {
         key: abandoned,

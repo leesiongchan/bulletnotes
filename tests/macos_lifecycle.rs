@@ -14,10 +14,21 @@ fn key() -> PageKey {
 fn app() -> Coordinator {
     let mut app = Coordinator::new(key().connection, key);
     app.dispatch(AppAction::NewNote);
-    app.receive(AppEvent::LocalSaved(SavedRevision {
-        key: key(),
-        local_revision: LocalRevision(0),
-    }));
+    app.receive(AppEvent::LocalSaved {
+        expected: app.editor().unwrap().rebase_token(),
+        outcome: {
+            let attempt = SavedRevision {
+                key: key(),
+                local_revision: LocalRevision(0),
+            };
+            let mut page = app.editor().unwrap().rebase_input().1;
+            page.local_revision = attempt.local_revision;
+            bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt,
+                stored: page.into(),
+            }
+        },
+    });
     app
 }
 #[test]
@@ -35,10 +46,21 @@ fn close_flushes_locally_before_hiding_without_a_network_dependency() {
             .iter()
             .any(|effect| matches!(effect, AppEffect::HideReady))
     );
-    let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
-        key: key(),
-        local_revision: LocalRevision(1),
-    }));
+    let effects = app.receive(AppEvent::LocalSaved {
+        expected: app.editor().unwrap().rebase_token(),
+        outcome: {
+            let attempt = SavedRevision {
+                key: key(),
+                local_revision: LocalRevision(1),
+            };
+            let mut page = app.editor().unwrap().rebase_input().1;
+            page.local_revision = attempt.local_revision;
+            bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt,
+                stored: page.into(),
+            }
+        },
+    });
     assert!(
         effects
             .iter()
@@ -61,7 +83,7 @@ fn failed_save_cancels_hide_and_quit_and_retains_the_buffer() {
             AppAction::RequestQuit
         });
         let effects = app.receive(AppEvent::LocalSaveFailed(
-            key(),
+            app.editor().unwrap().rebase_token(),
             LocalRevision(1),
             StoreError::Closed,
         ));
@@ -89,10 +111,21 @@ fn new_drafts_are_recorded_as_the_last_visited_note_after_creation_acknowledges(
             .iter()
             .any(|effect| matches!(effect, AppEffect::RecordVisit(_)))
     );
-    let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
-        key: key(),
-        local_revision: LocalRevision(0),
-    }));
+    let effects = app.receive(AppEvent::LocalSaved {
+        expected: app.editor().unwrap().rebase_token(),
+        outcome: {
+            let attempt = SavedRevision {
+                key: key(),
+                local_revision: LocalRevision(0),
+            };
+            let mut page = app.editor().unwrap().rebase_input().1;
+            page.local_revision = attempt.local_revision;
+            bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt,
+                stored: page.into(),
+            }
+        },
+    });
     assert!(
         effects
             .iter()

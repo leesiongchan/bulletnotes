@@ -202,14 +202,23 @@ async fn an_uncommitted_editor_keeps_its_original_base_when_remote_install_wins_
         .await
         .unwrap();
     assert_eq!(saved.local_revision, LocalRevision(1));
-    let conflicts = store.conflicts(&key("one.md").connection).await.unwrap();
-    assert_eq!(conflicts.len(), 1);
-    assert_eq!(conflicts[0].base, Some(original));
-    assert_eq!(conflicts[0].local.body, "unsaved editor text");
-    assert!(matches!(&conflicts[0].remote,RemoteRead::Present(file) if file.body=="remote"));
+    let restored = store
+        .load_editor_page(&key("one.md"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
-        store.load_page(&key("one.md")).await.unwrap().unwrap().body,
-        "unsaved editor text"
+        restored.authored.as_ref().unwrap().remote_base,
+        Some(original)
+    );
+    assert_eq!(restored.presented().body, "unsaved editor text");
+    assert_eq!(restored.stored.page.body, "remote");
+    assert_eq!(
+        store
+            .pending_reconciliation_keys(&key("one.md").connection)
+            .await
+            .unwrap(),
+        vec![key("one.md")]
     );
     assert!(
         store

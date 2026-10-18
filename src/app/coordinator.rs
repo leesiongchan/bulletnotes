@@ -6,7 +6,12 @@ use super::{
     recovery::{RecoveryIntent, RecoveryOutcome},
 };
 use crate::{
-    domain::{connection::ConnectionId, error::StoreError, page::*},
+    domain::{
+        connection::ConnectionId,
+        error::StoreError,
+        page::*,
+        reconciliation::{EditorRestore, EditorToken, LocalSaveOutcome, StoredPage},
+    },
     store::search::{SearchQuery, SearchResults},
 };
 use std::time::Duration;
@@ -64,19 +69,31 @@ pub enum AppEvent {
     },
     MetadataFailed(PageKey),
     MetadataDurable,
-    LocalSaved(SavedRevision),
-    LocalSaveFailed(PageKey, LocalRevision, StoreError),
+    LocalSaved {
+        expected: EditorToken,
+        outcome: LocalSaveOutcome,
+    },
+    LocalSaveFailed(EditorToken, LocalRevision, StoreError),
+    RebaseReady {
+        expected: EditorToken,
+        stored: StoredPage,
+        edits: Vec<crate::sync::text_merge::SourceEdit>,
+    },
     SearchReady(u64, Result<SearchResults, StoreError>),
     PageLoaded {
         request_id: u64,
         key: PageKey,
-        result: Result<Option<PageSnapshot>, StoreError>,
+        result: Result<Option<EditorRestore>, StoreError>,
     },
 }
 pub enum AppEffect {
     Recovery(RecoveryIntent),
-    CreateDraft(PageKey),
+    CreateDraft {
+        key: PageKey,
+        expected: EditorToken,
+    },
     SaveLocal {
+        expected: EditorToken,
         key: PageKey,
         body: String,
         revision: LocalRevision,
@@ -515,7 +532,17 @@ impl Coordinator {
                     self.notice = Some(METADATA_FAILURE);
                 }
             }
-            AppEvent::LocalSaved(saved) => {
+            AppEvent::RebaseReady {
+                expected,
+                stored,
+                edits,
+            } => {
+                if let Some(editor) = &mut self.editor {
+                    editor.apply_rebase(&expected, stored, &edits);
+                }
+            }
+            AppEvent::LocalSaved { expected, outcome } => {
+                let saved = &outcome.attempt;
                 let newly_created = self
                     .editor
                     .as_ref()
@@ -523,7 +550,7 @@ impl Coordinator {
                 if self
                     .editor
                     .as_mut()
-                    .is_some_and(|editor| editor.acknowledge(&saved))
+                    .is_some_and(|editor| editor.acknowledge(&expected, &outcome))
                 {
                     self.notice = None;
                     if newly_created {
@@ -556,11 +583,11 @@ impl Coordinator {
                     }
                 }
             }
-            AppEvent::LocalSaveFailed(key, revision, _) => {
+            AppEvent::LocalSaveFailed(expected, revision, _) => {
                 if self
                     .editor
                     .as_mut()
-                    .is_some_and(|editor| editor.fail(&key, revision))
+                    .is_some_and(|editor| editor.fail(&expected, revision))
                 {
                     self.pending_transition = None;
                     self.pending_load = None;
@@ -585,7 +612,11 @@ impl Coordinator {
                     return effects;
                 };
                 match result {
-                    Ok(Some(mut page)) if page.key == key => {
+                    Ok(Some(mut restored)) if restored.presented().key == key => {
+                        let page = restored
+                            .authored
+                            .as_mut()
+                            .unwrap_or(&mut restored.stored.page);
                         self.selected_uncached = None;
                         self.selected_page_error = None;
                         if let Some((history, _)) = request.history {
@@ -600,7 +631,7 @@ impl Coordinator {
                             self.navigation.open(key.clone(), page.position);
                         }
                         self.navigation.set_view(View::Note);
-                        self.editor = Some(EditorSession::restore(page));
+                        self.editor = Some(EditorSession::restore(restored));
                         self.notice = None;
                         effects.push(AppEffect::RecordVisit(key));
                     }
@@ -673,15 +704,19 @@ impl Coordinator {
             return;
         }
         if editor.needs_create() {
-            editor.start_write(LocalRevision(0));
-            effects.push(AppEffect::CreateDraft(editor.key().clone()));
+            let expected = editor.start_write(LocalRevision(0));
+            effects.push(AppEffect::CreateDraft {
+                key: editor.key().clone(),
+                expected,
+            });
         } else {
             let revision = editor.revision();
             let body = editor.body().to_owned();
             let key = editor.key().clone();
             let baseline = Box::new(editor.baseline());
-            editor.start_write(revision);
+            let expected = editor.start_write(revision);
             effects.push(AppEffect::SaveLocal {
+                expected,
                 key,
                 body,
                 revision,

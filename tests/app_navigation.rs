@@ -131,7 +131,7 @@ mod coordination {
         app.receive(AppEvent::PageLoaded {
             request_id: request,
             key: key("a.md"),
-            result: Ok(Some(page("a.md", "original"))),
+            result: Ok(Some(page("a.md", "original").into())),
         });
         app
     }
@@ -147,7 +147,14 @@ mod coordination {
             })
             .expect("load request")
     }
-    fn save(effects: &[AppEffect]) -> (PageKey, String, LocalRevision) {
+    fn save(
+        effects: &[AppEffect],
+    ) -> (
+        PageKey,
+        String,
+        LocalRevision,
+        bulletnotes::domain::reconciliation::EditorToken,
+    ) {
         effects
             .iter()
             .find_map(|effect| {
@@ -155,21 +162,39 @@ mod coordination {
                     key,
                     body,
                     revision,
+                    expected,
                     ..
                 } = effect
                 {
-                    Some((key.clone(), body.clone(), *revision))
+                    Some((key.clone(), body.clone(), *revision, expected.clone()))
                 } else {
                     None
                 }
             })
             .expect("save request")
     }
-    fn ack(app: &mut Coordinator, write: (PageKey, String, LocalRevision)) -> Vec<AppEffect> {
-        app.receive(AppEvent::LocalSaved(SavedRevision {
-            key: write.0,
-            local_revision: write.2,
-        }))
+    fn ack(
+        app: &mut Coordinator,
+        write: (
+            PageKey,
+            String,
+            LocalRevision,
+            bulletnotes::domain::reconciliation::EditorToken,
+        ),
+    ) -> Vec<AppEffect> {
+        let mut page = app.editor().unwrap().rebase_input().1;
+        page.body = write.1;
+        page.local_revision = write.2;
+        app.receive(AppEvent::LocalSaved {
+            expected: write.3,
+            outcome: bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt: SavedRevision {
+                    key: write.0,
+                    local_revision: write.2,
+                },
+                stored: page.into(),
+            },
+        })
     }
     #[test]
     fn save_is_due_by_250ms_and_only_acknowledgement_is_clean() {
@@ -229,7 +254,7 @@ mod coordination {
         app.dispatch(AppAction::EditText("unsaved 日本語".into()));
         let write = save(&app.dispatch(AppAction::RequestQuit));
         let effects = app.receive(AppEvent::LocalSaveFailed(
-            write.0,
+            write.3,
             write.2,
             StoreError::Closed,
         ));
@@ -273,17 +298,17 @@ mod coordination {
         app.receive(AppEvent::PageLoaded {
             request_id: new_a,
             key: key("a.md"),
-            result: Ok(Some(page("a.md", "new A"))),
+            result: Ok(Some(page("a.md", "new A").into())),
         });
         app.receive(AppEvent::PageLoaded {
             request_id: b,
             key: key("b.md"),
-            result: Ok(Some(page("b.md", "B"))),
+            result: Ok(Some(page("b.md", "B").into())),
         });
         app.receive(AppEvent::PageLoaded {
             request_id: old_a,
             key: key("a.md"),
-            result: Ok(Some(page("a.md", "old A"))),
+            result: Ok(Some(page("a.md", "old A").into())),
         });
         assert_eq!(app.editor().unwrap().body(), "new A");
     }
@@ -329,11 +354,9 @@ mod coordination {
     fn an_unacknowledged_empty_draft_is_not_yet_saved() {
         let mut app = Coordinator::new(key("a.md").connection.clone(), || key("draft.md"));
         let effects = app.dispatch(AppAction::NewNote);
-        assert!(
-            effects
-                .iter()
-                .any(|e| matches!(e,AppEffect::CreateDraft(key) if key.path.as_str()=="draft.md"))
-        );
+        assert!(effects.iter().any(
+            |e| matches!(e,AppEffect::CreateDraft { key, .. } if key.path.as_str()=="draft.md")
+        ));
         assert_ne!(
             app.editor().unwrap().save_state(),
             LocalSaveState::Clean(LocalRevision(0))
@@ -342,10 +365,26 @@ mod coordination {
             "typed before create acknowledgement".into(),
         ));
         app.dispatch(AppAction::RequestQuit);
-        let effects = app.receive(AppEvent::LocalSaved(SavedRevision {
-            key: key("draft.md"),
-            local_revision: LocalRevision(0),
-        }));
+        let expected = effects
+            .iter()
+            .find_map(|effect| {
+                if let AppEffect::CreateDraft { expected, .. } = effect {
+                    Some(expected.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let effects = app.receive(AppEvent::LocalSaved {
+            expected,
+            outcome: bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt: SavedRevision {
+                    key: key("draft.md"),
+                    local_revision: LocalRevision(0),
+                },
+                stored: page("draft.md", "").into(),
+            },
+        });
         let write = save(&effects);
         assert_eq!(write.1, "typed before create acknowledgement");
         assert!(
@@ -363,7 +402,7 @@ mod coordination {
         app.receive(AppEvent::PageLoaded {
             request_id: request,
             key: key("b.md"),
-            result: Ok(Some(page("b.md", "B"))),
+            result: Ok(Some(page("b.md", "B").into())),
         });
         assert_eq!(app.editor().unwrap().key(), &key("a.md"));
         assert_eq!(app.editor().unwrap().body(), "late typing in A");
@@ -374,7 +413,7 @@ mod coordination {
         app.dispatch(AppAction::EditText("keep".into()));
         let first = save(&app.dispatch(AppAction::Flush));
         app.receive(AppEvent::LocalSaveFailed(
-            first.0,
+            first.3,
             first.2,
             StoreError::Closed,
         ));

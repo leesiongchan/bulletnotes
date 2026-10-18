@@ -548,12 +548,28 @@ async fn stale_editor_attempt_is_durable_before_reconciliation_and_survives_rest
         .await
         .unwrap();
     assert_eq!(result.attempt.local_revision, LocalRevision(2));
-    assert_eq!(result.stored.page.body, "blue fox jumps\n\nend higher");
+    assert_eq!(result.stored.page.body, "blue fox runs\n\nend");
+    assert_eq!(
+        store
+            .load_editor_page(&key())
+            .await
+            .unwrap()
+            .unwrap()
+            .presented()
+            .body,
+        "blue fox jumps\n\nend higher"
+    );
     assert_eq!(
         result.stored,
         store.load_stored_page(&key()).await.unwrap().unwrap()
     );
-    assert_eq!(store.conflicts(&key().connection).await.unwrap().len(), 1);
+    assert_eq!(
+        store
+            .pending_reconciliation_keys(&key().connection)
+            .await
+            .unwrap(),
+        vec![key()]
+    );
     assert!(
         store
             .recovery_copies(&key().connection)
@@ -591,7 +607,13 @@ async fn concurrent_remote_edit_cancels_only_pending_local_deletion() {
         .await
         .unwrap();
     assert_eq!(
-        store.load_active_page(&key()).await.unwrap().unwrap().body,
+        store
+            .load_active_page(&key())
+            .await
+            .unwrap()
+            .unwrap()
+            .page
+            .body,
         "remote edit"
     );
     assert!(
@@ -621,8 +643,24 @@ async fn stale_source_with_same_remote_base_preserves_the_pre_save_version() {
         )
         .await
         .unwrap();
-    assert_eq!(outcome.stored.page.body, "late editor version");
-    assert_eq!(store.conflicts(&key().connection).await.unwrap().len(), 1);
+    assert_eq!(outcome.stored.page.body, "pending resolved version");
+    assert_eq!(
+        store
+            .load_editor_page(&key())
+            .await
+            .unwrap()
+            .unwrap()
+            .presented()
+            .body,
+        "late editor version"
+    );
+    assert_eq!(
+        store
+            .pending_reconciliation_keys(&key().connection)
+            .await
+            .unwrap(),
+        vec![key()]
+    );
     assert!(
         store
             .recovery_copies(&key().connection)

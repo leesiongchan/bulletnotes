@@ -216,6 +216,15 @@ pub(super) fn save_from_base(
     }
     let tx = db.transaction()?;
     let before = pages::load(&tx, &key)?.ok_or(StoreError::PageMissing)?;
+    let durable = pages::load_stored(&tx, &key)?.ok_or(StoreError::PageMissing)?;
+    if super::editor_rebase::handoff(&tx, &key)?.is_some()
+        || (revision != before.local_revision && expected.body != before.body)
+    {
+        let outcome = super::editor_rebase::admit(&tx, durable, body, revision, expected)?;
+        tx.commit()?;
+        return Ok(outcome);
+    }
+
     let deleted = tx.query_row(
         "SELECT remote_deleted FROM pages WHERE connection=?1 AND path=?2",
         [key.connection.as_str(), key.path.as_str()],

@@ -237,6 +237,7 @@ async fn delayed_delete_executes_after_retirement_and_restart_then_repairs() {
             .await
             .unwrap()
             .unwrap()
+            .page
             .body,
         "unchanged\r\n💾"
     );
@@ -500,6 +501,7 @@ async fn retirement_rolls_back_evidence_and_intent_if_preservation_fails() {
             .await
             .unwrap()
             .unwrap()
+            .page
             .body,
         "original"
     );
