@@ -53,8 +53,8 @@ Interfaces: public LocalUi preserved; child functions/methods private to control
 
 Files: native_app.rs and connection_ui.rs; affected child helpers.
 Interfaces: callbacks invoke named workflows; existing controller contracts and user messages retained.
-- [ ] Characterize existing failures with relevant current regressions, then extract dense async callback bodies into named functions.
-- [ ] Run connection security/probe regressions and native lifecycle; inspect for equivalent ordering and rollback; commit.
+- [x] Characterize existing failures with relevant current regressions, then extract dense async callback bodies into named functions.
+- [x] Run connection security/probe regressions and native lifecycle; inspect for equivalent ordering and rollback; commit.
 
 ### Task 5: Review and completion audit
 

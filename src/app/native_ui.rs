@@ -8,6 +8,7 @@ use crate::{
     AppWindow,
     platform::{
         application::NativeApplication,
+        hotkey::{NativeHotkeyBackend, PendingHotkey},
         integration::{self, MacIntegration},
     },
     store::settings::{AppSettings, HotkeySettings},
@@ -15,7 +16,7 @@ use crate::{
 use slint::ComponentHandle;
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc,
+    rc::{Rc, Weak},
     time::Duration,
 };
 struct State {
@@ -145,17 +146,55 @@ impl State {
         let old = self.settings.borrow().clone();
         let weak = Rc::downgrade(self);
         let appearance = self.appearance.clone();
-        if slint::spawn_local(async move {
-            let saved=appearance.save_hotkey(settings.clone()).await;let Some(state)=weak.upgrade()else{return;};
-            let Some(window)=state.window.upgrade()else{return;};
-            if saved.is_err(){drop(pending);state.message("Shortcut could not be saved. The current shortcut is kept; try again.",true);}
-            else {
-                let committed=state.integration.borrow_mut().as_mut().is_some_and(|native|native.commit_hotkey(pending).is_ok());
-                if committed {state.settings.replace(settings.clone());window.set_hotkey_accelerator(integration::accelerator(&settings).into());state.message("Shortcut saved.",false);}
-                else {let rollback=appearance.save_hotkey(old).await;state.message(if rollback.is_ok(){"Shortcut could not be changed. The previous shortcut is kept."}else{"Shortcut could not be changed and its settings need another save. Use the menu to reopen."},true);}
-            }
+        if slint::spawn_local(Self::save_hotkey(weak, appearance, settings, pending, old)).is_err()
+        {
             window.set_hotkey_busy(false);
-        }).is_err(){window.set_hotkey_busy(false);self.message("Shortcut change could not start. The current shortcut is kept.",true);}
+            self.message(
+                "Shortcut change could not start. The current shortcut is kept.",
+                true,
+            );
+        }
+    }
+    async fn save_hotkey(
+        weak: Weak<Self>,
+        appearance: AppearanceUi,
+        settings: HotkeySettings,
+        pending: PendingHotkey<NativeHotkeyBackend>,
+        old: HotkeySettings,
+    ) {
+        let saved = appearance.save_hotkey(settings.clone()).await;
+        let Some(state) = weak.upgrade() else {
+            return;
+        };
+        let Some(window) = state.window.upgrade() else {
+            return;
+        };
+        if saved.is_err() {
+            drop(pending);
+            state.message(
+                "Shortcut could not be saved. The current shortcut is kept; try again.",
+                true,
+            );
+        } else {
+            let committed = state
+                .integration
+                .borrow_mut()
+                .as_mut()
+                .is_some_and(|native| native.commit_hotkey(pending).is_ok());
+            if committed {
+                state.settings.replace(settings.clone());
+                window.set_hotkey_accelerator(integration::accelerator(&settings).into());
+                state.message("Shortcut saved.", false);
+            } else {
+                let rollback = appearance.save_hotkey(old).await;
+                state.message(if rollback.is_ok() {
+                    "Shortcut could not be changed. The previous shortcut is kept."
+                } else {
+                    "Shortcut could not be changed and its settings need another save. Use the menu to reopen."
+                }, true);
+            }
+        }
+        window.set_hotkey_busy(false);
     }
 }
 pub fn bind(
@@ -229,22 +268,10 @@ pub fn bind(
         window.on_native_preferences_changed(move || state.preferences());
     }
     {
-        let state = state.clone();
         window.on_native_activation_changed(move || {
             integration::remember_foreign_app();
-            let active = state
-                .integration
-                .borrow()
-                .as_ref()
-                .is_some_and(MacIntegration::is_active);
-            if active
-                && state
-                    .window
-                    .upgrade()
-                    .is_some_and(|window| !window.window().is_visible())
-            {
-                let _ = state.show();
-            }
+            // Activation also occurs when About opens; only explicit reopen
+            // requests, menu actions and the hotkey reveal the hidden note.
         });
     }
     {

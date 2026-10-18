@@ -285,6 +285,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let app=objc2_app_kit::NSApplication::sharedApplication(objc2::MainThreadMarker::new().ok_or("not main thread")?);
                     if let Some(about)=app.windows().iter().find(|native|native.title().to_string()=="About Bulletnotes" && native.isVisible()) {
                         pause().await;
+                        // Reproduce the activation notification that opening About delivers.
+                        window.invoke_native_activation_changed();
+                        pause().await;
                         if window.window().is_visible(){return Err("About action unexpectedly reopened the hidden note".into());}
                         about_observed=true;
                         if let Some(path)=&about_capture {
@@ -427,6 +430,17 @@ async fn connection_transition_contract(
     let next = ConnectionConfig::parse("https://other-generated.example")?
         .id()
         .clone();
+    // Dropping an admitted foreground future must restore admission and UI state.
+    let mut canceled = Box::pin(running.local().change_connection(next.clone()));
+    let pending = std::future::poll_fn(|cx| {
+        use std::future::Future;
+        std::task::Poll::Ready(canceled.as_mut().poll(cx).is_pending())
+    })
+    .await;
+    drop(canceled);
+    if !pending || running.window().get_note_read_only() {
+        return Err("canceled connection replacement left authoring locked".into());
+    }
     let injector = rusqlite::Connection::open(path)?;
     injector.execute_batch("BEGIN IMMEDIATE")?;
     let local = running.local().clone();

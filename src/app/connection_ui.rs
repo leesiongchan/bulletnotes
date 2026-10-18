@@ -11,9 +11,13 @@ use crate::{
 use slint::ComponentHandle;
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
-use tokio::{runtime::Handle, sync::watch, task::AbortHandle};
+use tokio::{
+    runtime::Handle,
+    sync::watch,
+    task::{AbortHandle, JoinHandle},
+};
 struct State {
     window: slint::Weak<AppWindow>,
     controller: ConnectionController,
@@ -81,31 +85,79 @@ impl State {
         });
         self.abort.replace(Some(task.abort_handle()));
         let weak = Rc::downgrade(self);
-        if slint::spawn_local(async move{
-            let result=task.await;let Some(state)=weak.upgrade()else{return;};if state.epoch.get()!=epoch{return;}
-            state.abort.borrow_mut().take();state.busy.set(false);
-            let Some(window)=state.window.upgrade()else{return;};window.set_connection_busy(false);
-            match result {
-                Ok(Ok(outcome))=>{
-                    state.input.borrow_mut().take();state.policy.borrow_mut().reset();
-                    let mut message=match outcome.write_capability {
-                        Ok(_)=>if window.get_sync_available(){"Connection verified · starting automatic sync…".to_owned()}else{"Connection verified · automatic sync is off.".to_owned()},
-                        Err(error)=>format!("Reading is available. Write sync is paused: {error}."),
-                    };
-                    if let Some(warning)=outcome.credential_warning{message.push_str(&format!(" {warning}."));}
-                    if outcome.cleanup_pending{message.push_str(" Temporary-page cleanup is pending; reconnect to retry its guarded cleanup.");}
-                    window.set_connection_url(outcome.client.connection_id().as_str().into());window.set_connection_message(message.into());state.outcomes.send_replace(Some(outcome));
-                },
-                Ok(Err(AppError::Sync(SyncError::Network)))=>{
-                    window.set_connection_message("Connection is unavailable. Retrying automatically; your local notes are still available.".into());state.retry_later();
-                },
-                Ok(Err(error))=>{state.input.borrow_mut().take();window.set_connection_message(format!("Connection failed: {error}. Your local notes are still available.").into());},
-                Err(_)=>{state.input.borrow_mut().take();window.set_connection_message("Connection check stopped. Your local notes are still available; try again.".into());},
+        if slint::spawn_local(Self::finish_attempt(weak, task, epoch)).is_err() {
+            if let Some(task) = self.abort.borrow_mut().take() {
+                task.abort();
             }
-        }).is_err(){
-            if let Some(task)=self.abort.borrow_mut().take(){task.abort();}
-            self.busy.set(false);window.set_connection_busy(false);window.set_connection_message("Connection check could not start. Try again.".into());
+            self.busy.set(false);
+            window.set_connection_busy(false);
+            window.set_connection_message("Connection check could not start. Try again.".into());
         }
+    }
+    async fn finish_attempt(
+        weak: Weak<Self>,
+        task: JoinHandle<Result<ConnectionOutcome, AppError>>,
+        epoch: u64,
+    ) {
+        let result = task.await;
+        let Some(state) = weak.upgrade() else {
+            return;
+        };
+        if state.epoch.get() != epoch {
+            return;
+        }
+        state.abort.borrow_mut().take();
+        state.busy.set(false);
+        let Some(window) = state.window.upgrade() else {
+            return;
+        };
+        window.set_connection_busy(false);
+        match result {
+            Ok(Ok(outcome)) => state.connected(&window, outcome),
+            Ok(Err(AppError::Sync(SyncError::Network))) => {
+                window.set_connection_message("Connection is unavailable. Retrying automatically; your local notes are still available.".into());
+                state.retry_later();
+            }
+            Ok(Err(error)) => {
+                state.input.borrow_mut().take();
+                window.set_connection_message(
+                    format!("Connection failed: {error}. Your local notes are still available.")
+                        .into(),
+                );
+            }
+            Err(_) => {
+                state.input.borrow_mut().take();
+                window.set_connection_message(
+                    "Connection check stopped. Your local notes are still available; try again."
+                        .into(),
+                );
+            }
+        }
+    }
+    fn connected(&self, window: &AppWindow, outcome: ConnectionOutcome) {
+        self.input.borrow_mut().take();
+        self.policy.borrow_mut().reset();
+        let mut message = match outcome.write_capability {
+            Ok(_) => {
+                if window.get_sync_available() {
+                    "Connection verified · starting automatic sync…".to_owned()
+                } else {
+                    "Connection verified · automatic sync is off.".to_owned()
+                }
+            }
+            Err(error) => format!("Reading is available. Write sync is paused: {error}."),
+        };
+        if let Some(warning) = outcome.credential_warning {
+            message.push_str(&format!(" {warning}."));
+        }
+        if outcome.cleanup_pending {
+            message.push_str(
+                " Temporary-page cleanup is pending; reconnect to retry its guarded cleanup.",
+            );
+        }
+        window.set_connection_url(outcome.client.connection_id().as_str().into());
+        window.set_connection_message(message.into());
+        self.outcomes.send_replace(Some(outcome));
     }
 }
 #[derive(Clone)]

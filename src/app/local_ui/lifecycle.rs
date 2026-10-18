@@ -17,53 +17,63 @@ impl LocalUi {
         {
             return Err(LocalUiError::SaveFailed);
         }
+        let mut transition = ConnectionChange {
+            state: &self.0,
+            active: true,
+        };
         self.0.render();
-        let result =
-            async {
-                if connection == self.connection_id() {
-                    return self
-                        .0
-                        .appearance
-                        .save_connection(connection)
-                        .await
-                        .map_err(|_| LocalUiError::SaveFailed);
-                }
-                self.flush().await?;
-                self.0
-                    .appearance
-                    .save_connection(connection.clone())
-                    .await
-                    .map_err(|_| LocalUiError::SaveFailed)?;
-                let draft_connection = connection.clone();
-                if !self.0.coordinator.borrow_mut().change_connection(
-                    connection.clone(),
-                    move || PageKey {
-                        connection: draft_connection.clone(),
-                        path: new_note_path(&jiff::Zoned::now(), uuid::Uuid::new_v4()),
-                    },
-                ) {
-                    return Err(LocalUiError::SaveFailed);
-                }
-                self.0.presentation.reset();
-                self.0.sync.facts.borrow_mut().take();
-                let last = self
-                    .0
-                    .store
-                    .last_cached_page(&connection)
-                    .await
-                    .map_err(|_| LocalUiError::LoadFailed)?;
-                // The connection is already replaced and durable; admit its initial open.
-                self.0.lifecycle.finish_connection();
-                self.0.dispatch(match last {
-                    Some(key) => AppAction::OpenPage(key),
-                    None => AppAction::NewNote,
-                });
-                Ok(())
+        let result = self.replace_connection(connection).await;
+        transition.release();
+        let result = result.map(|action| {
+            if let Some(action) = action {
+                self.0.dispatch(action);
             }
-            .await;
-        self.0.lifecycle.finish_connection();
+        });
         self.0.render();
         result
+    }
+    async fn replace_connection(
+        &self,
+        connection: ConnectionId,
+    ) -> Result<Option<AppAction>, LocalUiError> {
+        if connection == self.connection_id() {
+            self.0
+                .appearance
+                .save_connection(connection)
+                .await
+                .map_err(|_| LocalUiError::SaveFailed)?;
+            return Ok(None);
+        }
+        self.flush().await?;
+        self.0
+            .appearance
+            .save_connection(connection.clone())
+            .await
+            .map_err(|_| LocalUiError::SaveFailed)?;
+        let draft_connection = connection.clone();
+        if !self
+            .0
+            .coordinator
+            .borrow_mut()
+            .change_connection(connection.clone(), move || PageKey {
+                connection: draft_connection.clone(),
+                path: new_note_path(&jiff::Zoned::now(), uuid::Uuid::new_v4()),
+            })
+        {
+            return Err(LocalUiError::SaveFailed);
+        }
+        self.0.presentation.reset();
+        self.0.sync.facts.borrow_mut().take();
+        let last = self
+            .0
+            .store
+            .last_cached_page(&connection)
+            .await
+            .map_err(|_| LocalUiError::LoadFailed)?;
+        Ok(Some(match last {
+            Some(key) => AppAction::OpenPage(key),
+            None => AppAction::NewNote,
+        }))
     }
     pub(crate) fn prepare_close(&self, intent: CloseIntent) -> bool {
         let admitted = self.0.lifecycle.prepare_close(intent);
@@ -163,6 +173,28 @@ impl State {
         .is_err()
         {
             self.finish_lifecycle();
+        }
+    }
+}
+
+// A dropped future must release foreground admission just like an explicit error.
+struct ConnectionChange<'a> {
+    state: &'a State,
+    active: bool,
+}
+impl ConnectionChange<'_> {
+    fn release(&mut self) {
+        if self.active {
+            self.state.lifecycle.finish_connection();
+            self.active = false;
+        }
+    }
+}
+impl Drop for ConnectionChange<'_> {
+    fn drop(&mut self) {
+        if self.active {
+            self.release();
+            self.state.render();
         }
     }
 }
