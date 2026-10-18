@@ -9,7 +9,12 @@ use global_hotkey::{
     hotkey::{Code, HotKey, Modifiers},
 };
 use objc2::MainThreadMarker;
-use std::{cell::RefCell, collections::BTreeMap, ffi::c_void, ptr};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    ffi::{c_ulong, c_void},
+    ptr,
+};
 type NativeRef = *mut c_void;
 type EventCallback = unsafe extern "C" fn(NativeRef, NativeRef, NativeRef) -> i32;
 #[repr(C)]
@@ -31,7 +36,7 @@ unsafe extern "C" {
     fn InstallEventHandler(
         target: NativeRef,
         callback: Option<EventCallback>,
-        count: u32,
+        count: c_ulong,
         events: *const EventType,
         data: NativeRef,
         handler: *mut NativeRef,
@@ -52,8 +57,8 @@ unsafe extern "C" {
         name: u32,
         desired: u32,
         actual: *mut u32,
-        size: u32,
-        actual_size: *mut u32,
+        size: c_ulong,
+        actual_size: *mut c_ulong,
         result: NativeRef,
     ) -> i32;
 }
@@ -91,7 +96,7 @@ impl NativeHotkeyBackend {
             InstallEventHandler(
                 GetApplicationEventTarget(),
                 Some(on_event),
-                events.len() as u32,
+                events.len() as c_ulong,
                 events.as_ptr(),
                 (&mut *context as *mut Context).cast(),
                 &mut handler,
@@ -207,12 +212,12 @@ unsafe extern "C" fn on_event(_: NativeRef, event: NativeRef, data: NativeRef) -
                 u32::from_be_bytes(*b"----"),
                 u32::from_be_bytes(*b"hkid"),
                 ptr::null_mut(),
-                size_of::<KeyId>() as u32,
+                size_of::<KeyId>() as c_ulong,
                 &mut size,
                 (&mut key as *mut KeyId).cast(),
             )
         };
-        if status != 0 || size != size_of::<KeyId>() as u32 || key.signature != SIGNATURE {
+        if status != 0 || size != size_of::<KeyId>() as c_ulong || key.signature != SIGNATURE {
             return NOT_HANDLED;
         }
         // SAFETY: event remains live throughout the callback.
@@ -295,4 +300,30 @@ fn key_code(code: Code) -> Option<u32> {
         Code::F20 => 0x5a,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn callback_counts_match_the_public_mactypes_sdk_abi() {
+        // MacTypes.h: ByteCount and ItemCount are unsigned long, including LP64.
+        let _: unsafe extern "C" fn(
+            NativeRef,
+            u32,
+            u32,
+            *mut u32,
+            std::ffi::c_ulong,
+            *mut std::ffi::c_ulong,
+            NativeRef,
+        ) -> i32 = GetEventParameter;
+        let _: unsafe extern "C" fn(
+            NativeRef,
+            Option<EventCallback>,
+            std::ffi::c_ulong,
+            *const EventType,
+            NativeRef,
+            *mut NativeRef,
+        ) -> i32 = InstallEventHandler;
+    }
 }

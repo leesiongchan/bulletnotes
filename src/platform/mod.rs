@@ -18,3 +18,6 @@ mod native_events;
 
 #[cfg(target_os = "macos")]
 mod exclusive_hotkey;
+
+#[cfg(target_os = "macos")]
+pub mod installation;

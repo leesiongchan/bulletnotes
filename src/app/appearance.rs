@@ -15,7 +15,28 @@ pub struct AppearanceCommit {
     settings: AppSettings,
     preview_id: uuid::Uuid,
 }
+#[derive(Clone)]
+pub(crate) enum MetadataChange {
+    Window(crate::store::settings::WindowPlacement),
+    Hotkey(crate::store::settings::HotkeySettings),
+    Connection(crate::domain::connection::ConnectionId),
+}
+impl MetadataChange {
+    pub(crate) fn apply(&self, settings: &mut AppSettings) {
+        match self {
+            Self::Window(value) => settings.window = Some(value.clone()),
+            Self::Hotkey(value) => settings.hotkey = value.clone(),
+            Self::Connection(value) => settings.active_connection = Some(value.clone()),
+        }
+    }
+}
 impl AppearanceCommit {
+    /// UI appearance tickets own palette/font/paper/imports, never native metadata.
+    pub(crate) fn rebase_metadata(&mut self, current: &AppSettings) {
+        self.settings.window = current.window.clone();
+        self.settings.hotkey = current.hotkey.clone();
+        self.settings.active_connection = current.active_connection.clone();
+    }
     pub fn settings(&self) -> &AppSettings {
         &self.settings
     }
@@ -170,6 +191,10 @@ impl AppearanceController {
                 Err(error)
             }
         }
+    }
+    pub(crate) fn acknowledge_metadata(&mut self, change: &MetadataChange) {
+        change.apply(&mut self.committed);
+        change.apply(&mut self.displayed);
     }
     pub fn cancel_preview(&mut self) {
         self.displayed = self.committed.clone();

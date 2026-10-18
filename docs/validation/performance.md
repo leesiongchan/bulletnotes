@@ -6,6 +6,8 @@ were accessed. Hardware: Apple M4 Pro, Mac16,11, 48 GiB; macOS 27.0.1 (26A434),
 Rust 1.99.1, Slint 1.18.1, winit/FemtoVG, optimized Cargo bench profile. Twenty
 samples per interaction; p95 uses the nearest-rank method. The frame boundary is
 Slint AfterRendering/GPU submission, not a physical display-presentation probe.
+The latest release profile enables thin LTO, one codegen unit, and stripped debug
+information; panic unwinding remains enabled for the native callback boundary.
 
 Run `rustup run 1.99.1 cargo bench --bench interaction --locked`. It writes
 `target/interaction/latest.json` and exits nonzero when any target is unmet.
@@ -14,10 +16,10 @@ Run `rustup run 1.99.1 cargo bench --bench interaction --locked`. It writes
 
 | Interaction | Initial p95 | Latest p95 | Target | Result |
 | --- | ---: | ---: | ---: | --- |
-| Warm activation | 31.915 ms | 15.830 ms | 150 ms | Met on this host |
-| Cached short-page open | 17.433 ms | 18.734 ms | 100 ms | Met on this host |
-| Cached literal search | 33.505 ms | 17.193 ms | 100 ms | Met on this host |
-| Cached 1 MiB note open | 250.162 ms | 155.208 ms | 100 ms | **Open release blocker** |
+| Warm activation | 31.915 ms | 11.231 ms | 150 ms | Met on this host |
+| Cached short-page open | 17.433 ms | 21.554 ms | 100 ms | Met on this host |
+| Cached literal search | 33.505 ms | 17.629 ms | 100 ms | Met on this host |
+| Cached 1 MiB note open | 250.162 ms | 127.602 ms | 100 ms | **Open release blocker** |
 | Catalogue reachability | 5,000/10,000 | 10,000/10,000 | Every page | Met through result continuation |
 
 The original UI hard limit exposed only 5,000 pages. The native harness reproduced
@@ -28,10 +30,10 @@ on each new query. The list remains virtualized, and the harness exercised every
 batch until all 10,000 rows were reachable.
 
 Classified stage timing located the large-note cost in the supported Slint
-selection-restoration call: 145.908 ms p95. Cached storage opening measured
-5.577 ms, setting the text property 0.302 ms, and editor focus 0.001 ms. The
-large-note interval before the next frame was 149.368 ms p95, with a subsequent
-frame interval of 7.311 ms. Stage percentiles have different sample populations
+selection-restoration call: 119.815 ms p95. Cached storage opening measured
+6.058 ms, setting the text property 0.607 ms, and editor focus <0.001 ms. The
+large-note interval before the next frame was 123.916 ms p95, with a subsequent
+frame interval of 5.335 ms. Stage percentiles have different sample populations
 and are not additive. These numbers establish where the measured cost occurs;
 they do not establish a supported framework fix. The benchmark continues failing
 its original 100 ms requirement. No restoration was removed, private editor API

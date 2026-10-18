@@ -85,6 +85,10 @@ Diagnostics are non-blocking and expire after seven UTC calendar dates. Exports
 include complete records already written; a few in-flight diagnostic events may
 still be buffered. Diagnostic buffering is independent of note durability.
 
+See [build and artifact verification](build.md) for development packages and
+separate distribution prerequisites. The top-level About action includes Slint
+attribution.
+
 Run `scripts/check.sh` for formatting, strict all-feature Clippy, and automated
 regressions. Explicit native checks use `scripts/native-lifecycle-check.sh` and
 the named commands in validation documents. Run the native release benchmark with

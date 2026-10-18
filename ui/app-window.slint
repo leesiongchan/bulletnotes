@@ -1,6 +1,6 @@
 import { RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
-import { Palette } from "std-widgets.slint";
+import { Palette, AboutSlint } from "std-widgets.slint";
 import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
@@ -93,6 +93,7 @@ export component AppWindow inherits Window {
     callback native-activation-changed();
     callback native-reopen-requested();
     callback export-diagnostics();
+    callback show-about();
     callback native-geometry-changed();
     callback native-displays-changed();
     callback toggle-activation();
@@ -390,11 +391,29 @@ export component LocalTray inherits SystemTrayIcon {
     tooltip: "Bulletnotes";
     callback reopen();
     callback quit();
+    callback show-about();
     callback export-diagnostics();
     Menu {
+        MenuItem { title: "About Bulletnotes"; activated => { root.show-about(); } }
+        MenuSeparator {}
         MenuItem { title: "Export diagnostics…"; activated => { root.export-diagnostics(); } }
         MenuItem { title: "Show Bulletnotes"; activated => { root.reopen(); } }
         MenuSeparator {}
         MenuItem { title: "Quit Bulletnotes"; activated => { root.quit(); } }
+    }
+}
+
+export component AboutWindow inherits Window {
+    title:"About Bulletnotes";
+    preferred-width:360px;preferred-height:230px;
+    min-width:360px;min-height:230px;
+    always-on-top:true;
+    in property <string> app-version;
+    background:Palette.background;
+    VerticalLayout {
+        padding:20px;spacing:12px;
+        Text { text:"Bulletnotes";font-size:22px;font-weight:600;color:Palette.foreground;horizontal-alignment:center; }
+        Text { text:root.app-version;font-size:12px;color:Palette.foreground;horizontal-alignment:center; }
+        AboutSlint {}
     }
 }

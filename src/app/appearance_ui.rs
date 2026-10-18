@@ -1,6 +1,6 @@
 //! Native appearance actions with a bounded, serialized durable-settings queue.
 use super::{
-    appearance::{AppearanceCommit, AppearanceController},
+    appearance::{AppearanceCommit, AppearanceController, MetadataChange},
     ui::present_settings,
 };
 use crate::{
@@ -17,10 +17,8 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 enum Write {
-    Settings(
-        Box<AppearanceCommit>,
-        Option<oneshot::Sender<Result<(), StoreError>>>,
-    ),
+    Settings(Box<AppearanceCommit>),
+    Metadata(MetadataChange, oneshot::Sender<Result<(), StoreError>>),
     Barrier(oneshot::Sender<()>),
 }
 enum Pending {
@@ -48,99 +46,33 @@ impl AppearanceUi {
             .map_err(|_| StoreError::Closed)?;
         receiver.await.map_err(|_| StoreError::Closed)
     }
-    /// Serialize native window metadata through the same settings owner as themes.
+    /// Metadata patches never inherit an unacknowledged appearance/shortcut preview.
+    async fn save_metadata(&self, change: MetadataChange) -> Result<(), StoreError> {
+        let (sender, receiver) = oneshot::channel();
+        self.0
+            .sender
+            .try_send(Write::Metadata(change, sender))
+            .map_err(|_| StoreError::Closed)?;
+        receiver.await.map_err(|_| StoreError::Closed)?
+    }
     pub async fn save_window(
         &self,
         placement: crate::store::settings::WindowPlacement,
     ) -> Result<(), StoreError> {
-        let mut candidate = self.0.controller.borrow().displayed().clone();
-        candidate.window = Some(placement);
-        let ticket = self
-            .0
-            .controller
-            .borrow_mut()
-            .begin_settings_commit(candidate, true)
-            .map_err(|_| StoreError::InvalidSettings)?;
-        let (sender, receiver) = oneshot::channel();
-        if let Err(error) = self
-            .0
-            .sender
-            .try_send(Write::Settings(Box::new(ticket), Some(sender)))
-        {
-            if let Write::Settings(ticket, _) = error.into_inner() {
-                let _ = self
-                    .0
-                    .controller
-                    .borrow_mut()
-                    .complete_settings_commit(*ticket, Err(StoreError::Closed));
-            }
-            self.0.present();
-            return Err(StoreError::Closed);
-        }
-        self.0.present();
-        receiver.await.map_err(|_| StoreError::Closed)?
+        self.save_metadata(MetadataChange::Window(placement)).await
     }
     pub async fn save_hotkey(
         &self,
         hotkey: crate::store::settings::HotkeySettings,
     ) -> Result<(), StoreError> {
-        let mut candidate = self.0.controller.borrow().displayed().clone();
-        candidate.hotkey = hotkey;
-        let ticket = self
-            .0
-            .controller
-            .borrow_mut()
-            .begin_settings_commit(candidate, true)
-            .map_err(|_| StoreError::InvalidSettings)?;
-        let (sender, receiver) = oneshot::channel();
-        if let Err(error) = self
-            .0
-            .sender
-            .try_send(Write::Settings(Box::new(ticket), Some(sender)))
-        {
-            if let Write::Settings(ticket, _) = error.into_inner() {
-                let _ = self
-                    .0
-                    .controller
-                    .borrow_mut()
-                    .complete_settings_commit(*ticket, Err(StoreError::Closed));
-            }
-            self.0.present();
-            return Err(StoreError::Closed);
-        }
-        self.0.present();
-        receiver.await.map_err(|_| StoreError::Closed)?
+        self.save_metadata(MetadataChange::Hotkey(hotkey)).await
     }
     pub async fn save_connection(
         &self,
         connection: crate::domain::connection::ConnectionId,
     ) -> Result<(), StoreError> {
-        let mut candidate = self.0.controller.borrow().displayed().clone();
-        candidate.active_connection = Some(connection);
-        let ticket = self
-            .0
-            .controller
-            .borrow_mut()
-            .begin_settings_commit(candidate, true)
-            .map_err(|_| StoreError::InvalidSettings)?;
-        let (sender, receiver) = oneshot::channel();
-        if let Err(error) = self
-            .0
-            .sender
-            .try_send(Write::Settings(Box::new(ticket), Some(sender)))
-        {
-            if let Write::Settings(ticket, _) = error.into_inner() {
-                let _ = self
-                    .0
-                    .controller
-                    .borrow_mut()
-                    .complete_settings_commit(*ticket, Err(StoreError::Closed));
-            }
-            self.0.present();
-            return Err(StoreError::Closed);
-        }
-        self.0.present();
-        receiver.await.map_err(|_| StoreError::Closed)?
+        self.save_metadata(MetadataChange::Connection(connection))
+            .await
     }
     pub fn set_system_appearance(&self, system: SystemAppearance) {
         self.0.system.set(system);
@@ -178,13 +110,10 @@ impl State {
             .begin_settings_commit(candidate, allow);
         match ticket {
             Ok(ticket) => {
-                match self
-                    .sender
-                    .try_send(Write::Settings(Box::new(ticket), None))
-                {
+                match self.sender.try_send(Write::Settings(Box::new(ticket))) {
                     Ok(()) => self.message("Saving appearance…"),
                     Err(error) => {
-                        if let Write::Settings(ticket, _) = error.into_inner() {
+                        if let Write::Settings(ticket) = error.into_inner() {
                             let _ = self
                                 .controller
                                 .borrow_mut()
@@ -253,27 +182,36 @@ pub fn bind(
     let weak = Rc::downgrade(&state);
     slint::spawn_local(async move {
         while let Some(write) = receiver.recv().await {
+            let Some(state) = weak.upgrade() else {
+                break;
+            };
             match write {
-                Write::Settings(ticket, reply) => {
+                Write::Settings(mut ticket) => {
+                    ticket.rebase_metadata(state.controller.borrow().committed());
                     let result = store.save_settings(ticket.settings().clone()).await;
-                    if let Some(state) = weak.upgrade() {
-                        let result = state
-                            .controller
-                            .borrow_mut()
-                            .complete_settings_commit(*ticket, result);
-                        state.present();
-                        state.message(if result.is_ok() {
-                            "Appearance saved"
-                        } else {
-                            "Appearance could not be saved. Try selecting your theme again."
-                        });
-                        if let Some(reply) = reply {
-                            let _ = reply.send(result);
-                        }
-                    }
+                    let result = state
+                        .controller
+                        .borrow_mut()
+                        .complete_settings_commit(*ticket, result);
+                    state.present();
+                    state.message(if result.is_ok() {
+                        "Appearance saved"
+                    } else {
+                        "Appearance could not be saved. Try selecting your theme again."
+                    });
                 }
-                Write::Barrier(sender) => {
-                    let _ = sender.send(());
+                Write::Metadata(change, reply) => {
+                    let mut candidate = state.controller.borrow().committed().clone();
+                    change.apply(&mut candidate);
+                    let result = store.save_settings(candidate).await;
+                    if result.is_ok() {
+                        state.controller.borrow_mut().acknowledge_metadata(&change);
+                    }
+                    state.present();
+                    let _ = reply.send(result);
+                }
+                Write::Barrier(reply) => {
+                    let _ = reply.send(());
                 }
             }
         }

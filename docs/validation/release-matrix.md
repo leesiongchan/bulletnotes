@@ -72,3 +72,24 @@ Developer ID signing, notarization, clean Apple Silicon/Intel macOS 14+ installs
 physical accessibility checks, exact selection restoration, and measured native
 performance remain release gates. Ad-hoc fixture signing does not satisfy the
 Developer ID/notarization gate.
+
+## Packaging checkpoint (2026-10-18)
+
+| Check | Evidence |
+| --- | --- |
+| Apple Silicon release build | Locked Rust1.99.1 build, thin LTO, one codegen unit; Mach-O/Info.plist target14.0; hardened ad-hoc signature verified; isolated generated-UI launch passed |
+| Intel release build | Locked cross build; x86_64 Mach-O target14.0 and hardened ad-hoc signature verified; launch/clean install unobserved |
+| Strict distribution rejection | Real generated Mach-O regression rejects unsigned, minOS15, missing resources and development distribution; ad-hoc staple validation fails as expected |
+| Minimum Rust | Final production source compiles with Rust1.92.0 and Cargo.lock; no toolchain defaults changed |
+| Upgrade persistence | Separate current-code process retains committed notes, exact offline source, guarded queue and custom appearance; migration-failure/corruption regressions pass |
+| Metadata settings ordering | Native SQLite-contention regression prevents failed shortcut inheritance by a window save; queued theme changes retain a successful shortcut |
+| Slint attribution | Official AboutSlint component connected to top-level About; native About window observed; optional WindowServer image capture refused despite native visibility and is not claimed |
+| Production signing/notarization | Not performed; required release identity/profile absent; production packaging preflight refuses to proceed |
+| Isolated official SilverBullet | Final guarded probe passed against the owned official2.12.1 server |
+| Deployed endpoint final check | DNS lookup timed out before connection; owned probe journal has zero rows, no probe cleanup pending; earlier successful verification remains historical evidence |
+
+`curl` timing identified the deployed recheck's failure as DNS resolution, with
+zero connect/TLS time; this does not establish the remote server's health.
+Automatic offline retry behavior is covered by local/native fixtures. No resolver,
+proxy, TLS policy or server setting was changed to work around that observation.
+The user's existing note bodies and live preview processes remain untouched.

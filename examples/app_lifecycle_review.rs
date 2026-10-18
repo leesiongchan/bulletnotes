@@ -122,6 +122,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.len() == 3 && args[1] == "--restart-generated" {
         return restart_generated(std::path::Path::new(&args[2]));
     }
+    let about_capture = args
+        .windows(2)
+        .find(|pair| pair[0] == "--about-capture")
+        .map(|pair| std::path::PathBuf::from(&pair[1]));
     let native = NativeApplication::prepare()?;
     let runtime = tokio::runtime::Runtime::new()?;
     let directory = tempfile::Builder::new()
@@ -222,7 +226,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if store.load_settings().await?.hotkey.key!="KeyJ"{return Err("failed settings save changed the durable shortcut".into());}
                     probe_shortcut(old,false)?;probe_shortcut(candidate,true)?;
                     injector.execute_batch("DROP TRIGGER fail_shortcut")?;
-                    window.invoke_apply_hotkey();for _ in 0..200{if !window.get_hotkey_busy(){break;}pause().await;}
+                    // A rejected hotkey must not be inherited by a later window-only save.
+                    injector.execute_batch("CREATE TRIGGER reject_hotkey_only BEFORE UPDATE OF value ON settings WHEN json_extract(NEW.value,'$.hotkey.key')='KeyK' AND json_extract(NEW.value,'$.window.x')=json_extract(OLD.value,'$.window.x') BEGIN SELECT RAISE(ABORT,'generated hotkey failure'); END;")?;
+                    let mut placement=store.load_settings().await?.window.ok_or("placement absent")?;placement.x+=1.0;
+                    injector.execute_batch("BEGIN IMMEDIATE")?;
+                    window.invoke_apply_hotkey();pause().await;
+                    let expected=placement.clone();let appearance=running.appearance().clone();let (sender,receiver)=tokio::sync::oneshot::channel();
+                    slint::spawn_local(async move{let _=sender.send(appearance.save_window(placement).await);})?;
+                    pause().await;injector.execute_batch("COMMIT")?;
+                    receiver.await??;
+                    for _ in 0..200{if !window.get_hotkey_busy(){break;}pause().await;}
+                    let after=store.load_settings().await?;
+                    if after.hotkey.key!="KeyJ" || after.window.as_ref()!=Some(&expected){return Err("window metadata resurrected a rejected shortcut".into());}
+                    probe_shortcut(old,false)?;probe_shortcut(candidate,true)?;
+                    injector.execute_batch("DROP TRIGGER reject_hotkey_only")?;
+                    // A queued appearance ticket must retain a successfully changed key.
+                    injector.execute_batch("BEGIN IMMEDIATE")?;
+                    window.invoke_apply_hotkey();pause().await;
+                    window.set_font_size_px(20.0);window.invoke_appearance_changed();pause().await;
+                    injector.execute_batch("COMMIT")?;
+                    running.appearance().flush().await?;
+                    if store.load_settings().await?.appearance.font_size!=20.0{return Err("queued font preference was lost".into());}
+                    for _ in 0..200{if !window.get_hotkey_busy(){break;}pause().await;}
                     if store.load_settings().await?.hotkey.key!="KeyK"{return Err("valid shortcut was not saved".into());}
                     probe_shortcut(old,true)?;probe_shortcut(candidate,false)?;
                 }
@@ -252,6 +277,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if store.load_page(&review_key).await?.ok_or("page absent")?.body != changed { return Err("native close hid before saving".into()); }
                 #[cfg(feature="protocol-validation")]
                 if blocked_check.data.lock().unwrap().active_reads!=1{return Err("hide required the held network response".into());}
+                eprintln!("lifecycle stage: About while note is hidden");
+                window.invoke_show_about();
+                let mut about_observed=false;
+                for _ in 0..200 {
+                    let app=objc2_app_kit::NSApplication::sharedApplication(objc2::MainThreadMarker::new().ok_or("not main thread")?);
+                    if let Some(about)=app.windows().iter().find(|native|native.title().to_string()=="About Bulletnotes" && native.isVisible()) {
+                        pause().await;
+                        if window.window().is_visible(){return Err("About action unexpectedly reopened the hidden note".into());}
+                        about_observed=true;
+                        if let Some(path)=&about_capture {
+                            for _ in 0..100 {if about.occlusionState().contains(objc2_app_kit::NSWindowOcclusionState::Visible){break;}pause().await;}
+                            eprintln!("About capture: number={}, visible={}, occlusion={}, app_hidden={}",about.windowNumber(),about.isVisible(),about.occlusionState().bits(),app.isHidden());
+                            let status=std::process::Command::new("/usr/sbin/screencapture").args(["-x","-o",&format!("-l{}",about.windowNumber())]).arg(path).status()?;
+                            if !status.success(){return Err("About window capture failed".into());}
+                        }
+                        about.performClose(None);break;
+                    }
+                    pause().await;
+                }
+                if !about_observed {return Err("About window was not observed".into());}
                 eprintln!("lifecycle stage: owned second launch");
                 let executable=std::env::current_exe().map_err(|error|format!("owned executable lookup: {error}"))?;
                 eprintln!("lifecycle executable exists: {}",executable.is_file());

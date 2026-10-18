@@ -74,3 +74,8 @@ required-features = ["native-validation", "protocol-validation"]
 [[bench]]
 name = "interaction"
 harness = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

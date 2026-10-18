@@ -76,6 +76,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 #[cfg(target_os = "macos")]
 fn main() {
+    let arguments: Vec<_> = std::env::args_os().collect();
+    if arguments.len() > 1 {
+        if arguments.len() == 2 && arguments[1] == "--version" {
+            println!("Bulletnotes {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        let result = if arguments.len() == 2 && arguments[1] == "--verify-installation" {
+            bulletnotes::platform::installation::check()
+        } else {
+            Err("unsupported application arguments".into())
+        };
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(error) = run() {
         let message =
             format!("Bulletnotes could not start. {error}. Your local data has been preserved.");

@@ -7,7 +7,7 @@ use super::{
     window_placement::{self, ScreenFrame},
 };
 use crate::{
-    AppWindow, LocalTray,
+    AboutWindow, AppWindow, LocalTray,
     platform::{
         application::NativeApplication,
         window_chrome::{ChromeMonitor, native_window},
@@ -63,6 +63,38 @@ impl LocalApplication {
             native.clone(),
             &settings,
         );
+        {
+            let about = Rc::new(RefCell::new(None::<AboutWindow>));
+            let native = native.clone();
+            let weak = window.as_weak();
+            window.on_show_about(move || {
+                let result = (|| -> AppResult<()> {
+                    let mut about = about.borrow_mut();
+                    if about.is_none() {
+                        let window = AboutWindow::new()?;
+                        window.set_app_version(
+                            concat!("Version ", env!("CARGO_PKG_VERSION"), " · development").into(),
+                        );
+                        *about = Some(window);
+                    }
+                    about.as_ref().ok_or("About is unavailable")?.show()?;
+                    native.activate();
+                    Ok(())
+                })();
+                if result.is_err()
+                    && let Some(window) = weak.upgrade()
+                {
+                    window.set_native_message("About could not be shown. Try again.".into());
+                    window.set_native_warning(true);
+                }
+            });
+            let weak = window.as_weak();
+            tray.on_show_about(move || {
+                if let Some(window) = weak.upgrade() {
+                    window.invoke_show_about();
+                }
+            });
+        }
         let transition_pending = Rc::new(Cell::new(false));
         for quit in [false, true] {
             let weak = window.as_weak();
