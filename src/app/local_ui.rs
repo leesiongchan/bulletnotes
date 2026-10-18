@@ -2,6 +2,7 @@
 mod bindings;
 mod effects;
 mod lifecycle;
+mod metadata;
 mod presentation;
 mod search;
 mod synchronization;
@@ -32,6 +33,8 @@ pub enum LocalUiError {
     SaveFailed,
     #[error("local worker is unavailable")]
     Closed,
+    #[error("page position or history could not be saved; retry before closing")]
+    MetadataFailed,
     #[error("page is unavailable locally")]
     LoadFailed,
     #[error("search could not be completed")]
@@ -114,7 +117,7 @@ impl State {
         if matches!(&action, AppAction::RequestHide | AppAction::RequestQuit)
             && let Some(window) = self.window.upgrade()
         {
-            window.set_lifecycle_pending(self.lifecycle.closing());
+            window.set_lifecycle_pending(self.lifecycle.blocks_authoring());
         }
         let tick = matches!(&action, AppAction::Tick(_));
         let mut app = self.coordinator.borrow_mut();

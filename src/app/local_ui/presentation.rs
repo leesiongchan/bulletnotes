@@ -29,7 +29,7 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        window.set_lifecycle_pending(self.lifecycle.closing());
+        window.set_lifecycle_pending(self.lifecycle.blocks_authoring());
         let app = self.coordinator.borrow();
         window.set_active_view(
             match app.view() {

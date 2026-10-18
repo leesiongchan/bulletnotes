@@ -11,6 +11,8 @@ use crate::{
 };
 use std::time::Duration;
 
+const METADATA_FAILURE: &str = "Page history could not be saved. Note text is still available.";
+
 #[derive(Clone)]
 pub struct SearchRequest {
     pub id: u64,
@@ -61,6 +63,7 @@ pub enum AppEvent {
         id: uuid::Uuid,
     },
     MetadataFailed(PageKey),
+    MetadataDurable,
     LocalSaved(SavedRevision),
     LocalSaveFailed(PageKey, LocalRevision, StoreError),
     SearchReady(u64, Result<SearchResults, StoreError>),
@@ -498,14 +501,18 @@ impl Coordinator {
                     editor.apply_remote_snapshot(page);
                 }
             }
+            AppEvent::MetadataDurable => {
+                if self.notice == Some(METADATA_FAILURE) {
+                    self.notice = None;
+                }
+            }
             AppEvent::MetadataFailed(key) => {
                 if self
                     .editor
                     .as_ref()
                     .is_some_and(|editor| editor.key() == &key)
                 {
-                    self.notice =
-                        Some("Page history could not be saved. Note text is still available.");
+                    self.notice = Some(METADATA_FAILURE);
                 }
             }
             AppEvent::LocalSaved(saved) => {

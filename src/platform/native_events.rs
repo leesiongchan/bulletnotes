@@ -15,10 +15,10 @@ use objc2_app_kit::{
     NSWorkspaceDidActivateApplicationNotification,
 };
 use objc2_foundation::{
-    NSDistributedNotificationCenter, NSKeyValueObservingOptions, NSNotification,
-    NSNotificationCenter, NSNotificationName, NSNotificationSuspensionBehavior, NSObject,
-    NSObjectNSKeyValueObserverRegistration, NSObjectProtocol, NSOperationQueue, NSString,
-    ns_string,
+    NSAppleEventDescriptor, NSAppleEventManager, NSDistributedNotificationCenter,
+    NSKeyValueObservingOptions, NSNotification, NSNotificationCenter, NSNotificationName,
+    NSNotificationSuspensionBehavior, NSObject, NSObjectNSKeyValueObserverRegistration,
+    NSObjectProtocol, NSOperationQueue, NSString, ns_string,
 };
 use slint::ComponentHandle;
 use std::{ffi::c_void, ptr::NonNull};
@@ -40,6 +40,12 @@ define_class!(
         // an untrusted local sender can only request the same action as menu Reopen.
         #[unsafe(method(reopen:))]
         fn reopen(&self, _notification: &NSNotification) {
+            let _=self.ivars().window.upgrade_in_event_loop(|window|window.invoke_native_reopen_requested());
+        }
+        // SAFETY: documented Apple-event handler signature. Only reopen intent is
+        // consumed; descriptors contain no data this adapter reads or stores.
+        #[unsafe(method(handleReopen:withReplyEvent:))]
+        fn handle_reopen(&self, _event: &NSAppleEventDescriptor, _reply: &NSAppleEventDescriptor) {
             let _=self.ivars().window.upgrade_in_event_loop(|window|window.invoke_native_reopen_requested());
         }
         // SAFETY: matches NSObject's documented KVO selector and object encodings.
@@ -73,6 +79,7 @@ pub struct NativeEvents {
     observer: Retained<AppearanceObserver>,
     tokens: Vec<ObserverToken>,
     distributed: Retained<NSDistributedNotificationCenter>,
+    apple_events: Retained<NSAppleEventManager>,
     _main: MainThreadMarker,
 }
 impl NativeEvents {
@@ -115,6 +122,7 @@ impl NativeEvents {
             observer,
             tokens: Vec::new(),
             distributed,
+            apple_events: NSAppleEventManager::sharedAppleEventManager(),
             _main: main,
         };
         let workspace = NSWorkspace::sharedWorkspace().notificationCenter();
@@ -165,6 +173,16 @@ impl NativeEvents {
                 Event::Geometry,
             );
         }
+        // SAFETY: public Foundation selector, documented handler above; AEEventClass
+        // and AEEventID are UInt32 FourCharCodes ('aevt'/'rapp'). Main-thread guard
+        // retains manager and observer and removes this handler during teardown.
+        unsafe {
+            let _: () = msg_send![&*events.apple_events,
+                setEventHandler: &*events.observer,
+                andSelector: sel!(handleReopen:withReplyEvent:),
+                forEventClass: u32::from_be_bytes(*b"aevt"),
+                andEventID: u32::from_be_bytes(*b"rapp")];
+        }
         Ok(events)
     }
     fn observe(
@@ -201,6 +219,13 @@ impl NativeEvents {
 }
 impl Drop for NativeEvents {
     fn drop(&mut self) {
+        // SAFETY: public Foundation removal uses the exact event pair registered
+        // by this retained main-thread guard, before its observer is released.
+        unsafe {
+            let _: () = msg_send![&*self.apple_events,
+                removeEventHandlerForEventClass: u32::from_be_bytes(*b"aevt"),
+                andEventID: u32::from_be_bytes(*b"rapp")];
+        }
         // SAFETY: this exact retained selector observer belongs to this center.
         unsafe {
             self.distributed.removeObserver(&self.observer);

@@ -1,5 +1,5 @@
 //! Bounded ordered writes, latest-request reads and effect delivery.
-use super::{LocalUiError, State};
+use super::{LocalUiError, State, metadata::MetadataJournal};
 use crate::{
     app::coordinator::{AppAction, AppEffect, AppEvent, SearchRequest},
     domain::{error::StoreError, page::*},
@@ -14,7 +14,8 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 enum Work {
     Effect(AppEffect),
-    Barrier(oneshot::Sender<()>),
+    Metadata,
+    Barrier(oneshot::Sender<Result<(), StoreError>>),
 }
 #[derive(Clone)]
 struct LoadRequest {
@@ -26,25 +27,30 @@ pub(super) struct Effects {
     loads: watch::Sender<Option<LoadRequest>>,
     searches: watch::Sender<Option<SearchRequest>>,
     save_timer: slint::Timer,
+    metadata: MetadataJournal,
 }
 pub(super) struct Workers {
+    metadata: MetadataJournal,
     work: mpsc::Receiver<Work>,
     load_requests: watch::Receiver<Option<LoadRequest>>,
     search_requests: watch::Receiver<Option<SearchRequest>>,
 }
 impl Effects {
     pub(super) fn channels() -> (Self, Workers) {
+        let metadata = MetadataJournal::default();
         let (writes, work) = mpsc::channel(16);
         let (loads, load_requests) = watch::channel(None);
         let (searches, search_requests) = watch::channel(None);
         (
             Self {
+                metadata: metadata.clone(),
                 writes,
                 loads,
                 searches,
                 save_timer: slint::Timer::default(),
             },
             Workers {
+                metadata,
                 work,
                 load_requests,
                 search_requests,
@@ -57,11 +63,21 @@ impl Effects {
             .send(Work::Barrier(sender))
             .await
             .map_err(|_| StoreError::Closed)?;
-        receiver.await.map_err(|_| StoreError::Closed)
+        receiver.await.map_err(|_| StoreError::Closed)?
     }
 }
 
 impl State {
+    fn queue_metadata(
+        self: &Rc<Self>,
+        key: PageKey,
+        position: Option<crate::domain::editor::EditorPosition>,
+    ) {
+        self.effects.metadata.record(key.clone(), position);
+        if self.effects.writes.try_send(Work::Metadata).is_err() {
+            self.receive(AppEvent::MetadataFailed(key));
+        }
+    }
     pub(super) fn arm_save(self: &Rc<Self>) {
         self.effects.save_timer.stop();
         let deadline = self
@@ -96,6 +112,10 @@ impl State {
                         key,
                     }));
                 }
+                AppEffect::SavePosition { key, position } => {
+                    self.queue_metadata(key, Some(position))
+                }
+                AppEffect::RecordVisit(key) => self.queue_metadata(key, None),
                 AppEffect::QuitReady => self.quit(),
                 AppEffect::HideReady => {
                     if let Some(window) = self.window.upgrade() {
@@ -122,9 +142,6 @@ impl State {
                             AppEffect::SaveLocal { key, revision, .. } => {
                                 AppEvent::LocalSaveFailed(key, revision, StoreError::Closed)
                             }
-                            AppEffect::SavePosition { key, .. } | AppEffect::RecordVisit(key) => {
-                                AppEvent::MetadataFailed(key)
-                            }
                             _ => continue,
                         };
                         self.receive(event);
@@ -135,7 +152,7 @@ impl State {
     }
 }
 
-fn now_ms() -> Result<u64, StoreError> {
+pub(super) fn now_ms() -> Result<u64, StoreError> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| StoreError::InvalidData)?;
@@ -145,6 +162,7 @@ fn now_ms() -> Result<u64, StoreError> {
 impl Workers {
     pub(super) fn start(self, state: &Rc<State>, store: StoreHandle) -> Result<(), LocalUiError> {
         let Self {
+            metadata,
             mut work,
             mut load_requests,
             mut search_requests,
@@ -156,9 +174,19 @@ impl Workers {
                 while let Some(work) = work.recv().await {
                     let event = match work {
                         Work::Barrier(sender) => {
-                            let _ = sender.send(());
+                            let result = metadata.flush(&store).await.map_err(|(_, error)| error);
+                            if result.is_ok()
+                                && let Some(state) = weak.upgrade()
+                            {
+                                state.receive(AppEvent::MetadataDurable);
+                            }
+                            let _ = sender.send(result);
                             continue;
                         }
+                        Work::Metadata => Some(match metadata.flush(&store).await {
+                            Ok(()) => AppEvent::MetadataDurable,
+                            Err((key, _)) => AppEvent::MetadataFailed(key),
+                        }),
                         Work::Effect(AppEffect::Recovery(intent)) => {
                             let Some(state) = weak.upgrade() else {
                                 break;
@@ -193,20 +221,6 @@ impl Workers {
                                 Err(error) => AppEvent::LocalSaveFailed(key, revision, error),
                             },
                         ),
-                        Work::Effect(AppEffect::SavePosition { key, position }) => {
-                            let result = match now_ms() {
-                                Ok(now) => store.save_position(&key, position, now).await,
-                                Err(error) => Err(error),
-                            };
-                            result.err().map(|_| AppEvent::MetadataFailed(key))
-                        }
-                        Work::Effect(AppEffect::RecordVisit(key)) => {
-                            let result = match now_ms() {
-                                Ok(now) => store.record_visit(&key, now).await,
-                                Err(error) => Err(error),
-                            };
-                            result.err().map(|_| AppEvent::MetadataFailed(key))
-                        }
                         _ => None,
                     };
                     if let Some(state) = weak.upgrade()

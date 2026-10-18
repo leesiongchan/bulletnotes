@@ -59,6 +59,6 @@ Interfaces: callbacks invoke named workflows; existing controller contracts and 
 ### Task 5: Review and completion audit
 
 Files: docs/validation/structure-hardening.md and this plan's execution ledger.
-- [ ] Run scripts/check.sh, Rust1.92 locked production check and native generated-data matrix; inspect outputs.
-- [ ] Dispatch one read-only fresh-context review of this cleanup range; fix material findings with regressions and retain explicit dispositions for every finding.
-- [ ] Audit every spec acceptance against current source and observed tests; record remaining broader release gates separately; commit evidence.
+- [x] Run scripts/check.sh, Rust1.92 locked production check and native generated-data matrix; inspect outputs.
+- [x] Dispatch one read-only fresh-context review of this cleanup range; fix material findings with regressions and retain explicit dispositions for every finding.
+- [x] Audit every spec acceptance against current source and observed tests; record remaining broader release gates separately; commit evidence.

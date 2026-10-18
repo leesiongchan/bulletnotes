@@ -48,3 +48,14 @@ explicit lifecycle transitions and cohesive private modules, in that order.
   lifecycle/editor/theme/sync fixtures pass. No real user data, Keychain or endpoint.
 - One fresh-context review covers this complete cleanup delta, findings fixed and
   verification recorded before completion. No merge/push/publication implied.
+
+
+## Review-driven completion details
+
+Accepted recovery work excludes new close preparation until its pre-dispatch flush
+finishes. Admitted connection replacement completes as an owned UI operation even
+if its caller is canceled; last-page lookup precedes settings/coordinator commit.
+Metadata obligations survive queue saturation/storage failure and barriers report
+failure until actual acknowledgement/retry. Ordinary same-instance LaunchServices
+reopen is explicit intent, handled separately from passive About activation.
+These refine the existing safety contracts; no product feature or schema changes.

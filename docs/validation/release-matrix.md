@@ -119,3 +119,14 @@ Metal acknowledgement from its no-store installation path.
 Fresh same-host 1 MiB p95 is 132.203 ms versus 152.452 ms on the fresh OpenGL
 comparison; the original 100 ms gate remains open. All supported-OS hardware,
 manual input/accessibility, selection-capture and distribution gates remain open.
+
+
+## Structural hardening checkpoint — 2026-10-18
+
+[Code/design audit](structure-hardening.md): persisted position now belongs to the
+domain; foreground lifecycle has one owner; LocalUi responsibilities are separated;
+native/connection callbacks delegate named workflows. A reproduced dropped-future
+lock and an observed About/activation reopening race were fixed. Verification:
+184 passed, zero failed, 19 explicit ignored gates, strict Clippy/fmt, Rust1.92
+checking, nine generated-data native contracts and signed LaunchServices lifecycle.
+These checks do not waive the broader release gates above.

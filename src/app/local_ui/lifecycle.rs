@@ -17,11 +17,25 @@ impl LocalUi {
         {
             return Err(LocalUiError::SaveFailed);
         }
+        self.0.render();
+        let local = self.clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        // An admitted replacement owns its completion even if its caller goes away.
+        if let Err(error) = slint::spawn_local(async move {
+            let result = local.finish_connection_change(connection).await;
+            let _ = sender.send(result);
+        }) {
+            self.0.lifecycle.finish_connection();
+            self.0.render();
+            return Err(error.into());
+        }
+        receiver.await.map_err(|_| LocalUiError::Closed)?
+    }
+    async fn finish_connection_change(&self, connection: ConnectionId) -> Result<(), LocalUiError> {
         let mut transition = ConnectionChange {
             state: &self.0,
             active: true,
         };
-        self.0.render();
         let result = self.replace_connection(connection).await;
         transition.release();
         let result = result.map(|action| {
@@ -45,6 +59,12 @@ impl LocalUi {
             return Ok(None);
         }
         self.flush().await?;
+        let last = self
+            .0
+            .store
+            .last_cached_page(&connection)
+            .await
+            .map_err(|_| LocalUiError::LoadFailed)?;
         self.0
             .appearance
             .save_connection(connection.clone())
@@ -64,19 +84,18 @@ impl LocalUi {
         }
         self.0.presentation.reset();
         self.0.sync.facts.borrow_mut().take();
-        let last = self
-            .0
-            .store
-            .last_cached_page(&connection)
-            .await
-            .map_err(|_| LocalUiError::LoadFailed)?;
         Ok(Some(match last {
             Some(key) => AppAction::OpenPage(key),
             None => AppAction::NewNote,
         }))
     }
     pub(crate) fn prepare_close(&self, intent: CloseIntent) -> bool {
-        let admitted = self.0.lifecycle.prepare_close(intent);
+        let admitted = !self
+            .0
+            .window
+            .upgrade()
+            .is_some_and(|window| window.get_recovery_busy())
+            && self.0.lifecycle.prepare_close(intent);
         if admitted {
             self.0.render();
         }
@@ -119,7 +138,7 @@ impl LocalUi {
                     .effects
                     .barrier()
                     .await
-                    .map_err(|_| LocalUiError::Closed)?;
+                    .map_err(|_| LocalUiError::MetadataFailed)?;
                 if self
                     .0
                     .coordinator
@@ -139,7 +158,7 @@ impl State {
     pub(super) fn finish_lifecycle(&self) {
         self.lifecycle.finish_close();
         if let Some(window) = self.window.upgrade() {
-            window.set_lifecycle_pending(self.lifecycle.closing());
+            window.set_lifecycle_pending(self.lifecycle.blocks_authoring());
         }
     }
     pub(super) fn quit(self: &Rc<Self>) {

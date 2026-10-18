@@ -61,6 +61,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args_os().collect();
     if args
         .get(1)
+        .is_some_and(|arg| arg == "--ordinary-reopen-probe")
+    {
+        return Err("ordinary same-instance reopen unexpectedly launched a new process".into());
+    }
+
+    if args
+        .get(1)
         .is_some_and(|arg| arg == "--shortcut-probe" || arg == "--hold-shortcut")
     {
         use std::{io::Write, str::FromStr};
@@ -251,6 +258,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if store.load_settings().await?.hotkey.key!="KeyK"{return Err("valid shortcut was not saved".into());}
                     probe_shortcut(old,true)?;probe_shortcut(candidate,false)?;
                 }
+                metadata_durability_contract(&running, &store, &review_path).await?;
                 connection_transition_contract(&running, &store, &review_path).await?;
                 eprintln!("lifecycle stage: appearance observation");
                 {
@@ -278,6 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if store.load_page(&review_key).await?.ok_or("page absent")?.body != changed { return Err("native close hid before saving".into()); }
                 #[cfg(feature="protocol-validation")]
                 if blocked_check.data.lock().unwrap().active_reads!=1{return Err("hide required the held network response".into());}
+                ordinary_reopen_contract(&running).await?;
                 eprintln!("lifecycle stage: About while note is hidden");
                 window.invoke_show_about();
                 let mut about_observed=false;
@@ -346,7 +355,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let saved = runtime
         .block_on(reopened.load_page(&key))?
         .ok_or("reopened page absent")?;
-    if saved.body != "retain failed quit café\r\n👩🏽‍💻 日本語" {
+    if saved.body != "retain failed quit café\r\n👩🏽‍💻 日本語" || saved.position.scroll_y != 39.0
+    {
         return Err("native quit did not save the latest buffer".into());
     }
     let settings = runtime.block_on(reopened.load_settings())?;
@@ -430,7 +440,26 @@ async fn connection_transition_contract(
     let next = ConnectionConfig::parse("https://other-generated.example")?
         .id()
         .clone();
-    // Dropping an admitted foreground future must restore admission and UI state.
+    let original_key = running
+        .local()
+        .current_key()
+        .ok_or("connection fixture editor missing")?;
+    let original_body = running.window().get_note_text();
+    running.local().flush().await?;
+    let read_fault = rusqlite::Connection::open(path)?;
+    read_fault.execute_batch("ALTER TABLE pages RENAME TO fixture_hidden_pages")?;
+    let failed = running.local().change_connection(next.clone()).await;
+    read_fault.execute_batch("ALTER TABLE fixture_hidden_pages RENAME TO pages")?;
+    if failed.is_ok()
+        || running.local().current_key().as_ref() != Some(&original_key)
+        || running.window().get_note_text() != original_body
+        || store.load_settings().await?.active_connection.as_ref() != Some(&original)
+    {
+        return Err(
+            "failed last-page lookup discarded the editor or changed the durable connection".into(),
+        );
+    }
+    // Once admitted, replacement completes independently of a dropped caller.
     let mut canceled = Box::pin(running.local().change_connection(next.clone()));
     let pending = std::future::poll_fn(|cx| {
         use std::future::Future;
@@ -438,37 +467,54 @@ async fn connection_transition_contract(
     })
     .await;
     drop(canceled);
-    if !pending || running.window().get_note_read_only() {
-        return Err("canceled connection replacement left authoring locked".into());
+    if !pending {
+        return Err("connection fixture did not reach an asynchronous boundary".into());
     }
+    wait_for_connection(running, store, &next).await?;
+    running.local().change_connection(original.clone()).await?;
+    running.local().wait_until_loaded(&original_key).await?;
+    running.local().flush().await?;
     let injector = rusqlite::Connection::open(path)?;
     injector.execute_batch("BEGIN IMMEDIATE")?;
-    let local = running.local().clone();
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    slint::spawn_local(async move {
-        let _ = sender.send(local.change_connection(next).await);
-    })?;
-    for _ in 0..100 {
-        if running.window().get_note_read_only() {
-            break;
-        }
+    let mut canceled = Box::pin(running.local().change_connection(next.clone()));
+    std::future::poll_fn(|cx| {
+        use std::future::Future;
+        std::task::Poll::Ready(canceled.as_mut().poll(cx).is_pending())
+    })
+    .await;
+    for _ in 0..5 {
         pause().await;
     }
+    drop(canceled);
     let locked = running.window().get_note_read_only();
+    let pending_before_close = running.window().get_lifecycle_pending();
     running.window().invoke_request_hide();
-    let close_rejected = !running.window().get_lifecycle_pending();
+    let close_rejected = running.window().get_lifecycle_pending() == pending_before_close;
+    running.window().invoke_trash_current_note();
+    for _ in 0..5 {
+        pause().await;
+    }
+    let recovery_rejected = !running.window().get_recovery_busy();
     let overlapping_change_rejected = running
         .local()
         .change_connection(original.clone())
         .await
         .is_err();
     injector.execute_batch("COMMIT")?;
-    receiver.await??;
-    if !locked || !close_rejected || !overlapping_change_rejected {
+    if !recovery_rejected {
         return Err(
-            "foreground connection change admitted an overlapping close or replacement".into(),
+            "connection change admitted recovery while its owned commit was pending".into(),
         );
     }
+    if !locked || !close_rejected || !overlapping_change_rejected {
+        return Err(
+            "dropped connection caller released admission before its accepted operation completed"
+                .into(),
+        );
+    }
+    wait_for_connection(running, store, &next).await?;
+    running.local().change_connection(next.clone()).await?;
+    wait_for_connection(running, store, &next).await?;
     running.local().change_connection(original).await?;
     let key = PageKey {
         connection: running.local().connection_id(),
@@ -482,4 +528,121 @@ async fn connection_transition_contract(
         return Err("connection replacement lost the original note".into());
     }
     Ok(())
+}
+
+async fn metadata_durability_contract(
+    running: &LocalApplication,
+    store: &StoreHandle,
+    path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use bulletnotes::{app::coordinator::AppAction, domain::editor::EditorPosition};
+    let key = running
+        .local()
+        .current_key()
+        .ok_or("no metadata fixture page")?;
+    running.local().flush().await?;
+    let injector = rusqlite::Connection::open(path)?;
+    injector.execute_batch("CREATE TRIGGER reject_position BEFORE UPDATE OF anchor ON pages BEGIN SELECT RAISE(ABORT,'generated metadata failure'); END;")?;
+    let position = EditorPosition {
+        anchor: 0,
+        caret: 0,
+        scroll_y: 37.0,
+    };
+    running.local().dispatch(AppAction::SavePosition(position));
+    let rejected = running.local().flush().await.is_err();
+    injector.execute_batch("DROP TRIGGER reject_position")?;
+    if !rejected {
+        return Err("metadata durability barrier acknowledged a failed position write".into());
+    }
+    running.local().flush().await?;
+    if store
+        .load_page(&key)
+        .await?
+        .ok_or("metadata page absent")?
+        .position
+        != position
+    {
+        return Err("metadata barrier lost the failed write instead of retrying it".into());
+    }
+    // One synchronous callback exceeds the bounded queue before its worker can run.
+    for scroll in 0..40 {
+        running
+            .local()
+            .dispatch(AppAction::SavePosition(EditorPosition {
+                scroll_y: scroll as f32,
+                ..position
+            }));
+    }
+    running.local().flush().await?;
+    if store
+        .load_page(&key)
+        .await?
+        .ok_or("metadata page absent")?
+        .position
+        .scroll_y
+        != 39.0
+    {
+        return Err("queue saturation lost the newest accepted position".into());
+    }
+    Ok(())
+}
+
+async fn wait_for_connection(
+    running: &LocalApplication,
+    store: &StoreHandle,
+    connection: &bulletnotes::domain::connection::ConnectionId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for _ in 0..300 {
+        if running
+            .local()
+            .current_key()
+            .is_some_and(|key| &key.connection == connection)
+            && !running.window().get_note_read_only()
+        {
+            if store.load_settings().await?.active_connection.as_ref() != Some(connection) {
+                return Err("connection completion diverged from durable settings".into());
+            }
+            return Ok(());
+        }
+        pause().await;
+    }
+    Err("accepted connection replacement did not complete with an editable note".into())
+}
+
+async fn ordinary_reopen_contract(
+    running: &LocalApplication,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let executable = std::env::current_exe()?;
+    let Some(bundle) = executable
+        .ancestors()
+        .find(|path| path.extension().is_some_and(|extension| extension == "app"))
+    else {
+        return Ok(()); // The signed LaunchServices fixture supplies an actual bundle.
+    };
+    let status = std::process::Command::new("open")
+        .arg("-a")
+        .arg(bundle)
+        .args(["--args", "--ordinary-reopen-probe"])
+        .status()?;
+    if !status.success() {
+        return Err("ordinary same-instance LaunchServices reopen failed".into());
+    }
+    for _ in 0..200 {
+        if running.window().window().is_visible() {
+            break;
+        }
+        pause().await;
+    }
+    if !running.window().window().is_visible() {
+        return Err("ordinary same-instance reopen did not reveal the hidden note".into());
+    }
+    println!("ordinary_launchservices_reopen: true");
+    running.window().invoke_request_hide();
+    for _ in 0..200 {
+        if !running.window().window().is_visible() {
+            return Ok(());
+        }
+        pause().await;
+    }
+    Err("note did not hide after ordinary reopen".into())
 }

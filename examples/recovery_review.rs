@@ -393,6 +393,15 @@ fn main() -> Result<()> {
             })
             .await?;
             window.invoke_recovery_apply("merge".into());
+            if !window.get_recovery_busy() {
+                return Err("recovery action did not enter its preparation phase".into());
+            }
+            window.invoke_request_hide();
+            if window.get_lifecycle_pending() {
+                return Err(
+                    "close admitted while accepted recovery awaited its durability flush".into(),
+                );
+            }
             until(|| !window.get_recovery_busy()).await?;
             until(|| fixture.body("one.md").as_deref() == Some(MERGE)).await?;
             until(|| sync.snapshot().pending == 0 && sync.snapshot().conflicts == 0).await?;
@@ -400,6 +409,10 @@ fn main() -> Result<()> {
             if window.get_note_text() != MERGE {
                 return Err("merge did not install in the retained editor".into());
             }
+            window.invoke_request_hide();
+            until(|| !window.window().is_visible()).await?;
+            window.invoke_native_reopen_requested();
+            until(|| window.window().is_visible()).await?;
             window.invoke_trash_current_note();
             until(|| {
                 window.get_active_view() == "recovery"

@@ -118,3 +118,21 @@ Complete chronological export of the execution ledger’s ruling lines, includin
 57. Ruling: retain the original 100 ms large-note gate despite Metal's 132.203 ms result — improvement does not satisfy acceptance, and supported selection restoration remains costly — cost if wrong: release remains delayed pending supported optimization or explicit user scope change.
 
 58. Ruling: apply the renderer review's minor theme-identity assertion and retain its declined judgments as open gates — snapshots alone cannot prove callback selection; targeted review does not cover manual input, older OS, attribution legality or distribution — cost if wrong: additional corrections after native/manual acceptance.
+
+
+59. Ruling: execute the user's explicitly authorized continuous structural cleanup sequence without another permission loop; preserve existing product contracts and native execution — cost if wrong: design revisions remain isolated in reviewable commits.
+
+60. Ruling: complete admitted connection replacements as owned UI operations, look up the last page before commit, reject close during accepted recovery, and retain unsettled metadata through typed retrying barriers — fresh review and generated reproductions identified incomplete asynchronous boundaries — cost if wrong: further lifecycle corrections; targeted interleaving/restart regressions now retained.
+
+61. Ruling: retain the existing Slint long callback/instantiation-chain debug diagnostic without suppression; identical pre-cleanup appearance evidence establishes it was not introduced here — cost if wrong: a normal-use reproduction needs separate framework/UI investigation.
+
+62. Ruling: handle ordinary reopen through the public Foundation Apple-event API, retaining and unregistering the handler without replacing Winit's delegate; enable only existing Foundation bindings — actual signed same-instance LaunchServices regression failed then passed — cost if wrong: native reopen regression; About and both ordinary/owner reopen routes remain checked.
+
+63. Ruling: reviewer declined native visual/input/IME/VoiceOver/older OS/selection/performance/signing/distribution judgments; retain all broader release gates and make no production-readiness claim — cost if wrong: later supported-hardware/input/distribution corrections remain necessary.
+
+64. Ruling: reviewer declined live server/credentials/Keychain/user-data judgments; retain generated-data verification boundaries and the unchanged endpoint — cost if wrong: deployment-specific behavior remains unobserved.
+
+65. Ruling: reviewer performed no fresh runtime verification; executor ran the strict suite, minimum Rust check, nine native contracts and signed same-instance reopen/lifecycle checks; no second review was dispatched — cost if wrong: tests and author inspection may miss further interleavings; no claim of exhaustive defect absence.
+
+
+66. Ruling: project UI authoring blocks from every foreground transition, including connection replacement, rather than close-only state — symmetric held-write native regression showed recovery could otherwise enter during a pending connection commit — cost if wrong: UI controls remain temporarily disabled during replacement; lifecycle tests verify subsequent editability and both admission directions.
