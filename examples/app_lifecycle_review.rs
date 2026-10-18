@@ -251,6 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if store.load_settings().await?.hotkey.key!="KeyK"{return Err("valid shortcut was not saved".into());}
                     probe_shortcut(old,true)?;probe_shortcut(candidate,false)?;
                 }
+                connection_transition_contract(&running, &store, &review_path).await?;
                 eprintln!("lifecycle stage: appearance observation");
                 {
                     use objc2_app_kit::{NSApplication,NSAppearance,NSAppearanceNameAqua,NSAppearanceNameDarkAqua};
@@ -414,5 +415,57 @@ fn restart_generated(path: &std::path::Path) -> Result<(), Box<dyn std::error::E
         return Err("generated restart check failed".into());
     }
     println!("generated_process_restart: true");
+    Ok(())
+}
+
+async fn connection_transition_contract(
+    running: &LocalApplication,
+    store: &StoreHandle,
+    path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let original = running.local().connection_id();
+    let next = ConnectionConfig::parse("https://other-generated.example")?
+        .id()
+        .clone();
+    let injector = rusqlite::Connection::open(path)?;
+    injector.execute_batch("BEGIN IMMEDIATE")?;
+    let local = running.local().clone();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    slint::spawn_local(async move {
+        let _ = sender.send(local.change_connection(next).await);
+    })?;
+    for _ in 0..100 {
+        if running.window().get_note_read_only() {
+            break;
+        }
+        pause().await;
+    }
+    let locked = running.window().get_note_read_only();
+    running.window().invoke_request_hide();
+    let close_rejected = !running.window().get_lifecycle_pending();
+    let overlapping_change_rejected = running
+        .local()
+        .change_connection(original.clone())
+        .await
+        .is_err();
+    injector.execute_batch("COMMIT")?;
+    receiver.await??;
+    if !locked || !close_rejected || !overlapping_change_rejected {
+        return Err(
+            "foreground connection change admitted an overlapping close or replacement".into(),
+        );
+    }
+    running.local().change_connection(original).await?;
+    let key = PageKey {
+        connection: running.local().connection_id(),
+        path: PagePath::parse("existing.md")?,
+    };
+    running.local().wait_until_loaded(&key).await?;
+    if !running.window().window().is_visible() || running.window().get_note_read_only() {
+        return Err("connection replacement did not restore an editable visible note".into());
+    }
+    if store.load_page(&key).await?.is_none() {
+        return Err("connection replacement lost the original note".into());
+    }
     Ok(())
 }

@@ -3,6 +3,7 @@ use super::{
     appearance_ui::AppearanceUi,
     coordinator::{AppAction, AppEffect, AppEvent, Coordinator, SearchRequest},
     find::NoteFind,
+    lifecycle::{CloseIntent, Lifecycle},
     model::View,
 };
 use crate::{
@@ -63,9 +64,7 @@ struct State {
     started: Instant,
     appearance: AppearanceUi,
     store: StoreHandle,
-    quitting: Cell<bool>,
-    lifecycle_dispatched: Cell<bool>,
-    changing_connection: Cell<bool>,
+    lifecycle: Lifecycle,
     sync: RefCell<Option<SyncHandle>>,
     sync_snapshot: RefCell<Option<SyncSnapshot>>,
     sync_facts: RefCell<Option<(PageKey, LocalRevision, PageSyncFacts)>>,
@@ -155,22 +154,22 @@ impl LocalUi {
             .0
             .window
             .upgrade()
-            .is_some_and(|window| window.get_recovery_busy() || window.get_lifecycle_pending())
+            .is_some_and(|window| window.get_recovery_busy())
+            || !self.0.lifecycle.begin_connection()
         {
             return Err(LocalUiError::SaveFailed);
         }
-        if connection == self.connection_id() {
-            return self
-                .0
-                .appearance
-                .save_connection(connection)
-                .await
-                .map_err(|_| LocalUiError::SaveFailed);
-        }
-        self.0.changing_connection.set(true);
         self.0.render();
         let result =
             async {
+                if connection == self.connection_id() {
+                    return self
+                        .0
+                        .appearance
+                        .save_connection(connection)
+                        .await
+                        .map_err(|_| LocalUiError::SaveFailed);
+                }
                 self.flush().await?;
                 self.0
                     .appearance
@@ -198,7 +197,7 @@ impl LocalUi {
                     .await
                     .map_err(|_| LocalUiError::LoadFailed)?;
                 // The connection is already replaced and durable; admit its initial open.
-                self.0.changing_connection.set(false);
+                self.0.lifecycle.finish_connection();
                 self.0.dispatch(match last {
                     Some(key) => AppAction::OpenPage(key),
                     None => AppAction::NewNote,
@@ -206,9 +205,20 @@ impl LocalUi {
                 Ok(())
             }
             .await;
-        self.0.changing_connection.set(false);
+        self.0.lifecycle.finish_connection();
         self.0.render();
         result
+    }
+    pub(crate) fn prepare_close(&self, intent: CloseIntent) -> bool {
+        let admitted = self.0.lifecycle.prepare_close(intent);
+        if admitted {
+            self.0.render();
+        }
+        admitted
+    }
+    pub(crate) fn cancel_close(&self) {
+        self.0.finish_lifecycle();
+        self.0.render();
     }
     pub fn current_revision(&self) -> Option<LocalRevision> {
         self.0
@@ -306,9 +316,9 @@ impl LocalUi {
 }
 impl State {
     fn finish_lifecycle(&self) {
-        self.lifecycle_dispatched.set(false);
+        self.lifecycle.finish_close();
         if let Some(window) = self.window.upgrade() {
-            window.set_lifecycle_pending(false);
+            window.set_lifecycle_pending(self.lifecycle.closing());
         }
     }
     fn update_selected_status(self: &Rc<Self>) {
@@ -324,42 +334,28 @@ impl State {
         }
     }
     fn dispatch(self: &Rc<Self>, action: AppAction) {
-        if self
-            .window
-            .upgrade()
-            .is_some_and(|window| window.get_lifecycle_pending())
-            && !matches!(
-                &action,
-                AppAction::Tick(_)
-                    | AppAction::Flush
-                    | AppAction::RequestHide
-                    | AppAction::RequestQuit
-            )
-        {
-            return;
-        }
-        if self.quitting.get() {
-            return;
-        }
-        if self.changing_connection.get()
-            && !matches!(
-                &action,
-                AppAction::Flush
-                    | AppAction::Tick(_)
-                    | AppAction::RequestHide
-                    | AppAction::RequestQuit
-            )
+        let intent = match &action {
+            AppAction::RequestHide => Some(CloseIntent::Hide),
+            AppAction::RequestQuit => Some(CloseIntent::Quit),
+            _ => None,
+        };
+        if let Some(intent) = intent {
+            if !self.lifecycle.commit_close(intent) {
+                return;
+            }
+        } else if self.lifecycle.quitting()
+            || (self.lifecycle.blocks_authoring()
+                && !matches!(&action, AppAction::Tick(_) | AppAction::Flush))
         {
             return;
         }
         if matches!(&action, AppAction::EditText(_)) {
             self.sync_facts.borrow_mut().take();
         }
-        if matches!(&action, AppAction::RequestHide | AppAction::RequestQuit) {
-            self.lifecycle_dispatched.set(true);
-            if let Some(window) = self.window.upgrade() {
-                window.set_lifecycle_pending(true);
-            }
+        if matches!(&action, AppAction::RequestHide | AppAction::RequestQuit)
+            && let Some(window) = self.window.upgrade()
+        {
+            window.set_lifecycle_pending(self.lifecycle.closing());
         }
         let tick = matches!(&action, AppAction::Tick(_));
         let mut app = self.coordinator.borrow_mut();
@@ -414,7 +410,7 @@ impl State {
         let mut effects = app.dispatch(AppAction::Tick(self.started.elapsed()));
         effects.extend(app.receive(event));
         drop(app);
-        if save_failed && self.lifecycle_dispatched.get() {
+        if save_failed && self.lifecycle.flushing() {
             self.finish_lifecycle();
         }
         self.update_selected_status();
@@ -480,7 +476,7 @@ impl State {
                 }
                 let selected = state.coordinator.borrow().selected_uncached().cloned();
                 if let Some(selected) = selected
-                    && !state.quitting.get()
+                    && !state.lifecycle.quitting()
                 {
                     let cached = state
                         .store
@@ -704,6 +700,7 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
+        window.set_lifecycle_pending(self.lifecycle.closing());
         let app = self.coordinator.borrow();
         window.set_active_view(
             match app.view() {
@@ -757,9 +754,7 @@ impl State {
                 }
             }
             window.set_note_read_only(
-                self.quitting.get()
-                    || self.changing_connection.get()
-                    || editor.permission() == Permission::ReadOnly,
+                self.lifecycle.blocks_authoring() || editor.permission() == Permission::ReadOnly,
             );
             let status = app.notice().unwrap_or_else(|| {
                 status_text(
@@ -847,7 +842,7 @@ impl State {
         presentation.success();
     }
     fn quit(self: &Rc<Self>) {
-        if self.quitting.replace(true) {
+        if !self.lifecycle.start_quit() {
             return;
         }
         let state = self.clone();
@@ -871,7 +866,6 @@ impl State {
             if result.is_ok() {
                 let _ = slint::quit_event_loop();
             } else {
-                state.quitting.set(false);
                 state.finish_lifecycle();
                 state.render();
                 if let Some(window) = state.window.upgrade() {
@@ -883,7 +877,6 @@ impl State {
         })
         .is_err()
         {
-            self.quitting.set(false);
             self.finish_lifecycle();
         }
     }
@@ -927,9 +920,7 @@ pub fn bind(
         started: Instant::now(),
         appearance,
         store: store.clone(),
-        quitting: Cell::new(false),
-        lifecycle_dispatched: Cell::new(false),
-        changing_connection: Cell::new(false),
+        lifecycle: Lifecycle::default(),
         sync: RefCell::new(None),
         sync_snapshot: RefCell::new(None),
         sync_facts: RefCell::new(None),

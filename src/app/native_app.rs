@@ -2,6 +2,7 @@
 use super::{
     appearance_ui::{self, AppearanceUi},
     coordinator::AppAction,
+    lifecycle::CloseIntent,
     local_ui::{self, LocalUi},
     startup::Startup,
     window_placement::{self, ScreenFrame},
@@ -18,10 +19,7 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::NSScreen;
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use slint::ComponentHandle;
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct LocalApplication {
@@ -96,59 +94,7 @@ impl LocalApplication {
                 }
             });
         }
-        let transition_pending = Rc::new(Cell::new(false));
-        for quit in [false, true] {
-            let weak = window.as_weak();
-            let local = local.clone();
-            let appearance = appearance.clone();
-            let recovery = recovery.clone();
-            let pending = transition_pending.clone();
-            let action = move || {
-                let Some(window) = weak.upgrade() else {
-                    return;
-                };
-                if window.get_lifecycle_pending() || pending.replace(true) {
-                    return;
-                }
-                // Freeze authoring before the first asynchronous durability wait.
-                // LocalUi owns releasing this gate after dispatch, including failures.
-                window.set_lifecycle_pending(true);
-                let rollback_window = weak.clone();
-                let weak = weak.clone();
-                let local = local.clone();
-                let appearance = appearance.clone();
-                let recovery = recovery.clone();
-                let pending = pending.clone();
-                let rollback = pending.clone();
-                if slint::spawn_local(async move {
-                    if let Some(window) = weak.upgrade() {
-                        if recovery.flush().await.is_err(){
-                            let _=window.show();window.set_status_text("Merged draft could not be saved. Keep it available to copy, or retry closing.".into());window.set_lifecycle_pending(false);pending.set(false);return;
-                        }
-                        let metadata = match capture(&window) {
-                            Ok(placement) => appearance.save_window(placement).await.map_err(|_| ()),
-                            Err(_) => Err(()),
-                        };
-                        if metadata.is_ok() {
-                            local.dispatch(if quit { AppAction::RequestQuit } else { AppAction::RequestHide });
-                        } else {
-                            let _ = window.show();
-                            window.set_lifecycle_pending(false);
-                            window.set_status_text("Window settings could not be saved. Your note is still here; try again.".into());
-                        }
-                    }
-                    pending.set(false);
-                }).is_err() {
-                    rollback.set(false);
-                    if let Some(window) = rollback_window.upgrade() { window.set_lifecycle_pending(false); }
-                }
-            };
-            if quit {
-                window.on_request_quit(action);
-            } else {
-                window.on_request_hide(action);
-            }
-        }
+        bind_lifecycle(&window, local.clone(), appearance.clone(), recovery.clone());
         {
             let weak = window.as_weak();
             let integration = integration.clone();
@@ -303,4 +249,74 @@ pub(super) fn restore_window(window: &AppWindow, saved: Option<&WindowPlacement>
         native.center();
     }
     Ok(())
+}
+
+fn bind_lifecycle(
+    window: &AppWindow,
+    local: LocalUi,
+    appearance: AppearanceUi,
+    recovery: super::recovery_ui::RecoveryUi,
+) {
+    for intent in [CloseIntent::Hide, CloseIntent::Quit] {
+        let weak = window.as_weak();
+        let local = local.clone();
+        let appearance = appearance.clone();
+        let recovery = recovery.clone();
+        let action = move || {
+            if !local.prepare_close(intent) {
+                return;
+            }
+            let task = prepare_native_close(
+                weak.clone(),
+                local.clone(),
+                appearance.clone(),
+                recovery.clone(),
+                intent,
+            );
+            if slint::spawn_local(task).is_err() {
+                local.cancel_close();
+            }
+        };
+        match intent {
+            CloseIntent::Hide => window.on_request_hide(action),
+            CloseIntent::Quit => window.on_request_quit(action),
+        }
+    }
+}
+
+async fn prepare_native_close(
+    weak: slint::Weak<AppWindow>,
+    local: LocalUi,
+    appearance: AppearanceUi,
+    recovery: super::recovery_ui::RecoveryUi,
+    intent: CloseIntent,
+) {
+    let Some(window) = weak.upgrade() else {
+        local.cancel_close();
+        return;
+    };
+    if recovery.flush().await.is_err() {
+        local.cancel_close();
+        let _ = window.show();
+        window.set_status_text(
+            "Merged draft could not be saved. Keep it available to copy, or retry closing.".into(),
+        );
+        return;
+    }
+    let metadata = match capture(&window) {
+        Ok(placement) => appearance.save_window(placement).await.map_err(|_| ()),
+        Err(_) => Err(()),
+    };
+    if metadata.is_ok() {
+        local.dispatch(match intent {
+            CloseIntent::Hide => AppAction::RequestHide,
+            CloseIntent::Quit => AppAction::RequestQuit,
+        });
+    } else {
+        local.cancel_close();
+        let _ = window.show();
+        window.set_status_text(
+            "Window settings could not be saved. Your note is still here; try again.".into(),
+        );
+    }
 }

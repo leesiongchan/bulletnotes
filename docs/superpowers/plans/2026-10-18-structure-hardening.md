@@ -37,9 +37,9 @@ Interfaces: domain::editor::EditorPosition retains fields anchor:usize, caret:us
 
 Files: app/lifecycle.rs, app/local_ui.rs, app/native_app.rs, native lifecycle/recovery examples.
 Interfaces: private lifecycle model carries explicit Hide/Quit intent and Editing/ChangingConnection/Preparing/Flushing/Quitting state; LocalUi owns prepare/commit/cancel and UI projection.
-- [ ] Add model tests for duplicate/conflicting requests, connection overlap, rollback/retry; observe RED.
-- [ ] Implement model, replace duplicate flags, and route native preparation through LocalUi before awaits.
-- [ ] Add or extend generated native admission assertions; run failure/restart and close durability fixtures; commit.
+- [x] Add model tests for duplicate/conflicting requests, connection overlap, rollback/retry; observe RED.
+- [x] Implement model, replace duplicate flags, and route native preparation through LocalUi before awaits.
+- [x] Add or extend generated native admission assertions; run failure/restart and close durability fixtures; commit.
 
 ### Task 3: Cohesive LocalUi decomposition
 
