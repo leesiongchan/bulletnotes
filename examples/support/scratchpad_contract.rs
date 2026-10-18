@@ -78,7 +78,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     slint::Timer::single_shot(Duration::from_secs(15), || {
         let _ = slint::quit_event_loop();
     });
-    window.run()?;
+    window.show()?;
+    slint::run_event_loop_until_quit()?;
     if !passed.get() {
         return Err("native scratchpad contract failed".into());
     }
