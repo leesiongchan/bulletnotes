@@ -12,7 +12,7 @@ impl StoreHandle {
         input: AutomaticRecoveryInput,
     ) -> Result<AutomaticRecoveryEvent, StoreError> {
         let event = self
-            .call(move |w| {
+            .call_timed(crate::diagnostics::Operation::AutomaticRecovery, move |w| {
                 let tx = w.db.transaction()?;
                 let event = register(&tx, input)?;
                 tx.commit()?;

@@ -498,3 +498,290 @@ async fn stale_authoring_after_remote_install_and_delete_remains_restorable_and_
     );
     store.shutdown().await.unwrap();
 }
+
+const CRASH_BASE: &str = "red fox jumps\n\nstable\n";
+const CRASH_CANONICAL: &str = "red fox runs\n\nstable\n";
+const CRASH_U1: &str = "blue fox jumps\n\nstable\n";
+const CRASH_U2: &str = "green fox jumps\n\nstable\n\nmore typing";
+const CRASH_MERGED: &str = "green fox runs\n\nstable\n\nmore typing";
+
+#[tokio::test]
+async fn killed_editor_owner_retains_exact_admitted_branch_and_real_http_base() {
+    use bulletnotes::{domain::error::StoreError, store::StoreHandle};
+    use std::{
+        process::{Command, Stdio},
+        time::Instant,
+    };
+    for stage in [
+        "before-admission",
+        "after-admission",
+        "coalesced",
+        "before-replay",
+        "after-replay",
+        "leased",
+        "unknown",
+    ] {
+        let directory = tempfile::Builder::new()
+            .prefix("bulletnotes-editor-crash-")
+            .tempdir()
+            .unwrap();
+        let path = directory.path().join("owned.sqlite");
+        let marker = directory.path().join("ready");
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "editor_process_boundary_child"])
+            .env("BULLETNOTES_CRASH_PATH", &path)
+            .env("BULLETNOTES_CRASH_STAGE", stage)
+            .env("BULLETNOTES_CRASH_NONCE", &nonce)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while !marker.exists() {
+            if child.try_wait().unwrap().is_some() || Instant::now() >= deadline {
+                let _ = child.kill();
+                panic!(
+                    "{stage}: child did not reach boundary: {}",
+                    String::from_utf8_lossy(&child.wait_with_output().unwrap().stderr)
+                );
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            format!("{}:{nonce}", child.id())
+        );
+        child.kill().unwrap();
+        assert!(!child.wait().unwrap().success());
+        let store = StoreHandle::open(&path).await.unwrap();
+        let restored = store.load_editor_page(&key()).await.unwrap().unwrap();
+        let expected = match stage {
+            "before-admission" => CRASH_CANONICAL,
+            "after-admission" => CRASH_U1,
+            "after-replay" => CRASH_MERGED,
+            _ => CRASH_U2,
+        };
+        assert_eq!(restored.presented().body, expected, "{stage}");
+        assert_eq!(
+            restored.stored.page.remote_base.as_ref().unwrap().body,
+            CRASH_BASE,
+            "{stage}"
+        );
+        assert_eq!(
+            restored.stored.page.remote_base.as_ref().unwrap().revision,
+            Some(RemoteRevision("\"actual-http-base\"".into()))
+        );
+        assert!(
+            store
+                .load_sync_page(&key())
+                .await
+                .unwrap()
+                .unwrap()
+                .1
+                .pending
+        );
+        if stage == "before-admission" {
+            assert!(restored.authored.is_none());
+        } else {
+            if stage != "after-replay" {
+                assert!(restored.authored.is_some(), "{stage}");
+            }
+            let copies = store.recovery_copies(&key().connection).await.unwrap();
+            assert!(
+                copies.iter().any(|copy| copy.page.body == CRASH_U1),
+                "{stage}"
+            );
+            assert!(
+                copies.iter().any(|copy| copy.page.body == CRASH_CANONICAL),
+                "{stage}"
+            );
+            if matches!(stage, "leased" | "unknown") {
+                let old = store.unknown_mutations(&key().connection).await.unwrap();
+                assert_eq!(old.len(), 1);
+                assert_eq!(old[0].kind, MutationKind::Put(CRASH_CANONICAL.into()));
+                assert!(matches!(
+                    store.replay_editor_handoff(&key()).await,
+                    Err(StoreError::UnknownOperation)
+                ));
+                store
+                    .acknowledge(
+                        old[0].id,
+                        MutationAck {
+                            remote_revision: Some(RemoteRevision("\"late-old-put\"".into())),
+                        },
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    store
+                        .load_editor_page(&key())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .presented()
+                        .body,
+                    CRASH_U2
+                );
+                assert!(
+                    store
+                        .load_sync_page(&key())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .1
+                        .pending,
+                    "old completion falsely acknowledged U2"
+                );
+            }
+            if stage != "after-replay" {
+                let chosen = store.replay_editor_handoff(&key()).await.unwrap().unwrap();
+                assert_eq!(
+                    chosen.page.body,
+                    if stage == "after-admission" {
+                        "blue fox runs\n\nstable\n"
+                    } else {
+                        CRASH_MERGED
+                    }
+                );
+            }
+            assert!(store.replay_editor_handoff(&key()).await.unwrap().is_none());
+            let chosen = store.load_page(&key()).await.unwrap().unwrap();
+            let operation = store
+                .claim_pending(&key().connection, 100)
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|operation| operation.key == key())
+                .unwrap();
+            assert_eq!(operation.kind, MutationKind::Put(chosen.body.clone()));
+            store
+                .acknowledge(
+                    operation.id,
+                    MutationAck {
+                        remote_revision: Some(RemoteRevision("\"exact-chosen-ack\"".into())),
+                    },
+                )
+                .await
+                .unwrap();
+            assert!(
+                !store
+                    .load_sync_page(&key())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .1
+                    .pending
+            );
+        }
+        store.shutdown().await.unwrap();
+    }
+}
+
+#[test]
+#[ignore = "finite crash helper; parent validates nonce/PID and kills only this owned process"]
+fn editor_process_boundary_child() {
+    use bulletnotes::store::StoreHandle;
+    let path = std::path::PathBuf::from(std::env::var_os("BULLETNOTES_CRASH_PATH").unwrap());
+    assert!(
+        path.parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("bulletnotes-editor-crash-")
+    );
+    let stage = std::env::var("BULLETNOTES_CRASH_STAGE").unwrap();
+    let nonce = std::env::var("BULLETNOTES_CRASH_NONCE").unwrap();
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let store = StoreHandle::open(&path).await.unwrap();
+        store
+            .apply_remote(RemoteRead::Present(RemoteFile {
+                key: key(),
+                body: CRASH_BASE.into(),
+                revision: Some(RemoteRevision("\"actual-http-base\"".into())),
+                modified_ms: None,
+                permission: Permission::ReadWrite,
+            }))
+            .await
+            .unwrap();
+        store
+            .save_local(key(), CRASH_CANONICAL.into(), LocalRevision(1))
+            .await
+            .unwrap();
+        if matches!(stage.as_str(), "leased" | "unknown") {
+            let old = store
+                .claim_pending(&key().connection, 1)
+                .await
+                .unwrap()
+                .remove(0);
+            if stage == "unknown" {
+                store.mark_unknown(old.id).await.unwrap();
+            }
+        }
+        let admission = |store: StoreHandle| async move {
+            store
+                .save_local_from_base_outcome(
+                    key(),
+                    CRASH_U1.into(),
+                    LocalRevision(2),
+                    EditorBaseline {
+                        body: CRASH_BASE.into(),
+                        remote_base: store.load_page(&key()).await.unwrap().unwrap().remote_base,
+                    },
+                )
+                .await
+                .unwrap();
+        };
+        let blocker = if stage == "before-admission" {
+            let db = rusqlite::Connection::open(&path).unwrap();
+            db.execute_batch("BEGIN IMMEDIATE").unwrap();
+            tokio::spawn(admission(store.clone()));
+            Some(db)
+        } else {
+            admission(store.clone()).await;
+            if stage != "after-admission" {
+                store
+                    .save_local_from_base_outcome(
+                        key(),
+                        CRASH_U2.into(),
+                        LocalRevision(3),
+                        EditorBaseline {
+                            body: CRASH_U1.into(),
+                            remote_base: store
+                                .load_page(&key())
+                                .await
+                                .unwrap()
+                                .unwrap()
+                                .remote_base,
+                        },
+                    )
+                    .await
+                    .unwrap();
+            }
+            if stage == "after-replay" {
+                store.replay_editor_handoff(&key()).await.unwrap().unwrap();
+            }
+            if stage == "before-replay" {
+                let db = rusqlite::Connection::open(&path).unwrap();
+                db.execute_batch("BEGIN IMMEDIATE").unwrap();
+                let replay = store.clone();
+                tokio::spawn(async move {
+                    let _ = replay.replay_editor_handoff(&key()).await;
+                });
+                Some(db)
+            } else {
+                None
+            }
+        };
+        // The lock proves these started operations cannot commit before the parent kills us.
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        std::fs::write(
+            path.parent().unwrap().join("ready"),
+            format!("{}:{nonce}", std::process::id()),
+        )
+        .unwrap();
+        std::thread::park();
+        drop(blocker);
+    });
+}

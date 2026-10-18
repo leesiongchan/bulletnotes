@@ -1,0 +1,61 @@
+{
+  "baseline_ms": [
+    4.884167,
+    5.140709,
+    4.871916,
+    5.01425,
+    4.9900839999999995,
+    5.024375,
+    5.005208,
+    5.136375,
+    4.769209,
+    5.103125,
+    3.936542,
+    4.083584,
+    4.910167,
+    5.124375,
+    4.826625,
+    5.153417,
+    4.85225,
+    4.1417090000000005,
+    3.887,
+    5.1180829999999995
+  ],
+  "measurement": "SQLite acknowledgement; not native typing/frame latency",
+  "profile": "debug",
+  "samples": 20,
+  "stalled_ms": [
+    4.694625,
+    4.103624999999999,
+    4.978041,
+    5.037833,
+    5.034542,
+    5.055790999999999,
+    4.81225,
+    5.0860840000000005,
+    4.957625,
+    4.936167,
+    5.069875,
+    5.1522499999999996,
+    4.832458000000001,
+    3.878875,
+    3.991875,
+    4.166833,
+    3.9006250000000002,
+    4.0309159999999995,
+    4.810041,
+    4.16175
+  ],
+  "executor": "clone of actual StoreHandle executor via cfg(test)-only getter; private merge_with finite stall",
+  "replay_under_stall": "real journal replay chooses canonical fallback, exact authored original remains in recovery; late job cannot commit",
+  "baseline_ms_summary": {
+    "p50": 4.910167,
+    "p95": 5.140709,
+    "max": 5.153417
+  },
+  "stalled_ms_summary": {
+    "p50": 4.81225,
+    "p95": 5.0860840000000005,
+    "max": 5.1522499999999996
+  }
+}

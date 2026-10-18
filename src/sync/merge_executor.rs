@@ -23,7 +23,15 @@ impl Default for MergeExecutor {
 
 impl MergeExecutor {
     pub async fn merge(&self, base: String, local: String, remote: String) -> TextMergeResult {
-        self.merge_with(base, local, remote, merge_text).await
+        let timer =
+            crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::TextMerge);
+        let result = self.merge_with(base, local, remote, merge_text).await;
+        timer.complete(if result.disposition == MergeDisposition::BudgetFallback {
+            crate::diagnostics::Outcome::ResourceLimit
+        } else {
+            crate::diagnostics::Outcome::Success
+        });
+        result
     }
 
     async fn merge_with(
@@ -80,7 +88,7 @@ mod tests {
     use crate::{
         domain::{
             connection::ConnectionConfig,
-            page::{LocalRevision, PageKey, PagePath},
+            page::{EditorBaseline, LocalRevision, PageKey, PagePath},
         },
         store::StoreHandle,
         sync::text_merge::{MergeDisposition, SourceEdit},
@@ -95,11 +103,11 @@ mod tests {
 
     #[tokio::test]
     async fn timeout_retains_capacity_rejects_late_results_and_allows_unrelated_saves() {
-        let executor = MergeExecutor::default();
         let directory = tempfile::tempdir().unwrap();
         let store = StoreHandle::open(&directory.path().join("test.sqlite"))
             .await
             .unwrap();
+        let executor = store.merge_executor_for_test();
         let key = PageKey {
             connection: ConnectionConfig::parse("https://notes.example/")
                 .unwrap()
@@ -108,6 +116,15 @@ mod tests {
             path: PagePath::parse("independent.md").unwrap(),
         };
         store.create_draft(key.clone()).await.unwrap();
+        let mut baseline_ms = Vec::new();
+        for revision in 1..=20 {
+            let start = std::time::Instant::now();
+            store
+                .save_local(key.clone(), "baseline".into(), LocalRevision(revision))
+                .await
+                .unwrap();
+            baseline_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
         let (started, ready) = tokio::sync::oneshot::channel();
         let (release, blocked) = mpsc::channel();
         let finished = Arc::new(AtomicBool::new(false));
@@ -133,13 +150,26 @@ mod tests {
                 .await
         });
         ready.await.unwrap();
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            store.save_local(key.clone(), "durable during merge".into(), LocalRevision(1)),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let mut stalled_ms = Vec::new();
+        for revision in 21..=40 {
+            let start = std::time::Instant::now();
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                store.save_local(
+                    key.clone(),
+                    "durable during merge".into(),
+                    LocalRevision(revision),
+                ),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            stalled_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        println!(
+            "stalled_save_distribution: {}",
+            serde_json::json!({"samples":20,"baseline_ms":baseline_ms,"stalled_ms":stalled_ms,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"measurement":"SQLite acknowledgement; not native typing/frame latency"})
+        );
         assert!(!finished.load(Ordering::SeqCst));
         let timed_out = tokio::time::timeout(Duration::from_secs(1), job)
             .await
@@ -155,6 +185,48 @@ mod tests {
             }]
         );
         assert_eq!(executor.slots.available_permits(), 0);
+        let replay_key = PageKey {
+            path: PagePath::parse("replayed.md").unwrap(),
+            ..key.clone()
+        };
+        store.create_draft(replay_key.clone()).await.unwrap();
+        store
+            .save_local(replay_key.clone(), "red fox jumps".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        store
+            .save_local(replay_key.clone(), "red fox runs".into(), LocalRevision(2))
+            .await
+            .unwrap();
+        store
+            .save_local_from_base_outcome(
+                replay_key.clone(),
+                "blue fox jumps".into(),
+                LocalRevision(3),
+                EditorBaseline {
+                    body: "red fox jumps".into(),
+                    remote_base: None,
+                },
+            )
+            .await
+            .unwrap();
+        let replayed = store
+            .replay_editor_handoff(&replay_key)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            replayed.page.body, "red fox runs",
+            "the store must use the held shared executor and preserve original on busy fallback"
+        );
+        assert!(
+            store
+                .recovery_copies(&key.connection)
+                .await
+                .unwrap()
+                .iter()
+                .any(|copy| copy.page.body == "blue fox jumps")
+        );
         let clone = executor.clone();
         let busy = tokio::time::timeout(
             Duration::from_millis(100),
@@ -168,6 +240,20 @@ mod tests {
         .unwrap();
         assert_eq!(busy.body, "red fox runs");
         assert_eq!(busy.disposition, MergeDisposition::BudgetFallback);
+        for words in [128, 512, 1024, 2048] {
+            let repeated = "fox river cloud ".repeat(words / 3);
+            let remote = format!("remote {repeated}");
+            let busy = clone
+                .merge(
+                    repeated.clone(),
+                    format!("local {repeated}"),
+                    remote.clone(),
+                )
+                .await;
+            assert_eq!(busy.disposition, MergeDisposition::BudgetFallback);
+            assert_eq!(busy.body, remote);
+            assert_eq!(executor.slots.available_permits(), 0);
+        }
         let local_only = clone
             .merge(
                 "base".into(),
@@ -200,6 +286,11 @@ mod tests {
         assert_eq!(
             store.load_page(&key).await.unwrap().unwrap().body,
             "durable during merge"
+        );
+        assert_eq!(
+            store.load_page(&replay_key).await.unwrap().unwrap().body,
+            "red fox runs",
+            "late CPU output must not replace the chosen replay source"
         );
         let next = executor
             .merge(

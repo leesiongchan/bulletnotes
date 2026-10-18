@@ -27,6 +27,9 @@ pub enum DiagnosticError {
 #[serde(rename_all = "snake_case")]
 pub enum Operation {
     LocalSave,
+    TextMerge,
+    AutomaticRecovery,
+    EditorReplay,
     Storage,
     CachedSearch,
     CachedOpen,
@@ -369,8 +372,11 @@ impl OperationTimer {
             finished: false,
         }
     }
-    pub fn success(mut self) {
-        self.finish(Outcome::Success);
+    pub fn success(self) {
+        self.complete(Outcome::Success);
+    }
+    pub fn complete(mut self, outcome: Outcome) {
+        self.finish(outcome);
     }
     fn finish(&mut self, outcome: Outcome) {
         self.finished = true;

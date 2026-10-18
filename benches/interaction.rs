@@ -1,5 +1,7 @@
 //! Actual native Slint measurements with a generated 10k-page SQLite space.
 //! Frame completion is AfterRendering (submission), not a physical display probe.
+#[path = "support/merge_distribution.rs"]
+mod merge_distribution;
 #[cfg(target_os = "macos")]
 mod native {
     use bulletnotes::{
@@ -220,7 +222,11 @@ mod native {
 }
 #[cfg(target_os = "macos")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    native::run()
+    if std::env::args().any(|arg| arg == "--merge-only") {
+        merge_distribution::run()
+    } else {
+        native::run()
+    }
 }
 #[cfg(not(target_os = "macos"))]
 fn main() {

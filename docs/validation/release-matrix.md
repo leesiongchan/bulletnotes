@@ -4,6 +4,23 @@ Updated 2026-10-18. This is a development build; unobserved acceptance gates are
 open. Supported hardware is Apple Silicon only on macOS 14+; Intel and universal
 builds are excluded by the user’s 2026-10-18 scope correction. The older live BN/BN 2 previews and the user's store were not replaced.
 
+## Current automatic-sync checkpoint
+
+[Task 6 acceptance](automatic-sync-acceptance.md) is the current source of truth
+for automatic merging, immutable recovery, killed-process boundaries, generated
+native unsaved typing/offline restart, real upstream worker/browser peer evidence
+and release merge distributions. Earlier milestone counts and packaged-app live
+checks below remain historical; the current live check used an isolated temporary
+store and exact-path allowlist relay. Both final and corrected first live attempts
+confirmed all three owned server paths absent after guarded cleanup.
+
+Floating UI commit `803bd84` passed 30 controlled native cases and a fresh scoped
+review. Its palette/static Slint instantiation-chain diagnostic remains a minor
+with unknown attribution. Physical selection/IME/VoiceOver, native typing latency
+under deliberate executor stall, macOS/hardware matrix, existing large-open
+performance and distribution gates remain open. Controller owns final branch
+review and a fresh development package; no notarization/upload is authorized.
+
 ## Lifecycle
 
 Run `scripts/native-lifecycle-check.sh` for the generated-content, ad-hoc signed

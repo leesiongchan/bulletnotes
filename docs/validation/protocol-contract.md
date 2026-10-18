@@ -30,4 +30,15 @@ The Task 7 checkpoint passed 95 tests, with 12 native/manual tests explicitly ig
 - [reqwest ClientBuilder](https://docs.rs/reqwest/0.13.5/reqwest/struct.ClientBuilder.html)
 - [axum serve](https://docs.rs/axum/0.8.9/axum/fn.serve.html)
 
-Unknown DELETE outcomes are deliberately conservative. A missing readback acknowledges completion; any present page requires conflict review, including identical content and an equal strong revision. SilverBullet [documents content-derived SHA-256 validators](https://docs.silverbullet.md/HTTP%20API); these establish content equality, not file incarnation. Automatic retry would risk deleting a same-content recreation. Generated content-addressed fixtures cover both live readback and restart reconciliation.
+Unknown DELETE outcomes are deliberately conservative. A missing readback acknowledges completion; any present page retires uncertain destructive intent and preserves its evidence before automatic reconciliation, including identical content and an equal strong revision. SilverBullet [documents content-derived SHA-256 validators](https://docs.silverbullet.md/HTTP%20API); these establish content equality, not file incarnation. Automatic retry would risk deleting a same-content recreation. Generated content-addressed fixtures cover both live readback and restart reconciliation.
+
+
+## Current automatic-worker acceptance
+
+[Task 6 evidence](automatic-sync-acceptance.md) separates generated loopback
+contracts from real upstream HTTPS through an example-only exact-path allowlist
+relay. The native worker sees only filtered owned catalogue entries; UUID probe,
+main and exact recovery destinations are journaled before forwarding. Normal
+upstream TLS, current strong guards, immutable readback and post-worker-exit
+cleanup were observed. The normal app database, Keychain and unrelated note
+bodies were not used. This does not claim unmodified direct-server native routing.

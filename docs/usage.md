@@ -13,8 +13,10 @@ Option+A. If another application owns it, keep using the menu and choose another
 combination in Appearance. Supported physical keys are A–Z, digits, Space and
 F1–F20 with at least one modifier. A failed change keeps the working shortcut.
 
-Hover across the top strip to reveal native window controls and the drag area.
-Resize from edges/corners; Pin keeps the note above ordinary windows. Closing
+Hover near the top or bottom edge to reveal the matching header or footer.
+F6 moves keyboard focus through header, footer and the active view; Escape returns
+to that view. Revealing controls does not move or rewrap the note. The header
+includes native window controls and the drag area. Resize from edges/corners; Pin keeps the note above ordinary windows. Closing
 hides the window after local saves finish. **BN → Quit Bulletnotes** drains local
 writes and cancels network work. A failed local save retains the editable buffer;
 retry or copy the source using normal editing commands.
@@ -63,10 +65,13 @@ owned temporary probe page. An incompatible server remains read only. See the
 [protocol contract](validation/protocol-contract.md) for exact behavior.
 
 Local edits save independently of network availability. Sync uses guarded writes,
-backoff, and readback for unknown outcomes. Conflicts retain base, local and remote
-source; review them explicitly, choose a version or save a merged draft. Other
-pages continue syncing. Trash and kept versions support explicit restoration;
-a reused destination conflicts instead of silently overwriting it. See
+backoff, and readback for unknown outcomes. Compatible changes merge automatically.
+For overlapping changes, the server passage stays in the main note, independent
+local edits survive, and the complete original local source becomes a separate
+recovery page. Changes is optional; retained drafts, Trash and kept versions remain
+available for explicit restoration. Sync stays pending until recovery copies are
+acknowledged too. Reused destinations use guarded reconciliation and preservation
+instead of silent overwrite. See
 [recovery behavior](validation/recovery.md).
 
 The local store is in

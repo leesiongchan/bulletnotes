@@ -1,7 +1,8 @@
 # Automatic sync reconciliation design
 
-Status: approved for implementation planning on 2026-10-18; runtime implementation
-has not started. See the [implementation plan](../plans/2026-10-18-automatic-sync.md)
+Status: implemented on 2026-10-18; core Tasks 1–5 and floating UI have scoped
+reviews. [Production acceptance evidence](../../validation/automatic-sync-acceptance.md)
+records observed process/native/live checks and remaining release/fidelity gates. See the [implementation plan](../plans/2026-10-18-automatic-sync.md)
 and [library evaluation](../../validation/merge-library-research.md).
 
 ## Intent and decision

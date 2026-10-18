@@ -35,6 +35,10 @@ pub struct StoreHandle {
     draft_admission: draft_admission::SharedAdmission,
 }
 impl StoreHandle {
+    #[cfg(test)]
+    pub(crate) fn merge_executor_for_test(&self) -> crate::sync::merge_executor::MergeExecutor {
+        self.merge_executor.clone()
+    }
     pub async fn open(path: &Path) -> Result<Self, StoreError> {
         let path = path.to_owned();
         let (sender, receiver) = mpsc::channel(64);

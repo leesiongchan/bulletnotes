@@ -1,10 +1,12 @@
 # Bulletnotes
 
-A planned native Rust/Slint macOS quick-note client for SilverBullet, with automatic sync, whole-space browsing, and custom themes.
+A native Rust/Slint macOS quick-note development client for SilverBullet, with automatic sync, whole-space browsing, and custom themes.
 
-**Current state: native feasibility harness.** The user accepted plain-text editing with inline heading/link colors deferred. The remaining native gate has not passed; persistence, themes, and server synchronization have not been implemented. This build must not be used for storing notes.
+**Current state: implemented development build.** Local persistence, themes, automatic guarded synchronization, compatible-edit merging and separate recovery copies are implemented. The note window uses independent floating header/footer controls. Inline Markdown coloring and blur remain deferred; exact selection/IME/VoiceOver, hardware/OS coverage, performance and distribution gates remain explicit.
 
-See the [approved design](docs/superpowers/specs/2026-10-17-bulletnotes-design.md), [implementation plan](docs/superpowers/plans/2026-10-17-bulletnotes.md), and [native validation evidence](docs/validation/native-gate.md).
+See [development usage](docs/usage.md), [current automatic-sync acceptance](docs/validation/automatic-sync-acceptance.md), and the [release matrix](docs/validation/release-matrix.md). The [original approved design](docs/superpowers/specs/2026-10-17-bulletnotes-design.md), [implementation plan](docs/superpowers/plans/2026-10-17-bulletnotes.md), and [native feasibility record](docs/validation/native-gate.md) provide historical context.
+
+The following disposable examples preserve the earlier feasibility investigations.
 
 On an interactive macOS host, `cargo run --example native_window_probe -- --auto-close` opens the comparison window. The evidence document lists the source-preservation test, intentionally failing acceptance gate, renderer selectors, and isolated compiler probes.
 

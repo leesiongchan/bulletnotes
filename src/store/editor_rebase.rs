@@ -148,26 +148,32 @@ impl StoreHandle {
         &self,
         key: &PageKey,
     ) -> Result<Option<StoredPage>, StoreError> {
-        let key = key.clone();
-        let captured = self.call(move |w| context(&w.db, &key)).await?;
-        let Some(branch) = &captured.branch else {
-            return Ok(None);
-        };
-        let result = self
-            .merge_executor
-            .merge(
-                branch.baseline.clone(),
-                branch.input.body.clone(),
-                captured.stored.page.body.clone(),
-            )
-            .await;
-        let input = branch.input.clone();
-        let baseline = branch.baseline.clone();
-        let stored = self
-            .call(move |w| commit(&mut w.db, captured, baseline, input, result))
-            .await?;
-        self.local_changes.send_replace(());
-        Ok(Some(stored))
+        let timer =
+            crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::EditorReplay);
+        let result = async {
+            let key = key.clone();
+            let captured = self.call(move |w| context(&w.db, &key)).await?;
+            let Some(branch) = &captured.branch else {
+                return Ok(None);
+            };
+            let result = self
+                .merge_executor
+                .merge(
+                    branch.baseline.clone(),
+                    branch.input.body.clone(),
+                    captured.stored.page.body.clone(),
+                )
+                .await;
+            let input = branch.input.clone();
+            let baseline = branch.baseline.clone();
+            let stored = self
+                .call(move |w| commit(&mut w.db, captured, baseline, input, result))
+                .await?;
+            self.local_changes.send_replace(());
+            Ok(Some(stored))
+        }
+        .await;
+        timer.store(result)
     }
     /// The UI admits/acknowledges authored source before calling; this path installs durable source only.
     pub async fn rebase_editor(

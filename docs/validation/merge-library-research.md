@@ -1,7 +1,9 @@
 # Merge library evaluation, 2026-10-18
 
-This is dependency-selection evidence, not production implementation or release
-acceptance. All executable probes used generated text in a temporary standalone
+This section records historical dependency-selection evidence. Integrated
+implementation and release distributions are now recorded in
+[automatic sync acceptance](automatic-sync-acceptance.md) and
+[raw release samples](automatic-sync-merge-distributions.json). All executable probes used generated text in a temporary standalone
 Cargo project. The application manifest and lockfile were not modified.
 
 ## Decision
@@ -76,14 +78,12 @@ No library supplies the application's crash recovery, retry policy or durability
 Cargo audit 0.22.2 checked the selected probe's 113-package lockfile against RustSec
 commit `999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b`, updated October 17, 2026:
 zero reported vulnerabilities and zero informational warnings. This is a dated
-advisory check, not proof that a dependency has no defects. Repeat against the
-actual application lockfile after integration.
+advisory check, not proof that a dependency has no defects. The application-lockfile integration audit is recorded below.
 
 The unchanged application's 644-package lockfile had zero reported vulnerabilities
 and maintenance warnings for `bincode`, `ttf-parser`, `zbus_names`, `zvariant` and
 `zvariant_derive`. Default Apple Silicon normal-dependency inverse trees contained
-neither the flagged bincode nor ttf-parser packages; build/feature/target reachability
-still needs classification before release. Do not silently suppress these warnings
+neither the flagged bincode nor ttf-parser packages; build/feature/target reachability was classified in the integration audit below. Do not silently suppress these warnings
 or describe the full application graph as warning-free.
 
 ## Resource contract
@@ -94,3 +94,24 @@ tokens, run outside UI/SQLite ownership, bound concurrently executing jobs, keep
 the slot until the actual computation ends, and reject late results. Budget fallback
 uses the already agreed server-document/local-recovery policy. Exact limits and
 tests are specified in the implementation plan.
+
+
+## Integrated graph audit, 2026-10-18
+
+Cargo.lock SHA256 `8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b`
+matched the controller's completed audit against RustSec commit
+`999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b` (updated October 17). It reported zero
+known vulnerabilities and five existing unmaintained warnings: bincode 2.0.1
+(RUSTSEC-2025-0141), ttf-parser 0.25.1 (RUSTSEC-2026-0192), zbus_names 4.3.5
+(RUSTSEC-2026-0371), zvariant 5.15.1 (RUSTSEC-2026-0370), zvariant_derive 5.15.1
+(RUSTSEC-2026-0372). None was suppressed or upgraded incidentally.
+
+None is reachable on the active ARM64 macOS normal/build graph; bincode is absent
+with all application features too. Its typed-index-collections/Slint compiler
+edge is optional and unactivated even across all targets. ttf-parser belongs to
+Linux winit window-decoration dependencies through ab_glyph/sctk-adwaita; the
+zbus/zvariant family belongs to Linux AccessKit AT-SPI/tray integration through
+Slint. Upstream ownership is respectively typed-index-collections/Slint,
+winit/Slint and AccessKit/zbus/Slint. This graph-specific classification does not
+prove general safety. Runtime notices were regenerated with accepted license
+policy and hash-verified complete Slint license text.

@@ -1,6 +1,8 @@
 //! Generated-text native sync lifecycle fixture. Never opens the user's store.
 #[path = "../tests/support/http_fixture.rs"]
 mod http_fixture;
+#[path = "support/sync_acceptance.rs"]
+mod sync_acceptance;
 use bulletnotes::{
     app::{
         connection::ConnectionController,
@@ -120,6 +122,20 @@ fn restart(path: &Path, nonce: &str) -> Result<()> {
 }
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    if args.get(1).is_some_and(|arg| arg == "--cleanup-acceptance") {
+        return sync_acceptance::cleanup_owned(Path::new(
+            args.get(2).ok_or("missing owned cleanup directory")?,
+        ));
+    }
+    if args.get(1).is_some_and(|arg| arg == "--acceptance-child") {
+        return sync_acceptance::child(&args);
+    }
+    if args
+        .get(1)
+        .is_some_and(|arg| arg == "--acceptance" || arg == "--live-acceptance")
+    {
+        return sync_acceptance::supervise(args[1] == "--live-acceptance");
+    }
     if args.get(1).is_some_and(|arg| arg == "--restart") {
         return restart(
             Path::new(args.get(2).ok_or("missing fixture path")?),

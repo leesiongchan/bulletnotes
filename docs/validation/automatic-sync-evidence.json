@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "date": "2026-10-18",
+  "reviewed_base": "803bd84da20650b2277fbad9ae3c790ab7b6111f",
+  "generated_data_only": true,
+  "normal_application_store_or_keychain_accessed": false,
+  "journal_process_loss": {
+    "test": "editor_reconciliation::killed_editor_owner_retains_exact_admitted_branch_and_real_http_base",
+    "stages": [
+      "SQLite-lock-blocked admission",
+      "admitted U1 before editor ack delivery",
+      "coalesced U2",
+      "SQLite-lock-blocked checked replay",
+      "committed replay",
+      "leased old PUT",
+      "unknown old PUT"
+    ],
+    "passes": 7,
+    "before_commit_claim": "external SQLite write lock proves no commit possible; not a hook at the internal commit instruction",
+    "after_commit_claim": "store future returned; child killed before editor LocalSaved delivery",
+    "never_committed_input_guaranteed": false
+  },
+  "sync_process_loss": {
+    "test": "automatic_sync::killed_sync_owner_recovers_resolution_draft_and_exact_http_boundaries",
+    "stages": [
+      "SQLite-lock-blocked resolution",
+      "committed resolution",
+      "recovery HTTP create before local ack",
+      "recovery exact HTTP readback before local ack",
+      "recovery local ack committed",
+      "canonical HTTP upload with newer admitted text",
+      "draft Close received before durable drain",
+      "draft drain committed before Close ack"
+    ],
+    "passes": 8,
+    "parent_http_server_survives_child_loss": true,
+    "canonical_and_recovery_exact_after_worker_resumption": true
+  },
+  "native_loopback": {
+    "browser_peer": false,
+    "cleaned_paths": 3,
+    "exact_live_selection_ime_voiceover": "unverified",
+    "guarded_cleanup_after_child_exit": true,
+    "live": false,
+    "passed": true,
+    "relay_rejections": 0,
+    "restart_before_reconnect": true,
+    "routing": "exact-path allowlist relay; normal upstream TLS for live; owned catalogue only",
+    "unsaved_at_remote_release": true
+  },
+  "live": {
+    "browser_peer": true,
+    "cleaned_paths": 3,
+    "exact_live_selection_ime_voiceover": "unverified",
+    "guarded_cleanup_after_child_exit": true,
+    "live": true,
+    "passed": true,
+    "relay_rejections": 0,
+    "restart_before_reconnect": true,
+    "routing": "exact-path allowlist relay; normal upstream TLS for live; owned catalogue only",
+    "unsaved_at_remote_release": true
+  },
+  "live_browser_method": "focused CodeMirror SelectAll/Backspace and public CDP inserttext (editor paste/input); actual SyncHandle applied browser source in another native process; no fetch mutation; not physical typing",
+  "live_browser_drain": "exact editor/server readback; networkidle; browser closed before native worker resumed; all child processes exited before guarded cleanup",
+  "first_live_browser_input_attempt": {
+    "issue": "Enter inherited one indentation space; initial selector type repair did not replace the editor; exact target later restored via verified clear and public inserttext",
+    "cleanup": {
+      "absence_confirmed": true,
+      "guarded": true,
+      "paths": 3
+    }
+  },
+  "live_browser_retry_readiness": "blank noneditable bootstrap; one exact-page reload satisfied public editable condition before mutation",
+  "dependency_audit": {
+    "lock_sha256": "8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b",
+    "rustsec_commit": "999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b",
+    "known_vulnerabilities": 0,
+    "existing_maintenance_warnings": 5,
+    "reused_dated_audit": true
+  },
+  "ui": {
+    "commit": "803bd84",
+    "review": "approved spec and quality; no Critical/Important",
+    "native_cases": 30,
+    "unexpected_physical_events": 0,
+    "historical_full_check": {
+      "passed": 276,
+      "failed": 0,
+      "ignored": 21
+    },
+    "minor": "Slint long callback/instantiation chain on palette/static routes; attribution unknown; accepted floating route unaffected"
+  },
+  "remaining_gates": [
+    "exact live selection direction/endpoints and IME/VoiceOver fidelity",
+    "native typing/frame latency under a deliberately stalled shared executor (storage latency measured separately)",
+    "physical window gestures/Spaces and supported older hardware/OS coverage",
+    "1MiB native-open performance target",
+    "Developer ID signing/notarization/distribution/clean install",
+    "fresh whole-branch independent review and final development package (controller)"
+  ],
+  "shared_executor_stall": {
+    "red": "unshared executor allowed a clean blue fox runs result rather than expected canonical busy fallback",
+    "green": "cfg(test)-only getter shares actual StoreHandle executor; checked replay falls back and preserves original; late output cannot replace canonical/durable source",
+    "production_hook_added": false,
+    "baseline_p95_ms": 5.140709,
+    "stalled_p95_ms": 5.0860840000000005
+  },
+  "final_checks": {
+    "scripts/check.sh": {
+      "exit": 0,
+      "formatting": "passed",
+      "strict_all_feature_clippy": "passed",
+      "passed": 281,
+      "failed": 0,
+      "ignored": 23,
+      "test_binaries": 47
+    },
+    "rust_1_92_all_targets_locked": {
+      "exit": 0,
+      "warnings": 0
+    },
+    "git_diff_check": {
+      "exit": 0
+    },
+    "notices": {
+      "regenerated": true,
+      "custom_slint_licenses_hash_verified": 9
+    },
+    "audit_lock_hash_verified": true
+  }
+}

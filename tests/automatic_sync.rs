@@ -1142,3 +1142,294 @@ async fn uncached_readonly_recovery_occupant_relocates_after_initial_put_denial(
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn killed_sync_owner_recovers_resolution_draft_and_exact_http_boundaries() {
+    use std::process::{Command, Stdio};
+    for stage in [
+        "before-resolution",
+        "after-resolution",
+        "recovery-create",
+        "recovery-readback",
+        "recovery-ack",
+        "canonical-upload",
+        "before-draft-drain",
+        "after-draft-drain",
+    ] {
+        let directory = tempfile::Builder::new()
+            .prefix("bulletnotes-sync-crash-")
+            .tempdir()
+            .unwrap();
+        let path = directory.path().join("owned.sqlite");
+        let marker = directory.path().join("ready");
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let server = SpaceFixture::start().await;
+        server.put("one.md", "red fox jumps\n");
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "sync_process_boundary_child"])
+            .env("BULLETNOTES_SYNC_CRASH_PATH", &path)
+            .env("BULLETNOTES_SYNC_CRASH_STAGE", stage)
+            .env("BULLETNOTES_SYNC_CRASH_NONCE", &nonce)
+            .env("BULLETNOTES_SYNC_CRASH_SERVER", server.base.as_str())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        while !marker.exists() {
+            if child.try_wait().unwrap().is_some() || std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                panic!(
+                    "{stage}: boundary not reached: {}",
+                    String::from_utf8_lossy(&child.wait_with_output().unwrap().stderr)
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert_eq!(
+            std::fs::read_to_string(marker).unwrap(),
+            format!("{}:{nonce}", child.id())
+        );
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let store = StoreHandle::open(&path).await.unwrap();
+        if stage.ends_with("draft-drain") {
+            assert_eq!(
+                store.merge_draft(&key("one.md")).await.unwrap().as_deref(),
+                if stage == "after-draft-drain" {
+                    Some("draft drained before owner loss\r\n日本語")
+                } else {
+                    None
+                }
+            );
+            assert_eq!(store.conflicts(config().id()).await.unwrap().len(), 1);
+        }
+        let recovered = store.recovery_copies(config().id()).await.unwrap();
+        assert!(
+            store.load_page(&key("one.md")).await.unwrap().unwrap().body
+                == "blue fox jumps\n\nlocal tail"
+                || recovered
+                    .iter()
+                    .any(|copy| copy.page.body == "blue fox jumps\n\nlocal tail"),
+            "{stage}: original lost"
+        );
+        if matches!(stage, "recovery-create" | "recovery-readback") {
+            let heads = store.recovery_uploads(config().id(), 10).await.unwrap();
+            assert_eq!(heads.len(), 1);
+            assert_eq!(heads[0].state, RecoveryUploadState::Unknown);
+            let upload = store
+                .read_recovery_upload(heads[0].event_id, heads[0].ordinal, heads[0].operation_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                upload.operation.kind,
+                MutationKind::Put("blue fox jumps\n\nlocal tail".into())
+            );
+            assert_eq!(
+                server.body(heads[0].key.path.as_str()).as_deref(),
+                Some("blue fox jumps\n\nlocal tail")
+            );
+        }
+        if stage == "canonical-upload" {
+            let unknown = store.unknown_mutations(config().id()).await.unwrap();
+            assert!(unknown.iter().any(|op| op.key == key("one.md")));
+            assert!(
+                store
+                    .load_sync_page(&key("one.md"))
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .1
+                    .pending
+            );
+        }
+        let sync = start(&store, &server).await;
+        until(|| sync.snapshot().complete && sync.snapshot().pending == 0).await;
+        let expected = if stage == "canonical-upload" {
+            "green fox jumps\n\nlocal tail\nnewer"
+        } else {
+            "green fox jumps\n\nlocal tail"
+        };
+        assert_eq!(server.body("one.md").as_deref(), Some(expected), "{stage}");
+        assert_eq!(
+            store.load_page(&key("one.md")).await.unwrap().unwrap().body,
+            expected
+        );
+        let copies = store.recovery_copies(config().id()).await.unwrap();
+        assert!(
+            copies
+                .iter()
+                .any(|copy| copy.page.body == "blue fox jumps\n\nlocal tail"),
+            "{stage}"
+        );
+        if stage == "after-draft-drain" {
+            assert!(
+                copies
+                    .iter()
+                    .any(|copy| copy.page.body == "draft drained before owner loss\r\n日本語")
+            );
+        }
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+}
+
+#[test]
+#[ignore = "owned parent-supervised crash fixture only"]
+fn sync_process_boundary_child() {
+    let path = std::path::PathBuf::from(std::env::var_os("BULLETNOTES_SYNC_CRASH_PATH").unwrap());
+    assert!(
+        path.parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("bulletnotes-sync-crash-")
+    );
+    let stage = std::env::var("BULLETNOTES_SYNC_CRASH_STAGE").unwrap();
+    let nonce = std::env::var("BULLETNOTES_SYNC_CRASH_NONCE").unwrap();
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let store = StoreHandle::open(&path).await.unwrap();
+        let client = SilverBulletClient::for_loopback_fixture(
+            &config(),
+            url::Url::parse(&std::env::var("BULLETNOTES_SYNC_CRASH_SERVER").unwrap()).unwrap(),
+            None,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        let base = client.read(&key("one.md")).await.unwrap();
+        store.apply_remote(base).await.unwrap();
+        store
+            .save_local(
+                key("one.md"),
+                "blue fox jumps\n\nlocal tail".into(),
+                LocalRevision(1),
+            )
+            .await
+            .unwrap();
+        let snapshot = store.load_page(&key("one.md")).await.unwrap().unwrap();
+        client
+            .put(&PendingMutation {
+                id: OperationId::new(),
+                key: key("one.md"),
+                local_revision: LocalRevision(0),
+                kind: MutationKind::Put("green fox jumps\n".into()),
+                condition: WriteCondition::Match(
+                    snapshot
+                        .remote_base
+                        .as_ref()
+                        .unwrap()
+                        .revision
+                        .clone()
+                        .unwrap(),
+                ),
+            })
+            .await
+            .unwrap();
+        let observed = client.read(&key("one.md")).await.unwrap();
+        let mut blocker = None;
+        if stage.ends_with("draft-drain") {
+            store
+                .save_conflict(ConflictRecord {
+                    id: uuid::Uuid::new_v4(),
+                    key: key("one.md"),
+                    base: snapshot.remote_base.clone(),
+                    local: snapshot,
+                    remote: observed.clone(),
+                })
+                .await
+                .unwrap();
+            let mut owner = store.install_draft_admission().unwrap();
+            let background = store.clone();
+            tokio::spawn(async move {
+                let _ = background.apply_remote(observed).await;
+            });
+            let bulletnotes::store::DraftAdmissionRequest::Close {
+                key: target, reply, ..
+            } = owner.recv().await.unwrap()
+            else {
+                panic!("missing draft close boundary");
+            };
+            if stage == "after-draft-drain" {
+                store
+                    .save_merge_drafts(vec![(
+                        target,
+                        "draft drained before owner loss\r\n日本語".into(),
+                    )])
+                    .await
+                    .unwrap();
+            }
+            // Do not deliver the close acknowledgement or drop its owner before process loss.
+            std::mem::forget(reply);
+            std::mem::forget(owner);
+        } else if stage == "before-resolution" {
+            let db = rusqlite::Connection::open(&path).unwrap();
+            db.execute_batch("BEGIN IMMEDIATE").unwrap();
+            let background = store.clone();
+            tokio::spawn(async move {
+                let _ = background.apply_remote(observed).await;
+            });
+            blocker = Some(db);
+        } else {
+            store.apply_remote(observed).await.unwrap();
+            if stage != "after-resolution" {
+                let head = store
+                    .recovery_uploads(config().id(), 10)
+                    .await
+                    .unwrap()
+                    .remove(0);
+                let upload = store
+                    .claim_recovery_upload(head.event_id, head.ordinal)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let ack = client.put(&upload.operation).await.unwrap();
+                if stage != "recovery-create" {
+                    let RemoteRead::Present(file) =
+                        client.read(&upload.operation.key).await.unwrap()
+                    else {
+                        panic!("missing recovery readback");
+                    };
+                    assert_eq!(file.body, "blue fox jumps\n\nlocal tail");
+                    if stage != "recovery-readback" {
+                        store
+                            .acknowledge_recovery_upload(
+                                head.event_id,
+                                head.ordinal,
+                                upload.operation.id,
+                                ack,
+                            )
+                            .await
+                            .unwrap();
+                    }
+                }
+                if stage == "canonical-upload" {
+                    let sent = store
+                        .claim_pending(config().id(), 100)
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .find(|operation| operation.key == key("one.md"))
+                        .unwrap();
+                    client.put(&sent).await.unwrap();
+                    store
+                        .save_local(
+                            key("one.md"),
+                            "green fox jumps\n\nlocal tail\nnewer".into(),
+                            LocalRevision(2),
+                        )
+                        .await
+                        .unwrap();
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        std::fs::write(
+            path.parent().unwrap().join("ready"),
+            format!("{}:{nonce}", std::process::id()),
+        )
+        .unwrap();
+        std::thread::park();
+        drop(blocker);
+    });
+}
