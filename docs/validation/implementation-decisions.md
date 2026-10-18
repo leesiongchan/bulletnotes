@@ -109,3 +109,12 @@ Complete chronological export of the execution ledger’s ruling lines, includin
 53. Final: Ruling: retain this plan's evidence workspace while manual/native/performance/distribution completion contracts remain open; export all Ruling lines to committed docs/validation/implementation-decisions.md — deleting evidence now would discard the outstanding gate record — cost if wrong: local scratch storage retained longer.
 
 54. Ruling: User scope correction2026-10-18 supersedes the original dual-architecture spec: macOS14+ Apple Silicon only; build/package/attribution target only aarch64-apple-darwin, reject Intel and universal artifacts, and reject explicit Intel application compilation — the user directly requested purely Apple Silicon support — cost if wrong: Intel support requires a new scope decision; older supported macOS/native/performance/signing gates remain open.
+
+
+55. Ruling: adopt explicit Skia/WGPU 29/Metal after the user's renderer-evaluation authorization; retain macOS 14+ Apple Silicon and the current editor — actual Metal startup and native checks passed, with favorable fresh same-host timing — cost if wrong: renderer fallback requires a reviewed source change; no silent OpenGL fallback.
+
+56. Ruling: use Slint's pinned public `unstable-wgpu-29` API, isolated in renderer selection, after WGPU 30 resolution failed — no framework fork or private API introduced; matching WGPU feature supplies startup callbacks — cost if wrong: repeat selection/callback/MSRV/package checks during upgrades.
+
+57. Ruling: retain the original 100 ms large-note gate despite Metal's 132.203 ms result — improvement does not satisfy acceptance, and supported selection restoration remains costly — cost if wrong: release remains delayed pending supported optimization or explicit user scope change.
+
+58. Ruling: apply the renderer review's minor theme-identity assertion and retain its declined judgments as open gates — snapshots alone cannot prove callback selection; targeted review does not cover manual input, older OS, attribution legality or distribution — cost if wrong: additional corrections after native/manual acceptance.

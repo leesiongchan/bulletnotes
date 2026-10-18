@@ -6,6 +6,7 @@ use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc, time::Duration};
 pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     let _application = super::application::NativeApplication::prepare()?;
+    super::renderer::select()?;
     let window = AppWindow::new()?;
     present_settings(&window, &AppSettings::default(), SystemAppearance::Light)?;
     window.set_current_path("Installation check".into());
@@ -16,7 +17,7 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     let weak = window.as_weak();
     slint::Timer::single_shot(Duration::from_millis(400), move || {
         if let Some(window) = weak.upgrade() {
-            result.set(super::window_chrome::native_window(window.window()).is_ok());
+            result.set(super::renderer::uses_metal(window.window()).unwrap_or(false));
             let _ = window.hide();
         }
         let _ = slint::quit_event_loop();
@@ -24,8 +25,9 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if !checked.get() {
-        return Err("installation check did not observe a native window".into());
+        return Err("installation check did not observe a native Metal window".into());
     }
+    println!("graphics_backend: metal");
     println!("installation_check: true");
     Ok(())
 }

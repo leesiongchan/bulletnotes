@@ -151,7 +151,7 @@ fn native_palette_and_view_changes_preserve_source() {
         .join("examples/ui_review");
     let output = std::process::Command::new(executable)
         .arg("--contract")
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(
@@ -174,7 +174,7 @@ fn native_appearance_actions_persist_and_roll_back_on_failure() {
         .join("examples/ui_review");
     let output = std::process::Command::new(executable)
         .arg("--appearance-contract")
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(
@@ -205,7 +205,7 @@ fn maximum_text_size_keeps_native_navigation_visible() {
         let output = std::process::Command::new(&executable)
             .args(["--ruled", "--font", "24", "--capture"])
             .arg(&path)
-            .env("SLINT_BACKEND", "winit-femtovg")
+            .env("SLINT_BACKEND", "winit-skia")
             .output()
             .unwrap();
         assert!(
@@ -255,7 +255,7 @@ fn native_connection_form_preserves_editor_and_clears_credentials() {
         .join("examples/ui_review");
     let output = std::process::Command::new(executable)
         .arg("--connection-contract")
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(

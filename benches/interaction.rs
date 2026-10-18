@@ -56,10 +56,14 @@ mod native {
     }
     pub fn run() -> Result<()> {
         let native = NativeApplication::prepare()?;
-        slint::BackendSelector::new()
-            .backend_name("winit".into())
-            .renderer_name("femtovg".into())
-            .select()?;
+        let renderer =
+            std::env::var("BULLETNOTES_BENCH_RENDERER").unwrap_or_else(|_| "skia".into());
+        match renderer.as_str() {
+            #[cfg(feature = "renderer-review")]
+            "skia-opengl" => bulletnotes::platform::renderer::select_opengl_for_review()?,
+            "skia" => bulletnotes::platform::renderer::select()?,
+            _ => return Err("unsupported benchmark renderer".into()),
+        }
         let runtime = tokio::runtime::Runtime::new()?;
         let dir = tempfile::Builder::new()
             .prefix("bulletnotes-interaction-")
@@ -148,7 +152,7 @@ mod native {
                 }
                 let a=p95(&mut activation);let o=p95(&mut open);let l=p95(&mut large);let s=p95(&mut search);
                 let report=serde_json::json!({"schema":1,"pages":10000,"large_note_bytes":1024*1024,"samples":20,
-                    "renderer":"winit-femtovg","frame_boundary":"Slint AfterRendering; native GPU submission",
+                    "renderer":format!("winit-{renderer}"),"frame_boundary":"Slint AfterRendering; native GPU submission",
                     "profile":if cfg!(debug_assertions){"debug"}else{"release"},"os":metadata("sw_vers",&["-productVersion"]),
                     "os_build":metadata("sw_vers",&["-buildVersion"]),"hardware":metadata("sysctl",&["-n","hw.model"]),
                     "cpu":metadata("sysctl",&["-n","machdep.cpu.brand_string"]),"memory_bytes":metadata("sysctl",&["-n","hw.memsize"]),
@@ -197,6 +201,13 @@ mod native {
         let output = serde_json::to_string_pretty(&report)?;
         println!("{output}");
         std::fs::create_dir_all("target/interaction")?;
+        std::fs::write(
+            format!(
+                "target/interaction/{}.json",
+                report["renderer"].as_str().ok_or("missing renderer")?
+            ),
+            &output,
+        )?;
         std::fs::write("target/interaction/latest.json", output)?;
         if report["performance_pass"] != true || report["catalogue_reachable"] != true {
             return Err(

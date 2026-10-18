@@ -9,7 +9,7 @@ publish = false
 default = []
 protocol-validation = []
 native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor", "objc2-app-kit/NSGraphics", "objc2-app-kit/NSApplication", "objc2-app-kit/NSWorkspace", "objc2-app-kit/NSRunningApplication", "objc2-app-kit/NSButton", "objc2-app-kit/NSControl", "objc2-app-kit/NSEvent", "objc2-app-kit/NSGraphicsContext", "objc2-foundation/NSGeometry", "objc2-app-kit/block2"]
-probe-skia = ["slint/renderer-skia"]
+renderer-review = ["slint/renderer-skia-opengl"]
 
 [dependencies]
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
@@ -25,7 +25,7 @@ thiserror = "=2.0.21"
 uuid = { version = "=1.28.0", features = ["v4", "serde"] }
 jiff = "=0.2.38"
 url = "=2.5.8"
-slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-skia", "unstable-wgpu-29", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "=3.7.0"
@@ -79,3 +79,7 @@ harness = false
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+[[example]]
+name = "renderer_review"
+required-features = ["native-validation", "renderer-review"]

@@ -37,6 +37,7 @@ pub struct LocalApplication {
 }
 impl LocalApplication {
     pub fn new(startup: Startup, mut native: NativeApplication) -> AppResult<Self> {
+        crate::platform::renderer::select()?;
         let window = AppWindow::new()?;
         let tray = LocalTray::new()?;
         let settings = startup.settings.clone();

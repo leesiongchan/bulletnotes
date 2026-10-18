@@ -674,7 +674,7 @@ fn native_review_merge_delete_restart_and_restore_preserve_source() {
         .unwrap()
         .join("examples/recovery_review");
     let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(

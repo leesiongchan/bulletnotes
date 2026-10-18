@@ -29,7 +29,7 @@ codesign --force --sign - --timestamp=none "$app_bundle"
 codesign --verify --strict "$app_bundle"
 app_args=()
 if [[ "$#" -gt 0 ]]; then app_args=(--args "$@"); fi
-open -n -W --env SLINT_BACKEND=winit-femtovg --stdout "$app_build/stdout.log" --stderr "$app_build/stderr.log" "$app_bundle" "${app_args[@]}"
+open -n -W --env SLINT_BACKEND=winit-skia --stdout "$app_build/stdout.log" --stderr "$app_build/stderr.log" "$app_bundle" "${app_args[@]}"
 rg 'native_startup_close_and_quit: true' "$app_build/stdout.log" || {
     cat "$app_build/stderr.log"
     exit 1

@@ -47,9 +47,12 @@ else:
  run(['xcrun','stapler','validate',str(app)],'notarization staple validation')
  run(['spctl','--assess','--type','execute',str(app)],'Gatekeeper assessment')
 launch='unobserved (static-only)'
+graphics_api='unobserved (static-only)'
 if not args.static_only:
  output=run([str(binary),'--verify-installation'],'isolated installation launch')
  if 'installation_check: true' not in output.stdout:fail('installation launch did not acknowledge its check')
+ if 'graphics_backend: metal' not in output.stdout:fail('installation launch did not verify Metal rendering')
+ graphics_api='Metal'
  launch='passed (generated UI; no store, credentials, or network)'
-print(json.dumps({'artifact':str(app),'kind':kind,'architecture':architecture[0],'minimum_macos':'14.0','signature':'verified','launch':launch},indent=2))
+print(json.dumps({'artifact':str(app),'kind':kind,'architecture':architecture[0],'minimum_macos':'14.0','signature':'verified','launch':launch,'graphics_api':graphics_api},indent=2))
 PYTHON

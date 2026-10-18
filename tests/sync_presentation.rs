@@ -130,7 +130,7 @@ fn native_two_client_offline_reconnect_and_restart_preserve_source() {
         .unwrap()
         .join("examples/sync_review");
     let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(

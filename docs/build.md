@@ -28,10 +28,27 @@ launchability. Explicit Intel application builds fail at compile time.
 
 `--verify-installation` is an explicit binary smoke path: it shows generated UI
 briefly and exits before opening SQLite, credentials, or HTTP. The verifier uses
-it to avoid launching against a user's store. Normal app launch uses the real
+it to avoid launching against a user's store. It also requires a real native
+`CAMetalLayer`; the verification report records `graphics_api: "Metal"`. Normal app launch uses the real
 local store and automatic connection/synchronization. Older live previews are not
 replaced or stopped by packaging. Close an older local app normally before trying
 a new client that uses the same store; the writer lock prevents simultaneous use.
+
+## Production renderer
+
+Production explicitly selects Winit + Skia + WGPU 29 with Metal as the only GPU
+backend before constructing Slint components. Inherited `SLINT_BACKEND` and
+`WGPU_BACKEND` settings cannot switch the application to OpenGL. Selection is
+main-thread-only and idempotent. Startup uses the corresponding rendering notifier.
+Slint 1.18.1's documented `unstable-wgpu-29` feature exposes a public, version-specific
+API; it is pinned and isolated in `src/platform/renderer.rs`. It requires review
+when upgrading Slint/WGPU. No private editor API or unstable winit API is enabled.
+The macOS 14 deployment target remains unchanged.
+
+[Renderer evaluation](validation/metal-renderer.md) records native checks,
+performance comparisons, candidate limitations and remaining acceptance gates.
+The optional `renderer-review` feature enables an explicit Skia/OpenGL comparison
+path in development fixtures; production defaults do not enable it.
 
 ## Distribution prerequisites
 

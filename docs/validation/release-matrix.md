@@ -104,3 +104,18 @@ The [independent branch review and fix record](final-review.md) documents four b
 The user narrowed support to macOS 14+ on Apple Silicon only. Packaging and runtime attribution target `aarch64-apple-darwin`; the verifier accepts only a thin ARM64 Mach-O, and explicit Intel application compilation is rejected. Generated signed Intel and universal fixtures exercise rejection without executing either artifact. ARM64 positive verification remains covered.
 
 Verification: 173 passed, zero failed, 18 explicit ignored gates; strict Clippy/fmt passed. An explicit Intel Cargo check failed with the intended Apple Silicon-only diagnostic. Rust 1.92.0 production checking passed. Attribution regeneration passed with the same verified full license text. Intel runtime testing is removed from release acceptance; supported macOS, input/accessibility, performance, signing and notarization gates remain open.
+
+
+## Metal renderer checkpoint — 2026-10-18
+
+Production now uses Winit/Skia/WGPU 29 with Metal only. [Renderer evaluation](metal-renderer.md)
+records the selection, actual CAMetalLayer proof, native checks and targeted review.
+Automated verification: 174 passed, zero failed, 19 explicit ignored gates; strict
+Clippy/fmt and Rust 1.92.0 production checking passed. The renderer fixture and
+signed LaunchServices lifecycle passed, as did generated-data sync, recovery,
+local editing, appearance and installation checks. The verifier now requires
+Metal acknowledgement from its no-store installation path.
+
+Fresh same-host 1 MiB p95 is 132.203 ms versus 152.452 ms on the fresh OpenGL
+comparison; the original 100 ms gate remains open. All supported-OS hardware,
+manual input/accessibility, selection-capture and distribution gates remain open.

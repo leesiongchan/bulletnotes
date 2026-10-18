@@ -3,7 +3,7 @@
 Measured 2026-10-18 with the native Rust/Slint application, using a temporary
 10,000-page SQLite space and a 1,048,576-byte note. No live notes or deployed space
 were accessed. Hardware: Apple M4 Pro, Mac16,11, 48 GiB; macOS 27.0.1 (26A434),
-Rust 1.99.1, Slint 1.18.1, winit/FemtoVG, optimized Cargo bench profile. Twenty
+Rust 1.99.1, Slint 1.18.1, Winit/Skia on WGPU 29/Metal, optimized Cargo bench profile. Twenty
 samples per interaction; p95 uses the nearest-rank method. The frame boundary is
 Slint AfterRendering/GPU submission, not a physical display-presentation probe.
 The latest release profile enables thin LTO, one codegen unit, and stripped debug
@@ -16,10 +16,10 @@ Run `rustup run 1.99.1 cargo bench --bench interaction --locked`. It writes
 
 | Interaction | Initial p95 | Latest p95 | Target | Result |
 | --- | ---: | ---: | ---: | --- |
-| Warm activation | 31.915 ms | 11.231 ms | 150 ms | Met on this host |
-| Cached short-page open | 17.433 ms | 21.554 ms | 100 ms | Met on this host |
-| Cached literal search | 33.505 ms | 17.629 ms | 100 ms | Met on this host |
-| Cached 1 MiB note open | 250.162 ms | 127.602 ms | 100 ms | **Open release blocker** |
+| Warm activation | 31.915 ms | 11.411 ms | 150 ms | Met on this host |
+| Cached short-page open | 17.433 ms | 17.833 ms | 100 ms | Met on this host |
+| Cached literal search | 33.505 ms | 16.931 ms | 100 ms | Met on this host |
+| Cached 1 MiB note open | 250.162 ms | 132.203 ms | 100 ms | **Open release blocker** |
 | Catalogue reachability | 5,000/10,000 | 10,000/10,000 | Every page | Met through result continuation |
 
 The original UI hard limit exposed only 5,000 pages. The native harness reproduced
@@ -30,14 +30,22 @@ on each new query. The list remains virtualized, and the harness exercised every
 batch until all 10,000 rows were reachable.
 
 Classified stage timing located the large-note cost in the supported Slint
-selection-restoration call: 119.815 ms p95. Cached storage opening measured
-6.058 ms, setting the text property 0.607 ms, and editor focus <0.001 ms. The
-large-note interval before the next frame was 123.916 ms p95, with a subsequent
-frame interval of 5.335 ms. Stage percentiles have different sample populations
+selection-restoration call: 120.904 ms p95. Cached storage opening measured
+8.362 ms, setting the text property 0.611 ms, and editor focus <0.001 ms. The
+large-note interval before the next frame was 127.982 ms p95, with a subsequent
+frame interval of 4.222 ms. Stage percentiles have different sample populations
 and are not additive. These numbers establish where the measured cost occurs;
 they do not establish a supported framework fix. The benchmark continues failing
 its original 100 ms requirement. No restoration was removed, private editor API
 used, or editor rewrite introduced to change that result.
+
+A fresh same-host OpenGL/FemtoVG comparison measured 14.280 ms activation,
+25.296 ms cached open, 31.420 ms search and 152.452 ms large-note open. Both runs
+used the same optimized profile and 20 samples. The Metal results are favorable
+on this host; they do not establish a speedup on every supported machine.
+[OpenGL comparison data](interaction-opengl-comparison.json) and
+[Metal evaluation](metal-renderer.md) retain the context. Both runs failed the
+unchanged 100 ms large-note gate.
 
 ## Local diagnostics
 

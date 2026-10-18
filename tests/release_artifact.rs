@@ -12,6 +12,15 @@ fn fixture_for_architecture(
     signed: bool,
     resources: bool,
 ) -> (tempfile::TempDir, PathBuf) {
+    fixture_with_graphics_evidence(architecture, minimum, signed, resources, true)
+}
+fn fixture_with_graphics_evidence(
+    architecture: &str,
+    minimum: &str,
+    signed: bool,
+    resources: bool,
+    metal: bool,
+) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let app = dir.path().join("Generated Artifact.app");
     let mac = app.join("Contents/MacOS");
@@ -19,7 +28,7 @@ fn fixture_for_architecture(
     let source = dir.path().join("main.c");
     std::fs::write(
         &source,
-        b"#include <stdio.h>\nint main(void){puts(\"installation_check: true\");return 0;}\n",
+        format!("#include <stdio.h>\nint main(void){{puts(\"installation_check: true\");{}return 0;}}\n", if metal { "puts(\"graphics_backend: metal\");" } else { "" }),
     )
     .unwrap();
     let status = Command::new("xcrun")
@@ -178,4 +187,15 @@ fn verifier_rejects_universal_bundles_with_an_intel_slice() {
         "{}",
         reason(&output)
     );
+}
+
+#[test]
+fn verifier_requires_explicit_metal_installation_evidence() {
+    let (_dir, app) = fixture_with_graphics_evidence("arm64", "14.0", true, true, false);
+    let output = verify(&app, true);
+    assert!(
+        !output.status.success(),
+        "artifact without Metal evidence was accepted"
+    );
+    assert!(reason(&output).contains("Metal"), "{}", reason(&output));
 }

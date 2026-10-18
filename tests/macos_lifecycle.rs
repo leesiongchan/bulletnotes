@@ -110,7 +110,7 @@ fn native_startup_close_and_termination_preserve_local_data() {
         .unwrap()
         .join("examples/app_lifecycle_review");
     let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-femtovg")
+        .env("SLINT_BACKEND", "winit-skia")
         .output()
         .unwrap();
     assert!(

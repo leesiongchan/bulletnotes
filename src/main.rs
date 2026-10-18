@@ -13,6 +13,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         platform::credentials::CredentialStore,
     };
     let native = NativeApplication::prepare()?;
+    bulletnotes::platform::renderer::select()?;
     let runtime = tokio::runtime::Runtime::new()?;
     let connection = ConnectionConfig::parse("https://notes.harflix.lol")?
         .id()

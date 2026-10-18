@@ -21,3 +21,6 @@ mod exclusive_hotkey;
 
 #[cfg(target_os = "macos")]
 pub mod installation;
+
+#[cfg(target_os = "macos")]
+pub mod renderer;
