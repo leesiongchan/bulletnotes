@@ -280,7 +280,8 @@ async fn filename_stems_are_bounded_ascii_and_empty_drafts_remain_exact() {
     let directory = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&database(&directory)).await.unwrap();
     for (filename, expected) in [
-        ("folder/日本語💾.md".to_string(), "note".to_string()),
+        ("folder/日本語💾.md".to_string(), "-".to_string()),
+        ("folder/.md".to_string(), "note".to_string()),
         (format!("folder/{}.md", "A".repeat(80)), "A".repeat(64)),
         ("folder/a  💾b_C-2.md".to_string(), "a-b_C-2".to_string()),
     ] {

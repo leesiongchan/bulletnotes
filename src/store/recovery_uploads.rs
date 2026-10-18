@@ -180,7 +180,6 @@ fn destination(original: &PagePath, id: Uuid) -> Result<PagePath, StoreError> {
     let stem = filename.rsplit_once('.').map_or(filename, |(stem, _)| stem);
     let mut name = String::new();
     let mut replacing = false;
-    let mut usable = false;
     for ch in stem.chars() {
         if name.len() == 64 {
             break;
@@ -188,13 +187,12 @@ fn destination(original: &PagePath, id: Uuid) -> Result<PagePath, StoreError> {
         if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
             name.push(ch);
             replacing = false;
-            usable = true;
         } else if !replacing {
             name.push('-');
             replacing = true;
         }
     }
-    if !usable {
+    if name.is_empty() {
         name = "note".into();
     }
     PagePath::parse(&format!("Bulletnotes Recovery/{name}-{id}.md"))
