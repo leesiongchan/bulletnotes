@@ -353,6 +353,9 @@ impl Coordinator {
     pub fn can_go_forward(&self) -> bool {
         self.navigation.can_go_forward()
     }
+    pub fn scratchpads_pending(&self) -> bool {
+        self.stack_loading
+    }
     pub fn scratchpads(&self) -> Option<&super::scratchpads::ScratchpadStack> {
         self.stack.as_ref()
     }
@@ -392,6 +395,10 @@ impl Coordinator {
         });
     }
     fn step_scratchpad(&mut self, step: i8, effects: &mut Vec<AppEffect>) {
+        let timing = crate::diagnostics::OperationTimer::start(
+            crate::diagnostics::Operation::ScratchpadNavigation,
+        );
+        timing.success();
         let Some(stack) = &self.stack else {
             self.stack_intent = Some(step);
             self.refresh_scratchpads(effects);
@@ -768,6 +775,9 @@ impl Coordinator {
                     .as_ref()
                     .is_some_and(|editor| editor.key() == &key)
                 {
+                    self.stack_cursor = None;
+                    self.pending_transition = None;
+                    self.barrier_waiting = false;
                     self.notice = Some(METADATA_FAILURE);
                 }
             }

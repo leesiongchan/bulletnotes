@@ -120,17 +120,7 @@ impl State {
                 AppEffect::LoadScratchpads {
                     request_id,
                     connection,
-                } => {
-                    let state = self.clone();
-                    let _ = slint::spawn_local(async move {
-                        let result = state.store.scratchpad_stack(&connection).await;
-                        state.receive(AppEvent::ScratchpadsLoaded {
-                            request_id,
-                            connection,
-                            result,
-                        });
-                    });
-                }
+                } => self.load_scratchpads(request_id, connection),
                 AppEffect::Search(request) => {
                     self.effects.searches.send_replace(Some(request));
                 }

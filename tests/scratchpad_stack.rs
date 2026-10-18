@@ -49,7 +49,7 @@ async fn catalogue_only_and_large_stacks_are_complete() {
     store
         .record_catalogue(
             &key("a.md").connection,
-            (0..125)
+            (0..275)
                 .map(|n| metadata(&format!("Quick Notes/{n:03}.md"), Some(1000)))
                 .collect(),
             true,
@@ -60,7 +60,7 @@ async fn catalogue_only_and_large_stacks_are_complete() {
         .scratchpad_stack(&key("a.md").connection)
         .await
         .unwrap();
-    assert_eq!(entries.len(), 125);
+    assert_eq!(entries.len(), 275);
     assert_eq!(entries[0].key, key("Quick Notes/000.md"));
     assert!(store.load_page(&entries[0].key).await.unwrap().is_none());
     store.shutdown().await.unwrap();
