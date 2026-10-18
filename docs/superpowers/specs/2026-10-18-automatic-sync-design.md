@@ -1,6 +1,8 @@
 # Automatic sync reconciliation design
 
-Status: proposed specification; implementation has not started.
+Status: approved for implementation planning on 2026-10-18; runtime implementation
+has not started. See the [implementation plan](../plans/2026-10-18-automatic-sync.md)
+and [library evaluation](../../validation/merge-library-research.md).
 
 ## Intent and decision
 
