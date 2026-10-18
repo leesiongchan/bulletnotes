@@ -87,10 +87,18 @@ impl Worker {
                     version: 4,
                     sql: include_str!("../../migrations/004_recovery_intents.sql"),
                 },
+                Migration {
+                    version: 5,
+                    sql: include_str!("../../migrations/005_automatic_reconciliation.sql"),
+                },
             ],
             Some(&backup),
         )?;
         db.execute("UPDATE outbox SET state='unknown' WHERE state='leased'", [])?;
+        db.execute(
+            "UPDATE recovery_uploads SET state='unknown' WHERE state='leased'",
+            [],
+        )?;
         Ok(Self {
             db,
             _guard: guard,

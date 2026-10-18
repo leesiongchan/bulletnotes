@@ -69,6 +69,23 @@ pub(super) fn load(db: &Connection, key: &PageKey) -> Result<Option<PageSnapshot
         permission,
     }))
 }
+pub(super) fn load_stored(
+    db: &Connection,
+    key: &PageKey,
+) -> Result<Option<crate::domain::reconciliation::StoredPage>, StoreError> {
+    let Some(page) = load(db, key)? else {
+        return Ok(None);
+    };
+    let generation: i64 = db.query_row(
+        "SELECT source_generation FROM pages WHERE connection=?1 AND path=?2",
+        [key.connection.as_str(), key.path.as_str()],
+        |row| row.get(0),
+    )?;
+    Ok(Some(crate::domain::reconciliation::StoredPage {
+        page,
+        source_generation: generation.try_into().map_err(|_| StoreError::InvalidData)?,
+    }))
+}
 pub(super) fn load_active(
     db: &Connection,
     key: &PageKey,

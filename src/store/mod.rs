@@ -3,6 +3,7 @@ mod outbox;
 mod pages;
 mod probes;
 pub mod recovery;
+mod recovery_uploads;
 mod remote;
 mod restoration;
 mod sync_queue;
@@ -79,6 +80,21 @@ impl StoreHandle {
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
         self.call(move |w| pages::load(&w.db, &key)).await
+    }
+    pub async fn load_stored_page(
+        &self,
+        key: &PageKey,
+    ) -> Result<Option<crate::domain::reconciliation::StoredPage>, StoreError> {
+        let key = key.clone();
+        self.call(move |w| pages::load_stored(&w.db, &key)).await
+    }
+    pub async fn load_stored_merge_draft(
+        &self,
+        key: &PageKey,
+    ) -> Result<Option<crate::domain::reconciliation::StoredMergeDraft>, StoreError> {
+        let key = key.clone();
+        self.call(move |w| restoration::stored_merge_draft(&w.db, &key))
+            .await
     }
     pub async fn load_active_page(
         &self,

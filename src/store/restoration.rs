@@ -470,6 +470,25 @@ pub(super) fn merge_draft(db: &Connection, key: &PageKey) -> Result<Option<Strin
         )
         .optional()?)
 }
+pub(super) fn stored_merge_draft(
+    db: &Connection,
+    key: &PageKey,
+) -> Result<Option<crate::domain::reconciliation::StoredMergeDraft>, StoreError> {
+    let row: Option<(String, i64)> = db
+        .query_row(
+            "SELECT body,revision FROM merge_drafts WHERE connection=?1 AND path=?2",
+            [key.connection.as_str(), key.path.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(body, revision)| {
+        Ok(crate::domain::reconciliation::StoredMergeDraft {
+            body,
+            revision: revision.try_into().map_err(|_| StoreError::InvalidData)?,
+        })
+    })
+    .transpose()
+}
 pub(super) fn save_merge_drafts(
     db: &mut Connection,
     drafts: Vec<(PageKey, String)>,

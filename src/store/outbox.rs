@@ -8,6 +8,9 @@ pub(super) fn queue_put(
     page_id: i64,
     snapshot: &PageSnapshot,
 ) -> Result<(), StoreError> {
+    if super::recovery_uploads::fenced(db, &snapshot.key)? {
+        return Ok(());
+    }
     db.execute(
         "DELETE FROM outbox WHERE page_id=?1 AND state IN ('pending','blocked')",
         [page_id],
