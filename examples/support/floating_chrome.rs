@@ -186,6 +186,9 @@ pub fn run() -> Result<()> {
             capture(&window, "midpoint")?;
             pause(180).await?;
             assert!(!close.isHidden() && close.isEnabled(), "native header buttons hidden={},enabled={},revealed={},hovered={},opacity={},key={},unexpected_mouse={}", close.isHidden(), close.isEnabled(), window.get_header_revealed(), window.get_header_hovered(), window.get_header_opacity(), native.isKeyWindow(), unexpected_mouse.get());
+            let button_bounds=close.convertRect_toView(close.bounds(),None);
+            let button_center_from_top=size.height - button_bounds.origin.y - button_bounds.size.height / 2.0;
+            assert!((button_center_from_top - 22.0).abs() < 1.0,"native button center from top: {button_center_from_top}");
             capture(&window, "header")?;
             // The small gap below the header belongs to the same retention region.
             mouse(
