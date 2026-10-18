@@ -11,7 +11,7 @@ pub mod search;
 pub mod settings;
 mod worker;
 use crate::{
-    app::model::EditorPosition,
+    domain::editor::EditorPosition,
     domain::{connection::ConnectionId, error::StoreError, page::*},
 };
 use search::{SearchQuery, SearchResults};

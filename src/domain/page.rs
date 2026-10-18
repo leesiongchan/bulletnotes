@@ -148,7 +148,7 @@ pub struct PageSnapshot {
     pub body: String,
     pub local_revision: LocalRevision,
     pub remote_base: Option<RemoteFile>,
-    pub position: crate::app::model::EditorPosition,
+    pub position: super::editor::EditorPosition,
     pub permission: Permission,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 use crate::{
-    app::model::EditorPosition,
+    domain::editor::EditorPosition,
     domain::{connection::ConnectionId, error::StoreError, page::*},
 };
 use rusqlite::{Connection, OptionalExtension, Row};

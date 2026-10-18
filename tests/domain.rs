@@ -94,3 +94,45 @@ fn changing_display_title_does_not_change_page_identity() {
     assert_eq!(key.title_from("# Changed title\nbody"), "Changed title");
     assert_eq!(key, original);
 }
+
+#[test]
+fn persisted_editor_position_preserves_direction_and_field_format() {
+    use bulletnotes::domain::editor::EditorPosition;
+    let position = EditorPosition {
+        anchor: 9,
+        caret: 3,
+        scroll_y: 12.5,
+    };
+    assert_eq!(position.validate("abc日本").unwrap(), position);
+    let value = serde_json::to_value(position).unwrap();
+    assert_eq!(
+        value,
+        serde_json::json!({"anchor": 9, "caret": 3, "scroll_y": 12.5})
+    );
+    let decoded: EditorPosition = serde_json::from_value(value).unwrap();
+    assert_eq!(decoded, position);
+}
+
+#[test]
+fn shared_editor_position_rejects_invalid_offsets_and_nonfinite_scroll() {
+    use bulletnotes::domain::editor::EditorPosition;
+    for position in [
+        EditorPosition {
+            anchor: 1,
+            caret: 0,
+            scroll_y: 0.0,
+        },
+        EditorPosition {
+            anchor: 0,
+            caret: 3,
+            scroll_y: 0.0,
+        },
+        EditorPosition {
+            anchor: 0,
+            caret: 0,
+            scroll_y: f32::INFINITY,
+        },
+    ] {
+        assert!(position.validate("é").is_err());
+    }
+}

@@ -1,7 +1,7 @@
 //! Recovery copies and deletion intent commit in the same SQLite transaction.
 use super::{outbox, pages, remote};
 use crate::{
-    app::model::EditorPosition,
+    domain::editor::EditorPosition,
     domain::{connection::ConnectionId, error::StoreError, page::*},
 };
 use rusqlite::{Connection, OptionalExtension, params};
