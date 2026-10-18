@@ -371,3 +371,15 @@ fn failed_stack_read_never_becomes_an_empty_stack() {
             .all(|e| !matches!(e, AppEffect::CreateDraft { .. }))
     );
 }
+
+#[test]
+fn metadata_failure_notice_resets_the_requested_stack_cursor_before_retry() {
+    let mut app = app();
+    app.dispatch(AppAction::StepScratchpad(-1));
+    app.receive(AppEvent::MetadataFailed(key("Quick Notes/c.md")));
+    let effects = app.dispatch(AppAction::StepScratchpad(-1));
+    let effects = checked(&mut app, effects);
+    assert!(effects.iter().any(
+        |e| matches!(e,AppEffect::LoadPage {key:target,..} if target==&key("Quick Notes/b.md"))
+    ));
+}

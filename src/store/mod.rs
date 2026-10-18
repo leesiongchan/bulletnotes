@@ -96,7 +96,7 @@ impl StoreHandle {
         connection: &ConnectionId,
     ) -> Result<Vec<scratchpads::ScratchpadEntry>, StoreError> {
         let connection = connection.clone();
-        self.call_timed(crate::diagnostics::Operation::Storage, move |w| {
+        self.call_timed(crate::diagnostics::Operation::ScratchpadLoad, move |w| {
             scratchpads::list(&w.db, &connection)
         })
         .await

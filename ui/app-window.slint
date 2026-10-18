@@ -88,6 +88,14 @@ export component AppWindow inherits Window {
     in-out property <string> search-folder;
     in property <string> index-status;
     in property <string> note-counter;
+    in property <string> note-date;
+    in property <bool> can-go-older:false;
+    in property <bool> can-go-newer:false;
+    in property <bool> can-jump-to-newest:true;
+    in property <bool> is-newest-scratchpad:false;
+    in property <bool> status-attention:false;
+    callback scratchpad-step(int);
+    callback jump-to-newest();
     in property <bool> can-go-back:false;
     in property <bool> can-go-forward:false;
     in property <string> appearance-message;
@@ -203,10 +211,12 @@ export component AppWindow inherits Window {
             if (event.text == "w" || event.text == "W") { root.request-hide(); return accept; }
             if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
             if (event.text == "k" || event.text == "K") { root.browse-pages(); return accept; }
+            if (event.text == "1") { if (root.can-jump-to-newest) {root.jump-to-newest();} return accept; }
+            if (event.text == "p" || event.text == "P") {root.toggle-pin();return accept;}
             if (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
             if (event.text == ",") { root.show-appearance(); return accept; }
-            if (event.text == "[") { root.history-step(-1); return accept; }
-            if (event.text == "]") { root.history-step(1); return accept; }
+            if (event.text == "[") { root.scratchpad-step(-1); return accept; }
+            if (event.text == "]") { root.scratchpad-step(1); return accept; }
         }
         if (event.text == Key.Escape && root.active-view == "note" && root.find-visible) { root.close-find(); return accept; }
         if (event.text == Key.Escape && root.active-view != "note") {
@@ -422,7 +432,7 @@ export component AppWindow inherits Window {
                         icon: @image-url("../assets/icons/left.svg");
                         label: "Previous visited note";
                         enabled: root.footer-revealed && footer.opacity > 0 && root.can-go-back;
-                        clicked => { root.history-step(-1); }
+                        clicked => { root.scratchpad-step(-1); }
                     }
 
                     next := ActionButton {
@@ -430,7 +440,7 @@ export component AppWindow inherits Window {
                         icon: @image-url("../assets/icons/right.svg");
                         label: "Next visited note";
                         enabled: root.footer-revealed && footer.opacity > 0 && root.can-go-forward;
-                        clicked => { root.history-step(1); }
+                        clicked => { root.scratchpad-step(1); }
                     }
                 }
             }
