@@ -35,6 +35,9 @@ pub enum AppAction {
     OpenPage(PageKey),
     NewNote,
     StepHistory(i8),
+    RefreshScratchpads,
+    StepScratchpad(i8),
+    JumpToNewest,
     Search(SearchRequest),
     SavePosition(EditorPosition),
     Flush,
@@ -43,11 +46,22 @@ pub enum AppAction {
     Tick(Duration),
 }
 pub enum AppEvent {
+    ScratchpadsLoaded {
+        request_id: u64,
+        connection: ConnectionId,
+        result: Result<Vec<crate::store::scratchpads::ScratchpadEntry>, StoreError>,
+    },
+    TransitionChecked {
+        request_id: u64,
+        connection: ConnectionId,
+        result: Result<(), StoreError>,
+    },
     SelectedPageStatus {
         key: PageKey,
         error: Option<crate::domain::error::SyncError>,
     },
     RecoveryFinished {
+        request_id: u64,
         connection: ConnectionId,
         result: Result<RecoveryOutcome, StoreError>,
     },
@@ -87,7 +101,19 @@ pub enum AppEvent {
     },
 }
 pub enum AppEffect {
-    Recovery(RecoveryIntent),
+    LoadScratchpads {
+        request_id: u64,
+        connection: ConnectionId,
+    },
+    CheckTransition {
+        request_id: u64,
+        connection: ConnectionId,
+    },
+    Recovery {
+        request_id: u64,
+        connection: ConnectionId,
+        intent: RecoveryIntent,
+    },
     CreateDraft {
         key: PageKey,
         expected: EditorToken,
@@ -125,6 +151,18 @@ struct PendingLoad {
     history: Option<(NavigationState, i8)>,
 }
 pub struct Coordinator {
+    stack: Option<super::scratchpads::ScratchpadStack>,
+    stack_request: u64,
+    stack_loading: bool,
+    stack_again: bool,
+    stack_intent: Option<i8>,
+    stack_cursor: Option<PageKey>,
+    stack_step: i8,
+    transition_id: u64,
+    barrier_waiting: bool,
+    barrier_ready: bool,
+    recovery_successors: Option<(u64, Vec<PageKey>)>,
+    after_delete: Option<Vec<PageKey>>,
     connection: ConnectionId,
     editor: Option<EditorSession>,
     navigation: NavigationState,
@@ -150,6 +188,18 @@ pub struct Coordinator {
 impl Coordinator {
     pub fn new(connection: ConnectionId, make_draft: impl FnMut() -> PageKey + 'static) -> Self {
         Self {
+            stack: None,
+            stack_request: 0,
+            stack_loading: false,
+            stack_again: false,
+            stack_intent: None,
+            stack_cursor: None,
+            stack_step: 0,
+            transition_id: 0,
+            barrier_waiting: false,
+            barrier_ready: false,
+            recovery_successors: None,
+            after_delete: None,
             connection,
             editor: None,
             navigation: NavigationState::default(),
@@ -192,7 +242,7 @@ impl Coordinator {
         self.notice
     }
     pub fn loading(&self) -> bool {
-        self.pending_load.is_some()
+        self.pending_load.is_some() || self.pending_transition.is_some()
     }
     pub fn selected_uncached(&self) -> Option<&PageKey> {
         self.selected_uncached.as_ref()
@@ -267,6 +317,15 @@ impl Coordinator {
         {
             return false;
         }
+        self.stack = None;
+        self.stack_loading = false;
+        self.stack_again = false;
+        self.stack_intent = None;
+        self.stack_cursor = None;
+        self.barrier_waiting = false;
+        self.barrier_ready = false;
+        self.recovery_successors = None;
+        self.after_delete = None;
         self.connection = connection;
         self.editor = None;
         self.navigation = NavigationState::default();
@@ -294,9 +353,85 @@ impl Coordinator {
     pub fn can_go_forward(&self) -> bool {
         self.navigation.can_go_forward()
     }
+    pub fn scratchpads(&self) -> Option<&super::scratchpads::ScratchpadStack> {
+        self.stack.as_ref()
+    }
+    pub fn can_step_scratchpad(&self, step: i8) -> bool {
+        let Some(stack) = &self.stack else {
+            return false;
+        };
+        let Some(key) = self
+            .stack_cursor
+            .as_ref()
+            .or_else(|| self.editor.as_ref().map(|e| e.key()))
+        else {
+            return false;
+        };
+        if step < 0 {
+            stack.older(key).is_some()
+        } else if step > 0 {
+            stack.newer(key).is_some()
+        } else {
+            false
+        }
+    }
+    fn refresh_scratchpads(&mut self, effects: &mut Vec<AppEffect>) {
+        if self.stack_loading {
+            self.stack_again = true;
+            return;
+        }
+        let Some(id) = self.stack_request.checked_add(1) else {
+            self.notice = Some("Note stack could not be refreshed. Restart after saving.");
+            return;
+        };
+        self.stack_request = id;
+        self.stack_loading = true;
+        effects.push(AppEffect::LoadScratchpads {
+            request_id: id,
+            connection: self.connection.clone(),
+        });
+    }
+    fn step_scratchpad(&mut self, step: i8, effects: &mut Vec<AppEffect>) {
+        let Some(stack) = &self.stack else {
+            self.stack_intent = Some(step);
+            self.refresh_scratchpads(effects);
+            return;
+        };
+        let current = self
+            .stack_cursor
+            .as_ref()
+            .or_else(|| self.editor.as_ref().map(|e| e.key()));
+        let destination = if step == 0 {
+            stack.newest()
+        } else {
+            current.and_then(|key| {
+                if step < 0 {
+                    stack.older(key)
+                } else {
+                    stack.newer(key)
+                }
+            })
+        };
+        if let Some(key) = destination {
+            self.stack_step = step;
+            self.selected_uncached = None;
+            self.selected_page_error = None;
+            self.transition(Transition::Open(key.clone(), None), effects);
+            self.stack_cursor = Some(key);
+        } else if step == 0 && stack.is_empty() {
+            self.transition(Transition::New, effects);
+        }
+    }
     pub fn dispatch(&mut self, action: AppAction) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match action {
+            AppAction::RefreshScratchpads => self.refresh_scratchpads(&mut effects),
+            AppAction::StepScratchpad(step) => {
+                if step != 0 {
+                    self.step_scratchpad(step, &mut effects);
+                }
+            }
+            AppAction::JumpToNewest => self.step_scratchpad(0, &mut effects),
             AppAction::ResolveConflict(request) => self.transition(
                 Transition::Recovery(RecoveryIntent::Resolve(request)),
                 &mut effects,
@@ -322,6 +457,11 @@ impl Coordinator {
                 &mut effects,
             ),
             AppAction::CancelOpen => {
+                self.stack_intent = None;
+                self.stack_cursor = None;
+                self.barrier_waiting = false;
+                self.after_delete = None;
+                self.transition_id = self.transition_id.saturating_add(1);
                 self.pending_load = None;
                 self.pending_transition = None;
                 if self.selected_uncached.take().is_some() {
@@ -333,7 +473,10 @@ impl Coordinator {
                     match editor.edit(text, self.now) {
                         Ok(true) => {
                             self.pending_load = None;
-                            self.pending_transition = None;
+                            if !self.barrier_waiting {
+                                self.pending_transition = None;
+                            }
+                            self.stack_cursor = None;
                             self.notice = None;
                             self.selected_uncached = None;
                         }
@@ -353,6 +496,11 @@ impl Coordinator {
                 }
             }
             AppAction::Navigate(view) => {
+                self.stack_intent = None;
+                self.stack_cursor = None;
+                self.barrier_waiting = false;
+                self.after_delete = None;
+                self.transition_id = self.transition_id.saturating_add(1);
                 self.pending_load = None;
                 self.pending_transition = None;
                 if view != View::AllPages && self.selected_uncached.take().is_some() {
@@ -362,6 +510,8 @@ impl Coordinator {
                 self.flush(&mut effects);
             }
             AppAction::OpenPage(key) => {
+                self.stack_intent = None;
+                self.stack_cursor = None;
                 self.selected_uncached = None;
                 if key.connection == self.connection {
                     if self.pending_load.is_none()
@@ -378,6 +528,8 @@ impl Coordinator {
                 }
             }
             AppAction::NewNote => {
+                self.stack_intent = None;
+                self.stack_cursor = None;
                 self.selected_uncached = None;
                 self.transition(Transition::New, &mut effects);
             }
@@ -443,6 +595,9 @@ impl Coordinator {
             AppAction::Flush => {
                 self.flush_target = self.editor.as_ref().map(|editor| editor.revision());
                 self.flush(&mut effects);
+                if self.pending_transition.is_some() {
+                    self.finish_transition(&mut effects);
+                }
             }
             AppAction::RequestHide => self.transition(Transition::Hide, &mut effects),
             AppAction::RequestQuit => self.transition(Transition::Quit, &mut effects),
@@ -452,19 +607,94 @@ impl Coordinator {
     pub fn receive(&mut self, event: AppEvent) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match event {
+            AppEvent::TransitionChecked {
+                request_id,
+                connection,
+                result,
+            } => {
+                if !self.barrier_waiting
+                    || request_id != self.transition_id
+                    || connection != self.connection
+                    || self.pending_transition.is_none()
+                {
+                    return effects;
+                }
+                self.barrier_waiting = false;
+                if result.is_err() {
+                    self.stack_cursor = None;
+                    self.notice = Some(METADATA_FAILURE);
+                    return effects;
+                }
+                self.barrier_ready = true;
+                self.finish_transition(&mut effects);
+            }
+            AppEvent::ScratchpadsLoaded {
+                request_id,
+                connection,
+                result,
+            } => {
+                if !self.stack_loading
+                    || request_id != self.stack_request
+                    || connection != self.connection
+                {
+                    return effects;
+                }
+                self.stack_loading = false;
+                match result {
+                    Ok(entries)
+                        if entries.iter().all(|e| e.key.connection == self.connection)
+                            && entries
+                                .iter()
+                                .map(|e| &e.key)
+                                .collect::<std::collections::HashSet<_>>()
+                                .len()
+                                == entries.len() =>
+                    {
+                        self.stack = Some(super::scratchpads::ScratchpadStack::new(entries));
+                        if let Some(candidates) = self.after_delete.take() {
+                            let destination = self.stack.as_ref().and_then(|stack| {
+                                candidates
+                                    .into_iter()
+                                    .find(|k| stack.position(k).is_some())
+                                    .or_else(|| stack.newest())
+                            });
+                            if let Some(key) = destination {
+                                self.transition(Transition::Open(key, None), &mut effects);
+                            } else {
+                                self.transition(Transition::New, &mut effects);
+                            }
+                        } else if let Some(step) = self.stack_intent.take() {
+                            self.step_scratchpad(step, &mut effects);
+                        }
+                    }
+                    _ => self.notice = Some("Note stack could not be loaded. Try again."),
+                }
+                if std::mem::take(&mut self.stack_again) {
+                    self.refresh_scratchpads(&mut effects);
+                }
+            }
+
             AppEvent::SelectedPageStatus { key, error } => {
                 if self.selected_uncached.as_ref() == Some(&key) {
                     self.selected_page_error = error.map(|error| (key, error));
                     self.uncached_notice();
                 }
             }
-            AppEvent::RecoveryFinished { connection, result } => {
+            AppEvent::RecoveryFinished {
+                request_id,
+                connection,
+                result,
+            } => {
                 if connection != self.connection {
                     return effects;
                 }
                 match result {
                     Ok(outcome) => {
                         self.active_conflict = None;
+                        self.refresh_scratchpads(&mut effects);
+                        if request_id != self.transition_id {
+                            return effects;
+                        }
                         if let Some(key) = outcome.restored {
                             self.transition(Transition::Open(key, None), &mut effects);
                         } else if outcome.affected.as_ref().is_some_and(|key| {
@@ -475,8 +705,17 @@ impl Coordinator {
                             match outcome.page {
                                 Some(page) => self.editor = Some(EditorSession::restore(page)),
                                 None => {
-                                    self.editor = None;
-                                    self.finish_new_after_recovery(&mut effects);
+                                    if let Some((id, candidates)) = self
+                                        .recovery_successors
+                                        .take()
+                                        .filter(|(id, _)| *id == request_id)
+                                    {
+                                        let _ = id;
+                                        self.after_delete = Some(candidates);
+                                    } else {
+                                        self.editor = None;
+                                        self.finish_new_after_recovery(&mut effects);
+                                    }
                                 }
                             }
                         }
@@ -554,6 +793,7 @@ impl Coordinator {
                 {
                     self.notice = None;
                     if newly_created {
+                        self.refresh_scratchpads(&mut effects);
                         effects.push(AppEffect::RecordVisit(saved.key.clone()));
                     }
                     if self
@@ -633,11 +873,31 @@ impl Coordinator {
                         self.navigation.set_view(View::Note);
                         self.editor = Some(EditorSession::restore(restored));
                         self.notice = None;
+                        self.stack_cursor = None;
                         effects.push(AppEffect::RecordVisit(key));
                     }
                     Ok(None) => {
                         self.selected_uncached = Some(key);
                         self.uncached_notice();
+                    }
+                    Err(StoreError::PageMissing) if self.stack_cursor.as_ref() == Some(&key) => {
+                        let destination = self.stack.as_mut().and_then(|stack| {
+                            let next = if self.stack_step <= 0 {
+                                stack.older(&key)
+                            } else {
+                                stack.newer(&key)
+                            };
+                            stack.remove(&key);
+                            next
+                        });
+                        if let Some(next) = destination {
+                            self.transition(Transition::Open(next.clone(), None), &mut effects);
+                            self.stack_cursor = Some(next);
+                        } else {
+                            self.stack_cursor = None;
+                            self.notice = Some("That scratchpad is no longer available.");
+                        }
+                        self.refresh_scratchpads(&mut effects);
                     }
                     Err(StoreError::PageMissing) if request.history.is_some() => {
                         let (_, step) = request.history.expect("guarded history request");
@@ -725,6 +985,11 @@ impl Coordinator {
         }
     }
     fn transition(&mut self, transition: Transition, effects: &mut Vec<AppEffect>) {
+        self.after_delete = None;
+        self.stack_intent = None;
+        self.transition_id = self.transition_id.saturating_add(1);
+        self.barrier_waiting = false;
+        self.barrier_ready = false;
         self.pending_load = None;
         self.pending_transition = Some(transition);
         self.finish_transition(effects);
@@ -735,14 +1000,44 @@ impl Coordinator {
             .as_ref()
             .is_some_and(|editor| editor.dirty() || editor.writing())
         {
+            self.barrier_ready = false;
             self.flush(effects);
+            return;
+        }
+        if self.pending_transition.as_ref().is_some_and(|t| {
+            matches!(
+                t,
+                Transition::Open(..) | Transition::New | Transition::Recovery(..)
+            )
+        }) && !self.barrier_ready
+        {
+            if !self.barrier_waiting {
+                self.barrier_waiting = true;
+                effects.push(AppEffect::CheckTransition {
+                    request_id: self.transition_id,
+                    connection: self.connection.clone(),
+                });
+            }
             return;
         }
         let Some(transition) = self.pending_transition.take() else {
             return;
         };
         match transition {
-            Transition::Recovery(intent) => effects.push(AppEffect::Recovery(intent)),
+            Transition::Recovery(intent) => {
+                if let RecoveryIntent::Trash(key, _) = &intent
+                    && self.editor.as_ref().is_some_and(|e| e.key() == key)
+                    && let Some(stack) = &self.stack
+                {
+                    self.recovery_successors =
+                        Some((self.transition_id, stack.deletion_successors(key)));
+                }
+                effects.push(AppEffect::Recovery {
+                    request_id: self.transition_id,
+                    connection: self.connection.clone(),
+                    intent,
+                });
+            }
             Transition::Hide => effects.push(AppEffect::HideReady),
             Transition::Quit => effects.push(AppEffect::QuitReady),
             Transition::Open(key, history) => {

@@ -103,6 +103,34 @@ impl State {
     pub(super) fn execute(self: &Rc<Self>, effects: Vec<AppEffect>) {
         for effect in effects {
             match effect {
+                AppEffect::CheckTransition {
+                    request_id,
+                    connection,
+                } => {
+                    let state = self.clone();
+                    let _ = slint::spawn_local(async move {
+                        let result = state.effects.barrier().await;
+                        state.receive(AppEvent::TransitionChecked {
+                            request_id,
+                            connection,
+                            result,
+                        });
+                    });
+                }
+                AppEffect::LoadScratchpads {
+                    request_id,
+                    connection,
+                } => {
+                    let state = self.clone();
+                    let _ = slint::spawn_local(async move {
+                        let result = state.store.scratchpad_stack(&connection).await;
+                        state.receive(AppEvent::ScratchpadsLoaded {
+                            request_id,
+                            connection,
+                            result,
+                        });
+                    });
+                }
                 AppEffect::Search(request) => {
                     self.effects.searches.send_replace(Some(request));
                 }
@@ -132,8 +160,13 @@ impl State {
                         && let Work::Effect(effect) = error.into_inner()
                     {
                         let event = match effect {
-                            AppEffect::Recovery(_) => AppEvent::RecoveryFinished {
-                                connection: self.coordinator.borrow().connection().clone(),
+                            AppEffect::Recovery {
+                                request_id,
+                                connection,
+                                ..
+                            } => AppEvent::RecoveryFinished {
+                                request_id,
+                                connection,
                                 result: Err(StoreError::Closed),
                             },
                             AppEffect::CreateDraft { expected, .. } => AppEvent::LocalSaveFailed(
@@ -189,18 +222,16 @@ impl Workers {
                             Ok(()) => AppEvent::MetadataDurable,
                             Err((key, _)) => AppEvent::MetadataFailed(key),
                         }),
-                        Work::Effect(AppEffect::Recovery(intent)) => {
-                            let Some(state) = weak.upgrade() else {
-                                break;
-                            };
-                            let connection = state.coordinator.borrow().connection().clone();
-                            drop(state);
-                            Some(AppEvent::RecoveryFinished {
-                                connection: connection.clone(),
-                                result: crate::app::recovery::execute(&store, &connection, intent)
-                                    .await,
-                            })
-                        }
+                        Work::Effect(AppEffect::Recovery {
+                            request_id,
+                            connection,
+                            intent,
+                        }) => Some(AppEvent::RecoveryFinished {
+                            request_id,
+                            connection: connection.clone(),
+                            result: crate::app::recovery::execute(&store, &connection, intent)
+                                .await,
+                        }),
                         Work::Effect(AppEffect::CreateDraft { key, expected }) => {
                             Some(match store.create_draft_outcome(key).await {
                                 Ok(outcome) => AppEvent::LocalSaved { expected, outcome },

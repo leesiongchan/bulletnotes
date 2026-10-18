@@ -1,3 +1,6 @@
+use transitions::ReadyTransitions;
+#[path = "support/transitions.rs"]
+mod transitions;
 use bulletnotes::{
     app::{
         coordinator::{AppAction, AppEffect, AppEvent, Coordinator},
@@ -35,7 +38,7 @@ fn stored(body: &str, revision: u64, generation: u64) -> StoredPage {
 }
 fn app() -> Coordinator {
     let mut app = Coordinator::new(key().connection, key);
-    let effects = app.dispatch(AppAction::OpenPage(key()));
+    let effects = app.dispatch_ready(AppAction::OpenPage(key()));
     let request_id = effects
         .into_iter()
         .find_map(|e| {
@@ -46,7 +49,7 @@ fn app() -> Coordinator {
             }
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id,
         key: key(),
         result: Ok(Some(stored("base", 0, 1).into())),
@@ -71,8 +74,8 @@ fn typing_during_rebase_remains_dirty() {
 #[test]
 fn late_save_does_not_acknowledge_newer_text() {
     let mut app = app();
-    app.dispatch(AppAction::EditText("submitted".into()));
-    let effects = app.dispatch(AppAction::Flush);
+    app.dispatch_ready(AppAction::EditText("submitted".into()));
+    let effects = app.dispatch_ready(AppAction::Flush);
     let expected = effects
         .into_iter()
         .find_map(|e| {
@@ -83,8 +86,8 @@ fn late_save_does_not_acknowledge_newer_text() {
             }
         })
         .unwrap();
-    app.dispatch(AppAction::EditText("submitted and newer".into()));
-    app.receive(AppEvent::LocalSaved {
+    app.dispatch_ready(AppAction::EditText("submitted and newer".into()));
+    app.receive_ready(AppEvent::LocalSaved {
         expected,
         outcome: LocalSaveOutcome {
             attempt: SavedRevision {
@@ -281,8 +284,8 @@ async fn editor_overlap_preserves_exact_original_with_honest_local_provenance() 
 #[test]
 fn admitted_save_defers_rebase_and_failed_old_session_cannot_clear_current_attempt() {
     let mut app = app();
-    app.dispatch(AppAction::EditText("submitted".into()));
-    let effects = app.dispatch(AppAction::Flush);
+    app.dispatch_ready(AppAction::EditText("submitted".into()));
+    let effects = app.dispatch_ready(AppAction::Flush);
     let expected = effects
         .into_iter()
         .find_map(|effect| {
@@ -294,7 +297,7 @@ fn admitted_save_defers_rebase_and_failed_old_session_cannot_clear_current_attem
         })
         .unwrap();
     let edits = merge_text("submitted", "submitted", "remote").edits;
-    app.receive(AppEvent::RebaseReady {
+    app.receive_ready(AppEvent::RebaseReady {
         expected: expected.clone(),
         stored: stored("remote", 1, 2),
         edits,
@@ -303,7 +306,7 @@ fn admitted_save_defers_rebase_and_failed_old_session_cannot_clear_current_attem
     assert!(app.editor().unwrap().writing());
     let mut old = expected;
     old.session_id = uuid::Uuid::new_v4();
-    app.receive(AppEvent::LocalSaveFailed(
+    app.receive_ready(AppEvent::LocalSaveFailed(
         old,
         LocalRevision(1),
         bulletnotes::domain::error::StoreError::Closed,

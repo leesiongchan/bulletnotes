@@ -136,19 +136,17 @@ impl State {
     fn receive(self: &Rc<Self>, event: AppEvent) {
         let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
         let recovery = match &event {
-            AppEvent::RecoveryFinished { connection, result }
-                if connection == self.coordinator.borrow().connection() =>
-            {
-                Some((
-                    result.is_ok(),
-                    match result {
-                        Ok(_) => "Recovery action saved locally.".to_owned(),
-                        Err(error) => format!(
-                            "{error}. Review the latest version or choose another destination."
-                        ),
-                    },
-                ))
-            }
+            AppEvent::RecoveryFinished {
+                connection, result, ..
+            } if connection == self.coordinator.borrow().connection() => Some((
+                result.is_ok(),
+                match result {
+                    Ok(_) => "Recovery action saved locally.".to_owned(),
+                    Err(error) => {
+                        format!("{error}. Review the latest version or choose another destination.")
+                    }
+                },
+            )),
             _ => None,
         };
         let uncached = match &event {

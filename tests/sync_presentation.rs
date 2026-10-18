@@ -1,3 +1,6 @@
+use transitions::ReadyTransitions;
+#[path = "support/transitions.rs"]
+mod transitions;
 use bulletnotes::{
     app::{
         coordinator::{AppAction, AppEffect, AppEvent, Coordinator},
@@ -35,7 +38,7 @@ fn snapshot(body: &str) -> PageSnapshot {
 fn app() -> Coordinator {
     let key = key("https://one.example/");
     let mut app = Coordinator::new(key.connection.clone(), move || key.clone());
-    let effects = app.dispatch(AppAction::OpenPage(snapshot("base").key));
+    let effects = app.dispatch_ready(AppAction::OpenPage(snapshot("base").key));
     let id = effects
         .into_iter()
         .find_map(|effect| match effect {
@@ -43,7 +46,7 @@ fn app() -> Coordinator {
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: snapshot("base").key,
         result: Ok(Some(snapshot("base").into())),
@@ -53,10 +56,10 @@ fn app() -> Coordinator {
 #[test]
 fn remote_notifications_do_not_replace_an_unsaved_editor_buffer() {
     let mut app = app();
-    app.dispatch(AppAction::EditText("uncommitted".into()));
-    app.receive(AppEvent::RemoteApplied(snapshot("remote")));
+    app.dispatch_ready(AppAction::EditText("uncommitted".into()));
+    app.receive_ready(AppEvent::RemoteApplied(snapshot("remote")));
     assert_eq!(app.editor().unwrap().body(), "uncommitted");
-    let effects = app.dispatch(AppAction::Flush);
+    let effects = app.dispatch_ready(AppAction::Flush);
     let baseline = effects
         .into_iter()
         .find_map(|effect| match effect {
@@ -70,14 +73,14 @@ fn remote_notifications_do_not_replace_an_unsaved_editor_buffer() {
 #[test]
 fn remote_notifications_update_a_clean_editor_even_when_local_revision_is_unchanged() {
     let mut app = app();
-    app.receive(AppEvent::RemoteApplied(snapshot("remote")));
+    app.receive_ready(AppEvent::RemoteApplied(snapshot("remote")));
     assert_eq!(app.editor().unwrap().body(), "remote");
     assert_eq!(app.editor().unwrap().revision(), LocalRevision(0));
 }
 #[test]
 fn connection_changes_refuse_to_discard_unsaved_edits() {
     let mut app = app();
-    app.dispatch(AppAction::EditText("uncommitted".into()));
+    app.dispatch_ready(AppAction::EditText("uncommitted".into()));
     let next = key("https://two.example/");
     let draft = next.clone();
     assert!(!app.change_connection(next.connection, move || draft.clone()));
@@ -148,12 +151,12 @@ fn native_two_client_offline_reconnect_and_restart_preserve_source() {
 #[test]
 fn an_uncached_open_preserves_its_selected_path_and_the_current_editor() {
     let mut app = app();
-    app.dispatch(AppAction::Navigate(bulletnotes::app::model::View::AllPages));
+    app.dispatch_ready(AppAction::Navigate(bulletnotes::app::model::View::AllPages));
     let selected = PageKey {
         connection: key("https://one.example/").connection,
         path: PagePath::parse("uncached.md").unwrap(),
     };
-    let effects = app.dispatch(AppAction::OpenPage(selected.clone()));
+    let effects = app.dispatch_ready(AppAction::OpenPage(selected.clone()));
     let id = effects
         .into_iter()
         .find_map(|effect| match effect {
@@ -161,7 +164,7 @@ fn an_uncached_open_preserves_its_selected_path_and_the_current_editor() {
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: selected.clone(),
         result: Ok(None),
@@ -169,20 +172,20 @@ fn an_uncached_open_preserves_its_selected_path_and_the_current_editor() {
     assert_eq!(app.selected_uncached(), Some(&selected));
     assert_eq!(app.editor().unwrap().body(), "base");
     assert!(app.notice().unwrap().contains("Connect"));
-    app.dispatch(AppAction::EditText("continue editing".into()));
+    app.dispatch_ready(AppAction::EditText("continue editing".into()));
     assert!(app.selected_uncached().is_none());
 }
 #[test]
 fn catalogue_progress_is_scoped_to_the_active_connection() {
     let mut app = app();
-    app.receive(AppEvent::CatalogueProgress {
+    app.receive_ready(AppEvent::CatalogueProgress {
         connection: key("https://two.example/").connection,
         indexed: 10,
         total: 10,
         complete: true,
     });
     assert_eq!(app.catalogue_progress(), None);
-    app.receive(AppEvent::CatalogueProgress {
+    app.receive_ready(AppEvent::CatalogueProgress {
         connection: key("https://one.example/").connection,
         indexed: 2,
         total: 10,
@@ -195,12 +198,12 @@ fn catalogue_progress_is_scoped_to_the_active_connection() {
 fn background_search_refresh_does_not_cancel_the_selected_uncached_page() {
     use bulletnotes::{app::coordinator::SearchRequest, store::search::SearchQuery};
     let mut app = app();
-    app.dispatch(AppAction::Navigate(bulletnotes::app::model::View::AllPages));
+    app.dispatch_ready(AppAction::Navigate(bulletnotes::app::model::View::AllPages));
     let selected = PageKey {
         connection: key("https://one.example/").connection,
         path: PagePath::parse("uncached.md").unwrap(),
     };
-    let effects = app.dispatch(AppAction::OpenPage(selected.clone()));
+    let effects = app.dispatch_ready(AppAction::OpenPage(selected.clone()));
     let id = effects
         .into_iter()
         .find_map(|effect| match effect {
@@ -208,12 +211,12 @@ fn background_search_refresh_does_not_cancel_the_selected_uncached_page() {
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: selected.clone(),
         result: Ok(None),
     });
-    app.dispatch(AppAction::Search(SearchRequest {
+    app.dispatch_ready(AppAction::Search(SearchRequest {
         id: 1,
         query: SearchQuery {
             connection: selected.connection.clone(),
@@ -232,7 +235,7 @@ fn returning_to_the_note_cancels_an_older_page_load() {
         connection: key("https://one.example/").connection,
         path: PagePath::parse("other.md").unwrap(),
     };
-    let effects = app.dispatch(AppAction::OpenPage(selected.clone()));
+    let effects = app.dispatch_ready(AppAction::OpenPage(selected.clone()));
     let id = effects
         .into_iter()
         .find_map(|effect| match effect {
@@ -240,11 +243,11 @@ fn returning_to_the_note_cancels_an_older_page_load() {
             _ => None,
         })
         .unwrap();
-    app.dispatch(AppAction::Navigate(bulletnotes::app::model::View::Note));
+    app.dispatch_ready(AppAction::Navigate(bulletnotes::app::model::View::Note));
     let mut late = snapshot("late replacement");
     late.key = selected.clone();
     late.remote_base.as_mut().unwrap().key = selected.clone();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: selected,
         result: Ok(Some(late.into())),
@@ -266,11 +269,11 @@ fn background_reindexing_keeps_the_current_page_results_visible() {
         offset: 0,
         limit: 100,
     };
-    app.dispatch(AppAction::Search(SearchRequest {
+    app.dispatch_ready(AppAction::Search(SearchRequest {
         id: 1,
         query: query(),
     }));
-    app.receive(AppEvent::SearchReady(
+    app.receive_ready(AppEvent::SearchReady(
         1,
         Ok(SearchResults {
             items: vec![],
@@ -280,7 +283,7 @@ fn background_reindexing_keeps_the_current_page_results_visible() {
             complete: false,
         }),
     ));
-    app.dispatch(AppAction::Search(SearchRequest {
+    app.dispatch_ready(AppAction::Search(SearchRequest {
         id: 2,
         query: query(),
     }));
@@ -291,8 +294,8 @@ fn background_reindexing_keeps_the_current_page_results_visible() {
 #[test]
 fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
     let mut app = app();
-    app.dispatch(AppAction::EditText("unsaved before trash".into()));
-    let effects = app.dispatch(AppAction::MoveToTrash(
+    app.dispatch_ready(AppAction::EditText("unsaved before trash".into()));
+    let effects = app.dispatch_ready(AppAction::MoveToTrash(
         snapshot("base").key,
         LocalRevision(1),
     ));
@@ -304,9 +307,9 @@ fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
     assert!(
         !effects
             .iter()
-            .any(|effect| matches!(effect, AppEffect::Recovery(_)))
+            .any(|effect| matches!(effect, AppEffect::Recovery { .. }))
     );
-    let effects = app.receive(AppEvent::LocalSaved {
+    let effects = app.receive_ready(AppEvent::LocalSaved {
         expected: app.editor().unwrap().rebase_token(),
         outcome: {
             let attempt = SavedRevision {
@@ -324,7 +327,7 @@ fn destructive_recovery_intents_wait_for_the_latest_local_commit() {
     assert!(
         effects
             .iter()
-            .any(|effect| matches!(effect, AppEffect::Recovery(_)))
+            .any(|effect| matches!(effect, AppEffect::Recovery { .. }))
     );
 }
 
@@ -334,14 +337,14 @@ fn select_uncached(app: &mut Coordinator, path: &str) -> PageKey {
         path: PagePath::parse(path).unwrap(),
     };
     let id = app
-        .dispatch(AppAction::OpenPage(selected.clone()))
+        .dispatch_ready(AppAction::OpenPage(selected.clone()))
         .into_iter()
         .find_map(|effect| match effect {
             AppEffect::LoadPage { request_id, .. } => Some(request_id),
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: selected.clone(),
         result: Ok(None),
@@ -358,7 +361,7 @@ fn uncached_permission_and_resource_failures_explain_the_selected_page() {
     ] {
         let mut app = app();
         let selected = select_uncached(&mut app, "uncached.md");
-        app.receive(AppEvent::SelectedPageStatus {
+        app.receive_ready(AppEvent::SelectedPageStatus {
             key: selected,
             error: Some(error),
         });
@@ -376,27 +379,27 @@ fn uncached_errors_are_key_scoped_and_clear_after_download() {
     let mut app = app();
     let old = select_uncached(&mut app, "old.md");
     let selected = select_uncached(&mut app, "new.md");
-    app.receive(AppEvent::SyncStateChanged {
+    app.receive_ready(AppEvent::SyncStateChanged {
         connection: selected.connection.clone(),
         state: SyncState::Synced,
     });
-    app.receive(AppEvent::SelectedPageStatus {
+    app.receive_ready(AppEvent::SelectedPageStatus {
         key: selected.clone(),
         error: Some(SyncError::Permission),
     });
     assert!(app.notice().unwrap().contains("denied"));
-    app.receive(AppEvent::SelectedPageStatus {
+    app.receive_ready(AppEvent::SelectedPageStatus {
         key: old,
         error: Some(SyncError::ResponseTooLarge),
     });
     assert!(app.notice().unwrap().contains("denied"));
-    app.receive(AppEvent::SelectedPageStatus {
+    app.receive_ready(AppEvent::SelectedPageStatus {
         key: selected.clone(),
         error: None,
     });
     assert!(app.notice().unwrap().contains("Downloading"));
     let id = app
-        .dispatch(AppAction::OpenPage(selected.clone()))
+        .dispatch_ready(AppAction::OpenPage(selected.clone()))
         .into_iter()
         .find_map(|effect| match effect {
             AppEffect::LoadPage { request_id, .. } => Some(request_id),
@@ -406,7 +409,7 @@ fn uncached_errors_are_key_scoped_and_clear_after_download() {
     let mut downloaded = snapshot("downloaded");
     downloaded.key = selected.clone();
     downloaded.remote_base = None;
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: selected,
         result: Ok(Some(downloaded.into())),
@@ -423,33 +426,33 @@ fn successful_history_navigation_cancels_an_uncached_download() {
     let mut second = snapshot("second");
     second.key.path = PagePath::parse("second.md").unwrap();
     let id = app
-        .dispatch(AppAction::OpenPage(second.key.clone()))
+        .dispatch_ready(AppAction::OpenPage(second.key.clone()))
         .into_iter()
         .find_map(|effect| match effect {
             AppEffect::LoadPage { request_id, .. } => Some(request_id),
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: second.key.clone(),
         result: Ok(Some(second.into())),
     });
     let abandoned = select_uncached(&mut app, "uncached.md");
     let id = app
-        .dispatch(AppAction::StepHistory(-1))
+        .dispatch_ready(AppAction::StepHistory(-1))
         .into_iter()
         .find_map(|effect| match effect {
             AppEffect::LoadPage { request_id, .. } => Some(request_id),
             _ => None,
         })
         .unwrap();
-    app.receive(AppEvent::PageLoaded {
+    app.receive_ready(AppEvent::PageLoaded {
         request_id: id,
         key: snapshot("base").key,
         result: Ok(Some(snapshot("base").into())),
     });
-    app.receive(AppEvent::SelectedPageStatus {
+    app.receive_ready(AppEvent::SelectedPageStatus {
         key: abandoned,
         error: Some(SyncError::Permission),
     });
