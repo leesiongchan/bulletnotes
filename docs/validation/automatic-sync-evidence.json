@@ -154,7 +154,7 @@
   "final_review_correction": {
     "date": "2026-10-18",
     "source_base": "44ded26681cc2d7cb9c35217f7a3c24f29626619",
-    "source_binding": "This final correction commit; exact compiled source SHA-256 values below, recorded after all code changes and before commit.",
+    "source_binding": "Commit 6fb0bf7ddcb37cbf748b68db9d7c25ffd50faa81; its original compiled source hashes and 288-test evidence are retained as historical, not rebound to the follow-up.",
     "source_files_sha256": {
       "src/sync/worker.rs": "31e45aaba818af56b14a2246dbfc3139639ed0591f9bb6572498d246016aaf32",
       "tests/automatic_sync.rs": "f3f32b91102b8acb560ab751af8d1d58e0d498c37cfd008cc1eba4d6265fb598",
@@ -269,6 +269,73 @@
       "notices_changed": false
     },
     "tracked_ui_investigation": "Slint static/palette long callback/instantiation chain attribution remains unknown; no equivalent baseline or demonstrated product failure. Accepted floating contract still stands; no suppression or speculative product change.",
-    "remaining_review": "Controller scoped final-correction re-review, then development packaging; no merge or push."
+    "remaining_review": "Controller scoped final-correction re-review, then development packaging; no merge or push.",
+    "source_commit": "6fb0bf7ddcb37cbf748b68db9d7c25ffd50faa81",
+    "historical": true
+  },
+  "denied_readback_followup": {
+    "date": "2026-10-18",
+    "source_base": "6fb0bf7ddcb37cbf748b68db9d7c25ffd50faa81",
+    "source_binding": "The denied-readback follow-up commit containing this object; exact source hashes recorded after the final checks and before commit.",
+    "source_files_sha256": {
+      "src/sync/worker.rs": "acd709afb0803a2cf9619aeb4475f5a45788c153d66b24652b346fc26a53430e",
+      "tests/automatic_sync.rs": "8bfd27462f2a2c7f9669c16040eba991ef349784a48e863155b99afc536849c0",
+      "tests/support/space_fixture.rs": "89361406a548cf247784beeb34b390fcb1241352d1f85e33550a7c035bf796e0",
+      "tests/editor_reconciliation.rs": "ba284100e8bb6975f90a4f8e05aba1bdba5addf64436a6734706e421f32e9255",
+      "examples/support/sync_acceptance.rs": "a6a786017a5add7a9aaa163d573f6f4a55c03bbeef598bbb42338a4bbbab5efc",
+      "build.rs": "5ee2aeee7acd333435a68bc502f5d3bcf31ac25b474655bd4a8eda8a3622498e",
+      "benches/support/merge_distribution.rs": "ef7f001bf08efd5ed058c4ea01534a7ff8f884a3ee6f39c6e2774af1e832f6f3",
+      "tests/build_metadata.rs": "ada9b3394a9b7fcaf87eaa317377b999c1f5b77174b9a5c40a1d102ce24bd5b0"
+    },
+    "finding": "Permission-tolerant unknown admission could immediately reschedule when the actual readback GET returned HTTP403, because that resolution error recorded Permission without a page retry.",
+    "change": "Work::Resolve returning Permission defers its exact page with existing Retry before error publication and admission release. No payload, auth, write-claim, DELETE, schema or UI behavior is changed.",
+    "regression": {
+      "red_gets_per_1300ms": 2436,
+      "green_gets_per_1300ms": [
+        2,
+        2
+      ],
+      "asserted_max_per_1300ms": 4,
+      "access_restoration_variants": [
+        "explicit Refresh",
+        "autonomous retry"
+      ],
+      "actual_sync_handle": true,
+      "unknown_operation_exactly_preserved": true,
+      "put_requests_while_denied": 1,
+      "unrelated_peer_uploaded": true,
+      "restart_required": false,
+      "final_queue_pending": 0
+    },
+    "affected_checks": {
+      "passed": 99,
+      "failed": 0,
+      "ignored": 3,
+      "test_binaries": 6
+    },
+    "final_checks": {
+      "scripts/check.sh": {
+        "exit": 0,
+        "formatting": "passed",
+        "strict_all_feature_clippy": "passed",
+        "passed": 289,
+        "failed": 0,
+        "ignored": 24,
+        "test_binaries": 49
+      },
+      "rust_1_92_all_targets_locked": {
+        "exit": 0,
+        "warnings": 0,
+        "seconds": 6.59
+      },
+      "git_diff_check": {
+        "exit": 0
+      }
+    },
+    "previous_evidence": "The prior 6fb0bf7 288-test/full/MSRV/native evidence remains historical in final_review_correction. No native, live, browser or benchmark rerun was performed for this error-path-only correction.",
+    "dependency_lock_sha256": "8b50c734727a3274d46ea815de646cdb9981817a449b1adec1e178664191d30b",
+    "dependency_graph_and_notices_changed": false,
+    "normal_store_or_keychain_accessed": false,
+    "remaining_review": "Controller scoped recheck of this denied-readback path and patch before development packaging; previous native/distribution limitations and Slint investigation remain."
   }
 }

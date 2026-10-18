@@ -745,7 +745,13 @@ async fn perform(
                 _ => Ok(()),
             }
         }
-        Work::Resolve(operation) => resolve(store, client, shared, &operation).await,
+        Work::Resolve(operation) => {
+            let result = resolve(store, client, shared, &operation).await;
+            if result == Err(SyncError::Permission) {
+                shared.defer(&key);
+            }
+            result
+        }
         Work::Write(operation) => {
             if shared.blocked()
                 || shared.page_blocked(&key)

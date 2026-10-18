@@ -32,6 +32,7 @@ pub struct Data {
     pub delete_received: bool,
     pub lost_put: Option<String>,
     pub denied_put: Option<String>,
+    pub denied_read: Option<String>,
     pub read_only: Option<String>,
     pub delay_put: Option<String>,
     pub puts: Vec<(String, String, bool)>,
@@ -174,6 +175,9 @@ async fn process(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) 
         match parts.method {
             Method::GET | Method::HEAD => {
                 *data.reads.entry(path.into()).or_default() += 1;
+                if data.denied_read.as_deref() == Some(path) {
+                    return reply(403, "", None);
+                }
                 return match existing {
                     Some(file) => {
                         let mut response = reply(

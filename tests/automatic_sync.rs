@@ -144,6 +144,88 @@ async fn denied_canonical_put_recovers_after_fresh_permission_without_restart() 
     }
 }
 #[tokio::test]
+async fn denied_unknown_readback_is_bounded_and_recovers_without_restart() {
+    for refresh in [true, false] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = StoreHandle::open(&dir.path().join("test.sqlite"))
+            .await
+            .unwrap();
+        let f = SpaceFixture::start().await;
+        f.put("one.md", "red fox jumps");
+        store
+            .apply_remote(client(&f).read(&key("one.md")).await.unwrap())
+            .await
+            .unwrap();
+        store
+            .save_local(key("one.md"), "red fox runs".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        f.data.lock().unwrap().denied_put = Some("one.md".into());
+        let sync = start(&store, &f).await;
+        until(|| sync.snapshot().page_errors.get(&key("one.md")) == Some(&SyncError::Permission))
+            .await;
+        let unknown = store
+            .unknown_mutations(config().id())
+            .await
+            .unwrap()
+            .remove(0);
+        f.data.lock().unwrap().denied_read = Some("one.md".into());
+        let before = *f.data.lock().unwrap().reads.get("one.md").unwrap();
+        sync.refresh();
+        store.create_draft(key("peer.md")).await.unwrap();
+        store
+            .save_local(key("peer.md"), "unrelated peer".into(), LocalRevision(1))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        let reads = *f.data.lock().unwrap().reads.get("one.md").unwrap() - before;
+        eprintln!("restore_refresh={refresh}: denied unknown readbacks in 1300ms={reads}");
+        assert!(
+            (1..=4).contains(&reads),
+            "GET403 readback must be bounded: {reads}"
+        );
+        until(|| f.body("peer.md").as_deref() == Some("unrelated peer")).await;
+        assert_eq!(
+            store.unknown_mutations(config().id()).await.unwrap(),
+            vec![unknown]
+        );
+        assert_eq!(
+            f.data
+                .lock()
+                .unwrap()
+                .puts
+                .iter()
+                .filter(|p| p.0 == "one.md")
+                .count(),
+            1
+        );
+        assert!(sync.snapshot().pending > 0);
+        assert_eq!(f.body("one.md").as_deref(), Some("red fox jumps"));
+        {
+            let mut data = f.data.lock().unwrap();
+            data.denied_put = None;
+            data.denied_read = None;
+        }
+        if refresh {
+            sync.refresh();
+        }
+        until(|| {
+            f.body("one.md").as_deref() == Some("red fox runs") && sync.snapshot().pending == 0
+        })
+        .await;
+        assert!(!sync.snapshot().page_errors.contains_key(&key("one.md")));
+        assert!(
+            store
+                .unknown_mutations(config().id())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        sync.shutdown().await.unwrap();
+        store.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
 async fn blocked_handoffs_bound_reads_and_replay_latest_after_settlement() {
     for (fenced, read_only) in [(false, false), (false, true), (true, false)] {
         let dir = tempfile::tempdir().unwrap();

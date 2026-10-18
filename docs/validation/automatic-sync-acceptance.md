@@ -217,3 +217,29 @@ attribution unknown, no equivalent baseline and no demonstrated product failure.
 The accepted floating contract is unchanged. No diagnostic was suppressed or
 speculative UI fix made. Existing physical/native-fidelity and distribution gates
 remain open; the controller owns scoped re-review and subsequent packaging.
+
+## Denied readback follow-up
+
+Scoped review of `6fb0bf7` confirmed those four corrections, then found an uncovered
+HTTP 403 readback path: recording a Permission error allowed the same unknown
+operation to be read again immediately. Resolution now applies the existing
+per-page retry before releasing admission when it returns Permission. The error
+remains visible, the unknown payload stays immutable, and write/authentication and
+unknown-DELETE guards are unchanged.
+
+A real-worker regression reproduced 2,436 denied GETs in 1.3 seconds. The correction
+measured two in each of two restoration variants (limit: four). During denial the
+exact unknown operation remained, only the original PUT had been sent, and an
+unrelated page uploaded. Restored access settled the queue without restarting,
+both with Refresh and autonomously. Existing read-only metadata, recovery and
+guard regressions also passed: 99 tests, zero failures, three explicit ignores
+across six affected targets.
+
+After this narrow code change, one new `scripts/check.sh` passed formatting, strict
+Clippy and **289 tests, zero failures, 24 explicit ignores across 49 binaries**.
+One new Rust 1.92.0 `cargo check --all-targets --locked` passed without warnings in
+6.59 seconds. The `denied_readback_followup` JSON object records current source
+hashes and evidence; `final_review_correction` explicitly retains the preceding
+`6fb0bf7` hashes and 288-test evidence as historical. The lock hash and notices are
+unchanged. No native, live-server or browser run was repeated for this error path.
+The controller owns its scoped recheck before packaging.
