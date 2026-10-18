@@ -39,6 +39,7 @@ export component AppWindow inherits Window {
     out property <float> footer-opacity:footer.opacity;
     out property <length> editor-height:editor.height;
     out property <length> editor-width:editor.width;
+    out property <bool> appearance-controls-first:appearance.controls-first;
     private property <int> pending-chrome-focus:0;
     private property <bool> header-focused:pin.has-focus || browse.has-focus || appearance-button.has-focus || new-button.has-focus;
     private property <bool> footer-focused:trash-button.has-focus || recovery-button.has-focus || newest.has-focus || back.has-focus || next.has-focus;

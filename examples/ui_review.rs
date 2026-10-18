@@ -61,6 +61,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window.set_find_query("café".into());
         window.set_find_status("1 of 1".into());
     }
+    if args.iter().any(|arg| arg == "--appearance-layout-contract") {
+        window.set_active_view("appearance".into());
+    }
     if let Some(view) = argument("--view") {
         window.set_active_view(view.into());
     }
@@ -71,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: "Journal/Saturday.md".into(),
             excerpt: "Start with one thought. Let the rest follow.".into(),
             availability: "Cached".into(),
+            modified_label: "Edited 19 Oct 2026".into(),
         },
         bulletnotes::PageRow {
             key: "sample-2".into(),
@@ -78,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: "Personal/Weekend.md".into(),
             excerpt: "A walk, a book, and a few unhurried hours.".into(),
             availability: "Online only".into(),
+            modified_label: "Edited 18 Oct 2026".into(),
         },
     ])));
     window.set_index_status("Preview · 2 generated pages".into());
@@ -354,12 +359,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
-    if std::env::args().any(|arg| arg == "--contract") {
+    if std::env::args().any(|arg| arg == "--contract" || arg == "--appearance-layout-contract") {
         let weak = window.as_weak();
         let result = passed.clone();
         slint::Timer::single_shot(Duration::from_millis(420), move || {
             if let Some(window) = weak.upgrade() {
                 let check = || -> Result<(), Box<dyn std::error::Error>> {
+                    if std::env::args().any(|arg| arg == "--appearance-layout-contract")
+                        && !window.get_appearance_controls_first()
+                    {
+                        return Err("paper and text controls must precede themes".into());
+                    }
                     let themes = settings.themes()?;
                     for entry in &themes {
                         let mut appearance = settings.appearance.clone();
@@ -431,7 +441,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if capture_failed.get() {
         return Err("owned capture failed".into());
     }
-    if std::env::args().any(|arg| arg == "--contract") && !passed.get() {
+    if std::env::args().any(|arg| arg == "--contract" || arg == "--appearance-layout-contract")
+        && !passed.get()
+    {
         return Err("native UI contract failed".into());
     }
     if args.iter().any(|arg| arg == "--scrollbar-contract") && !passed.get() {
