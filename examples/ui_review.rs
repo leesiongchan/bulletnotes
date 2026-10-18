@@ -251,8 +251,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
-    window.set_current_path("Journal/Saturday.md".into());
+    window.set_current_path("Quick Notes/2026-10-19/Scratchpad.md".into());
+    window.set_note_date("19 Oct 2026".into());
+    window.set_note_counter("1 of 3".into());
+    window.set_can_go_older(true);
+    window.set_is_newest_scratchpad(true);
+    window.set_can_jump_to_newest(false);
     window.set_status_text("Preview · temporary text".into());
+    if args.iter().any(|arg| arg == "--attention") {
+        window.set_status_attention(true);
+        window.set_status_text("Local save failed · Command S to retry".into());
+    }
     let passed = Rc::new(Cell::new(false));
     if args.iter().any(|arg| arg == "--scrollbar-contract") {
         let weak = window.as_weak();
@@ -444,6 +453,8 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
         FindStep(i32),
         Save,
         History(i32),
+        Newest,
+        Pin,
         Hide,
         Quit,
     }
@@ -482,12 +493,14 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
     window.on_show_appearance(record(&actions, Action::Appearance));
     window.on_find_opened(record(&actions, Action::Find));
     window.on_save_now(record(&actions, Action::Save));
+    window.on_jump_to_newest(record(&actions, Action::Newest));
+    window.on_toggle_pin(record(&actions, Action::Pin));
     window.on_request_hide(record(&actions, Action::Hide));
     window.on_request_quit(record(&actions, Action::Quit));
     let observed = actions.clone();
     window.on_find_step(move |step| observed.borrow_mut().push(Action::FindStep(step)));
     let observed = actions.clone();
-    window.on_history_step(move |step| observed.borrow_mut().push(Action::History(step)));
+    window.on_scratchpad_step(move |step| observed.borrow_mut().push(Action::History(step)));
     let passed = Rc::new(Cell::new(false));
     let result = passed.clone();
     let weak = window.as_weak();
@@ -501,6 +514,8 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
             ("g", false, Action::FindStep(1)),
             ("G", true, Action::FindStep(-1)),
             ("s", false, Action::Save),
+            ("1", false, Action::Newest),
+            ("p", false, Action::Pin),
             ("[", false, Action::History(-1)),
             ("]", false, Action::History(1)),
             ("w", false, Action::Hide),

@@ -103,11 +103,26 @@ fn standard_buttons(
     .into_iter()
     .filter_map(|kind| window.standardWindowButton(kind))
 }
+fn align_buttons(window: &NSWindow) {
+    for button in standard_buttons(window) {
+        // SAFETY: the live window and retained standard buttons are accessed on the main thread.
+        if let Some(parent) = unsafe { button.superview() } {
+            let frame = button.frame();
+            button.setFrameOrigin(objc2_foundation::NSPoint::new(
+                frame.origin.x,
+                parent.frame().size.height - 22.0 - frame.size.height / 2.0,
+            ));
+        }
+    }
+}
 fn animate_buttons(window: &NSWindow, visible: bool, immediate: bool, generation: &Rc<Cell<u64>>) {
     let current = generation.get().wrapping_add(1);
     generation.set(current);
     if immediate {
         show_buttons(window, visible);
+        if visible {
+            align_buttons(window);
+        }
         return;
     }
     let buttons: Vec<_> = standard_buttons(window).collect();
@@ -116,6 +131,9 @@ fn animate_buttons(window: &NSWindow, visible: bool, immediate: bool, generation
         if visible {
             button.setHidden(false);
         }
+    }
+    if visible {
+        align_buttons(window);
     }
     let targets = buttons.clone();
     let changes = RcBlock::new(move |context: NonNull<NSAnimationContext>| {
@@ -150,6 +168,9 @@ impl ChromeMonitor {
     ) -> ProbeResult<Self> {
         configure(window.window())?;
         let native = native_window(window.window())?;
+        if W::FLOATING {
+            align_buttons(&native);
+        }
         let generation = Rc::new(Cell::new(0));
         show_buttons(&native, window.visible_edges().0);
         let weak_generation = Rc::downgrade(&generation);
@@ -184,11 +205,11 @@ impl ChromeMonitor {
                             && point.y >= 0.0
                             && point.y <= size.height;
                         let header_depth = if W::FLOATING {
-                            if shown_header { 44.0 } else { 16.0 }
+                            if shown_header { 52.0 } else { 16.0 }
                         } else {
                             36.0
                         };
-                        let footer_depth = if shown_footer { 56.0 } else { 16.0 };
+                        let footer_depth = if shown_footer { 62.0 } else { 16.0 };
                         let header = in_window && point.y >= size.height - header_depth;
                         let footer = W::FLOATING && in_window && point.y <= footer_depth;
                         if event_ref.r#type() == NSEventType::LeftMouseDown {

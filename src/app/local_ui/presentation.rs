@@ -43,8 +43,6 @@ impl State {
         );
         window.set_can_go_older(app.can_step_scratchpad(-1));
         window.set_can_go_newer(app.can_step_scratchpad(1));
-        window.set_can_go_back(app.can_step_scratchpad(-1));
-        window.set_can_go_forward(app.can_step_scratchpad(1));
         let current = app.editor().map(|editor| editor.key());
         let stack = app.scratchpads();
         let position = stack.and_then(|stack| current.and_then(|key| stack.position(key)));
