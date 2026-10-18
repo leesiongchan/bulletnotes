@@ -164,6 +164,19 @@ impl State {
                                 title: page.title.as_str().into(),
                                 path: page.key.path.as_str().into(),
                                 excerpt: page.excerpt.as_deref().unwrap_or("").into(),
+                                modified_label: page
+                                    .modified_ms
+                                    .and_then(|ms| i64::try_from(ms).ok())
+                                    .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
+                                    .map(|time| {
+                                        format!(
+                                            "Edited {}",
+                                            time.to_zoned(jiff::tz::TimeZone::system())
+                                                .strftime("%d %b %Y")
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                                    .into(),
                                 availability: if !page.cached {
                                     "Online only"
                                 } else if page.permission == Permission::ReadOnly {
