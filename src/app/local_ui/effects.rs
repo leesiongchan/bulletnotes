@@ -103,6 +103,16 @@ impl State {
     pub(super) fn execute(self: &Rc<Self>, effects: Vec<AppEffect>) {
         for effect in effects {
             match effect {
+                AppEffect::RecoveryCancelled { connection } => {
+                    let current = connection == *self.coordinator.borrow().connection();
+                    if current && let Some(window) = self.window.upgrade() {
+                        window.invoke_recovery_completed(
+                            false,
+                            "Recovery action cancelled. Your saved versions are still available."
+                                .into(),
+                        );
+                    }
+                }
                 AppEffect::CheckTransition {
                     request_id,
                     connection,

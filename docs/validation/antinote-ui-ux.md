@@ -56,10 +56,13 @@ target/debug/examples/ui_review --scrollbar-contract
 | Check | Observed result |
 | --- | --- |
 | Format and strict all-target/all-feature Clippy | Passed; no compiler warnings |
-| Full automated lib/bin/test/example suite | 323 passed, 0 failed, 24 explicitly ignored across 52 targets |
+| Full automated lib/bin/test/example suite | 326 passed, 0 failed, 24 explicitly ignored across 52 targets |
 | Durable membership/order, legacy dates, DST, clock rollback, upgrade, recovery, restart | Passed store regressions |
 | Late stack/barrier/load results, connection roundtrip, repeated steps, missing/uncached destinations | Passed coordinator regressions |
 | Failed metadata write retains note; explicit retry reaches intended neighbor | Reproduced before fix; coordinator and native regressions pass |
+| Cancelled/failed recovery readiness releases editing and close admission | Reproduced before fix; coordinator and native regressions pass |
+| Position changes during a page load invalidate readiness and reject stale completion | Reproduced before fix; coordinator regression passes |
+| Alternate restoration over a reusable deleted destination retains source order after restart | Reproduced before fix; store regression passes |
 | Offline scratchpad capture, restart, subsequent guarded sync, empty draft stays local | Passed controlled HTTP regression |
 | Generated native stack controls, counters, ordinary-page behavior, known position target | `native_scratchpad_contract_passed: true` |
 | Existing generated native editing/find/save/retry/restart callbacks | `native_local_callbacks_and_restart: true` |
@@ -71,6 +74,24 @@ target/debug/examples/ui_review --scrollbar-contract
 | Scrollbar drag/track and wheel input | `native_scrollbar_contract_passed: true` |
 
 The first full run found lifecycle model fixtures that still assumed synchronous draft admission. Their helpers now explicitly acknowledge the new metadata-readiness event, like the other coordinator fixtures; the full suite then passed.
+
+## Independent review
+
+A fresh read-only review found three Important defects and no Critical defects. The consolidated fix pass explicitly completes cancelled or failed pending recovery requests, invalidates page-load readiness when outgoing position changes, and replaces historical destination ordering only after restoration validates destination reuse. Each finding reproduced before its fix and passed afterward. The native generated scratchpad contract also verifies recovery cancellation clears the busy state, allows editing, and admits close. The complete suite then passed with 326 tests.
+
+The additional signed LaunchServices lifecycle check failed before the first rendered frame (`frames=0`), before note admission. The unchanged base commit `1c90b58` also fails the same fixture at startup on this host in this session. This check is **not passing** and does not establish a full-application Metal/startup regression caused by this change; it remains an unresolved validation gate. Widget-level native UI fixtures pass. Temporary diagnostic instrumentation was removed after the baseline comparison; no renderer or startup policy was changed.
+
+## Implementation decisions
+
+- Used the managed detached worktree under the existing execution approval. Cost if wrong: the work needs explicit integration before it appears on `main`.
+- Retained the approved Slint selection API limitation. Cost if wrong: live directional selection may not restore exactly across page changes or restart.
+- Coalesced stack reads in the coordinator, with one request in flight and one refresh flag. Cost if wrong: refresh latency could grow; generation tests cover stale replies.
+- Adapted existing coordinator fixtures with an explicit-success readiness helper; raw regressions exercise errors and races. Cost if wrong: helper-based tests alone would miss barrier failures.
+- Used 275 catalogue entries because the actual search batch is 200. Cost if wrong: larger batching would require expanding that regression.
+- Split the generated native scratchpad fixture into its own support module. Cost if wrong: fixture maintenance spans two files.
+- Kept physical IME, VoiceOver, trackpad, OS/hardware, performance, distribution and notarization gates open. Cost if wrong: automated checks would overstate release confidence.
+- Kept translucency, inline Markdown coloring, slotted notes, split view, archive, locking, exports and expiry outside the approved scope. Cost if wrong: these Antinote capabilities remain absent.
+- Left the reproduced baseline first-frame startup failure open. Cost if wrong: the signed app may fail to present its editor on this host; no successful current full-app lifecycle claim is made.
 
 ## Limits
 

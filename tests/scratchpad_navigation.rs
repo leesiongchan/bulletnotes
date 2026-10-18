@@ -383,3 +383,108 @@ fn metadata_failure_notice_resets_the_requested_stack_cursor_before_retry() {
         |e| matches!(e,AppEffect::LoadPage {key:target,..} if target==&key("Quick Notes/b.md"))
     ));
 }
+
+#[test]
+fn recovery_readiness_cancellation_and_failure_settle_the_caller() {
+    use bulletnotes::app::model::View;
+    for action in [
+        AppAction::CancelOpen,
+        AppAction::Navigate(View::Appearance),
+        AppAction::NewNote,
+        AppAction::OpenPage(key("Quick Notes/b.md")),
+        AppAction::OpenPage(key("Quick Notes/c.md")),
+    ] {
+        let mut app = app();
+        app.dispatch(AppAction::EmptyTrash(vec![]));
+        let effects = app.dispatch(action);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, AppEffect::RecoveryCancelled { .. }))
+        );
+    }
+    for failure in [0, 1, 2] {
+        let mut app = app();
+        if failure == 2 {
+            app.dispatch(AppAction::EditText("changed".into()));
+        }
+        let effects = app.dispatch(AppAction::EmptyTrash(vec![]));
+        let event = if failure == 0 {
+            let (request_id, connection) = effects
+                .into_iter()
+                .find_map(|e| match e {
+                    AppEffect::CheckTransition {
+                        request_id,
+                        connection,
+                    } => Some((request_id, connection)),
+                    _ => None,
+                })
+                .unwrap();
+            AppEvent::TransitionChecked {
+                request_id,
+                connection,
+                result: Err(StoreError::Closed),
+            }
+        } else if failure == 1 {
+            AppEvent::MetadataFailed(key("Quick Notes/c.md"))
+        } else {
+            let expected = effects
+                .into_iter()
+                .find_map(|e| match e {
+                    AppEffect::SaveLocal { expected, .. } => Some(expected),
+                    _ => None,
+                })
+                .unwrap();
+            AppEvent::LocalSaveFailed(expected, LocalRevision(1), StoreError::Closed)
+        };
+        let effects = app.receive(event);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, AppEffect::RecoveryCancelled { .. }))
+        );
+        assert!(!app.loading());
+    }
+}
+
+#[test]
+fn position_change_during_load_rechecks_readiness_and_rejects_old_completion() {
+    use bulletnotes::domain::editor::EditorPosition;
+    let mut app = app();
+    let effects = app.dispatch(AppAction::StepScratchpad(-1));
+    let effects = checked(&mut app, effects);
+    let (request_id, target) = effects
+        .into_iter()
+        .find_map(|e| match e {
+            AppEffect::LoadPage { request_id, key } => Some((request_id, key)),
+            _ => None,
+        })
+        .unwrap();
+    let effects = app.dispatch(AppAction::SavePosition(EditorPosition {
+        scroll_y: 37.0,
+        ..Default::default()
+    }));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, AppEffect::CheckTransition { .. }))
+    );
+    app.receive(AppEvent::MetadataFailed(key("Quick Notes/c.md")));
+    app.receive(AppEvent::PageLoaded {
+        request_id,
+        key: target.clone(),
+        result: Ok(Some(
+            PageSnapshot {
+                key: target,
+                body: "destination".into(),
+                local_revision: LocalRevision(0),
+                remote_base: None,
+                position: Default::default(),
+                permission: Permission::ReadWrite,
+            }
+            .into(),
+        )),
+    });
+    assert_eq!(app.editor().unwrap().key(), &key("Quick Notes/c.md"));
+    assert!(app.notice().is_some());
+}
