@@ -161,7 +161,7 @@ pub fn run() -> Result<()> {
                 .standardWindowButton(NSWindowButton::CloseButton)
                 .ok_or("native close button missing")?;
             assert!(close.isHidden());
-            // The first line remains clickable inside the transparent native titlebar area.
+            // The first writing line remains clickable while the header controls are hidden.
             window.invoke_restore_editor_position(6, 6, 0.0);
             mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseDown)?;
             mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseUp)?;
