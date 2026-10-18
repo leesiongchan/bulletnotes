@@ -63,7 +63,8 @@ fn type_text(window: &bulletnotes::AppWindow, text: &str) {
     key_event(window, text.into(), false);
 }
 fn undo(window: &bulletnotes::AppWindow, redo: bool) {
-    key_event(window, slint::platform::Key::Meta.into(), true);
+    // Slint maps its Control modifier to Command on macOS; Meta means physical Control.
+    key_event(window, slint::platform::Key::Control.into(), true);
     if redo {
         key_event(window, slint::platform::Key::Shift.into(), true);
     }
@@ -71,7 +72,7 @@ fn undo(window: &bulletnotes::AppWindow, redo: bool) {
     if redo {
         key_event(window, slint::platform::Key::Shift.into(), false);
     }
-    key_event(window, slint::platform::Key::Meta.into(), false);
+    key_event(window, slint::platform::Key::Control.into(), false);
 }
 fn capture(window: &bulletnotes::AppWindow, name: &str) -> Result<()> {
     let native = native_window(window.window())?;
@@ -194,30 +195,37 @@ fn main() -> Result<()> {
             window.set_recovery_merge(DRAFT.into());
             window.invoke_recovery_merge_edited();
             let injector = rusqlite::Connection::open(path)?;
-            injector.execute_batch("BEGIN IMMEDIATE")?;
+            injector.execute_batch("CREATE TRIGGER fail_native_draft_drain BEFORE INSERT ON merge_drafts BEGIN SELECT RAISE(ABORT,'generated native draft drain failure'); END;")?;
             let background = saved.clone();
-            let job = tokio::spawn(async move {
-                background
-                    .apply_remote(remote("later server source", "c"))
-                    .await
-            });
-            eprintln!("fixture phase: draft admitted and worker started");
-            until(|| window.get_recovery_draft_closed()).await?;
-            window.invoke_focus_recovery_merge();
-            type_text(&window, "Z");
+            let failed = tokio::spawn(async move {
+                background.apply_remote(remote("later server source", "c")).await
+            }).await?;
+            assert!(matches!(failed,Err(bulletnotes::domain::error::StoreError::Database(rusqlite::Error::SqliteFailure(_,Some(message)))) if message=="generated native draft drain failure"),"worker must report the exact injected draft drain failure");
+            until(|| !window.get_recovery_draft_closed()).await?;
             assert_eq!(window.get_recovery_merge(), DRAFT);
+            assert_eq!(saved.conflicts(&key().connection).await?.len(), 1);
+            assert!(saved.load_stored_merge_draft(&key()).await?.is_none());
             assert!(!window.get_recovery_busy());
             assert!(!window.get_note_read_only());
-            injector.execute_batch("ROLLBACK")?;
-            job.await??;
+            eprintln!("fixture phase: injected draft drain failure retained text and reopened admission");
+            injector.execute_batch("DROP TRIGGER fail_native_draft_drain")?;
+            let latest_draft = format!("{DRAFT}\r\nnewer admitted generation");
+            window.set_recovery_merge(latest_draft.as_str().into());
+            window.invoke_recovery_merge_edited();
+            assert!(saved.load_stored_merge_draft(&key()).await?.is_none());
+            let background = saved.clone();
+            tokio::spawn(async move {
+                background.apply_remote(remote("later server source", "c")).await
+            }).await??;
+            eprintln!("fixture phase: worker commit completed after latest draft drain");
             until(|| window.get_recovery_stale()).await?;
             assert_eq!(window.get_active_view(), "recovery");
-            assert_eq!(window.get_recovery_merge(), DRAFT);
+            assert_eq!(window.get_recovery_merge(), latest_draft);
             let heads = saved.recovery_uploads(&key().connection, 20).await?;
             let mut found = false;
             for head in heads {
                 let event = saved.automatic_recovery_event(head.event_id).await?;
-                found |= event.input.draft.as_deref() == Some(DRAFT);
+                found |= event.input.draft.as_deref() == Some(latest_draft.as_str());
             }
             assert!(found);
             assert!(
@@ -225,7 +233,7 @@ fn main() -> Result<()> {
                     .recovery_copies(&key().connection)
                     .await?
                     .iter()
-                    .any(|copy| copy.page.body == DRAFT)
+                    .any(|copy| copy.page.body == latest_draft)
             );
             println!("native_worker_origin_closes_and_drains_admitted_draft: true");
             println!("native_selection_endpoint_IME_VoiceOver_fidelity: unverified");
