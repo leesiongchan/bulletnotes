@@ -8,6 +8,10 @@ pub mod probe;
 
 pub mod reconcile;
 
+pub mod text_merge;
+
+pub mod merge_executor;
+
 pub mod worker;
 
 mod schedule;

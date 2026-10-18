@@ -57,6 +57,17 @@ pub enum Outcome {
     ResourceLimit,
     Cancelled,
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeFallbackReason {
+    InputLimit,
+    TokenLimit,
+    OutputLimit,
+    InvalidEncoding,
+    WorkerBusy,
+    WorkerTimeout,
+    WorkerFailure,
+}
 impl Outcome {
     pub fn from_store_error(_: &StoreError) -> Self {
         Self::Storage
@@ -80,6 +91,10 @@ impl Outcome {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DiagnosticEvent {
+    MergeFallback {
+        id: uuid::Uuid,
+        reason: MergeFallbackReason,
+    },
     Finished {
         id: uuid::Uuid,
         operation: Operation,
