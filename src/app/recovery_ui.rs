@@ -210,7 +210,7 @@ impl State {
                 match result {
                     Ok(rows)=>{
                         let visible:Vec<_>=rows.iter().filter(|row|row.kind==kind(&window)).collect();
-                        let model=visible.iter().map(|row|PageRow{key:row.id.to_string().into(),title:format!("{} · {}",row.label,row.key.path.as_str()).into(),path:row.key.path.as_str().into(),excerpt:Default::default(),availability:Default::default()}).collect::<Vec<_>>();
+                        let model=visible.iter().map(|row|PageRow{key:row.id.to_string().into(),title:format!("{} · {}",row.label,row.key.path.as_str()).into(),path:row.key.path.as_str().into(),excerpt:Default::default(),availability:Default::default(),modified_label:Default::default()}).collect::<Vec<_>>();
                         window.set_recovery_items(ModelRc::new(VecModel::from(model)));
                         if let Some(selected)=state.selected.borrow().as_ref(){
                             if item_key(selected).connection!=connection{window.set_recovery_selected(false);}

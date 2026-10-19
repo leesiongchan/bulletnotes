@@ -124,6 +124,7 @@ pub(super) fn catalogue(
             .transpose()
             .map_err(|_| StoreError::InvalidData)?;
         tx.execute("INSERT INTO pages(connection,path,title,permission,modified_ms,catalogued) VALUES(?1,?2,?3,0,?4,1) ON CONFLICT(connection,path) DO UPDATE SET catalogued=1,remote_deleted=0",params![connection.as_str(),entry.key.path.as_str(),entry.key.title_from(""),modified])?;
+        super::scratchpads::admit(&tx, &entry.key, entry.modified_ms, false)?;
     }
     tx.execute(
         "INSERT INTO catalogue_state(connection) VALUES(?1) ON CONFLICT DO NOTHING",
@@ -162,6 +163,7 @@ fn install(db: &Connection, file: &RemoteFile) -> Result<(), StoreError> {
     position.anchor = clamp(position.anchor);
     position.caret = clamp(position.caret);
     db.execute("INSERT INTO pages(connection,path,title,body,local_revision) VALUES(?1,?2,?3,?4,'0') ON CONFLICT(connection,path) DO UPDATE SET title=excluded.title,body=excluded.body,anchor=?5,caret=?6,scroll_y=?7,remote_deleted=0",params![file.key.connection.as_str(),file.key.path.as_str(),file.key.title_from(&file.body),file.body,i64::try_from(position.anchor).map_err(|_|StoreError::InvalidData)?,i64::try_from(position.caret).map_err(|_|StoreError::InvalidData)?,position.scroll_y])?;
+    super::scratchpads::admit(db, &file.key, file.modified_ms, false)?;
     set_base(db, &file.key, Some(file))?;
     // The scheduler serializes remote observations and mutations for each page.
     // Leased/unknown payloads remain immutable until their outcomes are resolved.

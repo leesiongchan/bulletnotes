@@ -41,8 +41,39 @@ impl State {
             }
             .into(),
         );
-        window.set_can_go_back(app.can_go_back());
-        window.set_can_go_forward(app.can_go_forward());
+        window.set_can_go_older(app.can_step_scratchpad(-1));
+        window.set_can_go_newer(app.can_step_scratchpad(1));
+        let current = app.editor().map(|editor| editor.key());
+        let stack = app.scratchpads();
+        let position = stack.and_then(|stack| current.and_then(|key| stack.position(key)));
+        window.set_note_counter(
+            position
+                .zip(stack)
+                .map(|(position, stack)| format!("{position} of {}", stack.len()))
+                .unwrap_or_default()
+                .into(),
+        );
+        window.set_is_newest_scratchpad(position == Some(1));
+        window.set_can_jump_to_newest(
+            stack.is_none_or(|stack| stack.is_empty() || stack.newest().as_ref() != current),
+        );
+        let created = stack
+            .and_then(|stack| {
+                current.and_then(|key| stack.entries().iter().find(|entry| &entry.key == key))
+            })
+            .map(|entry| entry.created_ms);
+        window.set_note_date(
+            created
+                .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
+                .map(|time| {
+                    time.to_zoned(jiff::tz::TimeZone::system())
+                        .strftime("%d %b %Y")
+                        .to_string()
+                })
+                .unwrap_or_default()
+                .into(),
+        );
+        window.set_status_attention(app.notice().is_some());
         if let Some(editor) = app.editor() {
             let changed = self.presentation.key.borrow().as_ref() != Some(editor.key());
             let source_changed = window.get_note_text().as_str() != editor.body();
@@ -103,6 +134,19 @@ impl State {
                 )
             });
             window.set_status_text(status.into());
+            window.set_status_attention(
+                app.notice().is_some()
+                    || matches!(
+                        editor.save_state(),
+                        crate::domain::status::LocalSaveState::Failed(_)
+                    )
+                    || matches!(
+                        self.sync_state(editor),
+                        crate::domain::status::SyncState::Authentication
+                            | crate::domain::status::SyncState::Failed
+                            | crate::domain::status::SyncState::Conflict
+                    ),
+            );
         } else {
             window.set_note_read_only(true);
             window.set_status_text("Open or create a local note".into());
@@ -120,6 +164,19 @@ impl State {
                                 title: page.title.as_str().into(),
                                 path: page.key.path.as_str().into(),
                                 excerpt: page.excerpt.as_deref().unwrap_or("").into(),
+                                modified_label: page
+                                    .modified_ms
+                                    .and_then(|ms| i64::try_from(ms).ok())
+                                    .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
+                                    .map(|time| {
+                                        format!(
+                                            "Edited {}",
+                                            time.to_zoned(jiff::tz::TimeZone::system())
+                                                .strftime("%d %b %Y")
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                                    .into(),
                                 availability: if !page.cached {
                                     "Online only"
                                 } else if page.permission == Permission::ReadOnly {

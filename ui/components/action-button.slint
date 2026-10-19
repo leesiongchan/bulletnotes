@@ -4,23 +4,24 @@ export component ActionButton inherits FocusScope {
     in property <image> icon;
     in property <string> label;
     in property <bool> selected:false;
+    in property <bool> circular:false;
     out property <bool> pressed:touch.pressed;
     callback clicked();
-    width: 28px;
-    height: 28px;
+    width: root.circular ? 32px : 28px;
+    height: root.circular ? 32px : 28px;
     accessible-role: button;
     accessible-label: root.label;
     accessible-enabled: root.enabled;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
     key-pressed(event) => {
-        if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; }
+        if (root.enabled && (event.text == Key.Return || event.text == " ")) { root.clicked(); return accept; }
         return reject;
     }
     Rectangle {
-        border-radius: 5px;
-        background: root.selected || touch.has-hover ? root.theme.selection : transparent;
-        border-width: root.has-focus ? 1px : 0px;
-        border-color: root.theme.accent;
+        border-radius: root.circular ? self.height / 2 : 5px;
+        background: root.selected || touch.has-hover ? root.theme.selection : (root.circular ? root.theme.paper : transparent);
+        border-width: root.has-focus || root.circular ? 1px : 0px;
+        border-color: root.has-focus ? root.theme.accent : root.theme.line.with-alpha(0.35);
         Image {
             source: root.icon;
             colorize: root.enabled ? root.theme.ink : root.theme.muted;

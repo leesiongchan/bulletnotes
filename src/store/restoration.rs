@@ -314,6 +314,8 @@ pub(super) fn restore_page(
         return Err(StoreError::InvalidData);
     }
     db.execute("INSERT INTO pages(connection,path,title,body,local_revision,explicit_create,modified_ms) VALUES(?1,?2,?3,?4,'1',1,?5)",params![key.connection.as_str(),key.path.as_str(),key.title_from(&page.body),page.body,pages::now_ms()?])?;
+    super::scratchpads::carry_order(db, &page.key, &key)?;
+    super::scratchpads::admit(db, &key, None, false)?;
     let restored = pages::load(db, &key)?.ok_or(StoreError::PageMissing)?;
     outbox::queue_put(db, pages::id(db, &key)?, &restored)?;
     Ok(key)

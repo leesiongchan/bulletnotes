@@ -68,7 +68,7 @@ fn capture(window: &AppWindow, name: &str) -> Result<()> {
         renderer::uses_metal(window.window())
     );
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".superpowers/sdd/2026-10-18-automatic-sync")
+        .join(".superpowers/sdd/2026-10-19-antinote-ui-ux")
         .join(format!("floating-{name}.png"));
     if !std::process::Command::new("/usr/sbin/screencapture")
         .args(["-x", "-o", &format!("-l{}", native.windowNumber())])
@@ -117,10 +117,10 @@ pub fn run() -> Result<()> {
     window.on_toggle_pin(move || count.set(count.get() + 1));
     let browses = Rc::new(Cell::new(0));
     let count = browses.clone();
-    window.on_browse_pages(move || count.set(count.get() + 1));
+    window.on_trash_current_note(move || count.set(count.get() + 1));
     let histories = Rc::new(Cell::new(0));
     let count = histories.clone();
-    window.on_history_step(move |_| count.set(count.get() + 1));
+    window.on_scratchpad_step(move |_| count.set(count.get() + 1));
     let weak = window.as_weak();
     let passed = Rc::new(Cell::new(false));
     let result = passed.clone();
@@ -161,10 +161,10 @@ pub fn run() -> Result<()> {
                 .standardWindowButton(NSWindowButton::CloseButton)
                 .ok_or("native close button missing")?;
             assert!(close.isHidden());
-            // The first line remains clickable inside the transparent native titlebar area.
+            // The first writing line remains clickable while the header controls are hidden.
             window.invoke_restore_editor_position(6, 6, 0.0);
-            mouse(&window, 42.0, size.height - 27.0, NSEventType::LeftMouseDown)?;
-            mouse(&window, 42.0, size.height - 27.0, NSEventType::LeftMouseUp)?;
+            mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseDown)?;
+            mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseUp)?;
             pause(40).await?;
             edges(&window, (false, false))?;
             key(&window, "X".into());
@@ -186,12 +186,15 @@ pub fn run() -> Result<()> {
             capture(&window, "midpoint")?;
             pause(180).await?;
             assert!(!close.isHidden() && close.isEnabled(), "native header buttons hidden={},enabled={},revealed={},hovered={},opacity={},key={},unexpected_mouse={}", close.isHidden(), close.isEnabled(), window.get_header_revealed(), window.get_header_hovered(), window.get_header_opacity(), native.isKeyWindow(), unexpected_mouse.get());
+            let button_bounds=close.convertRect_toView(close.bounds(),None);
+            let button_center_from_top=size.height - button_bounds.origin.y - button_bounds.size.height / 2.0;
+            assert!((button_center_from_top - 22.0).abs() < 1.0,"native button center from top: {button_center_from_top}");
             capture(&window, "header")?;
             // The small gap below the header belongs to the same retention region.
             mouse(
                 &window,
                 size.width / 2.0,
-                size.height - 40.0,
+                size.height - 48.0,
                 NSEventType::MouseMoved,
             )?;
             pause(140).await?;
@@ -205,7 +208,7 @@ pub fn run() -> Result<()> {
             edges(&window, (false, false))?;
             assert!(window.get_header_opacity() > 0.0);
             println!("fade_retention_reentry_opacity: {}", window.get_header_opacity());
-            mouse(&window, size.width / 2.0, size.height - 40.0, NSEventType::MouseMoved)?;
+            mouse(&window, size.width / 2.0, size.height - 48.0, NSEventType::MouseMoved)?;
             pause(30).await?;
             edges(&window, (true, false))?;
             mouse(
@@ -244,7 +247,7 @@ pub fn run() -> Result<()> {
             key(&window, " ".into());
             assert_eq!(browses.get(), 1);
             // Disabled history actions cannot be triggered through pointer dispatch.
-            for x in [size.width - 32.0, size.width - 62.0] {
+            for x in [size.width - 108.0, size.width - 146.0] {
                 mouse(&window, x, 28.0, NSEventType::LeftMouseDown)?;
                 mouse(&window, x, 28.0, NSEventType::LeftMouseUp)?;
             }

@@ -30,11 +30,21 @@ fn typed_diagnostics_exclude_sentinel_payloads_and_preserve_sources_on_export_fa
         pending: 2,
         conflicts: 1,
     });
+    for operation in [Operation::ScratchpadLoad, Operation::ScratchpadNavigation] {
+        diagnostics::record(DiagnosticEvent::Finished {
+            id: uuid::Uuid::new_v4(),
+            operation,
+            outcome: Outcome::Success,
+            elapsed_micros: 1,
+        });
+    }
     drop(guard);
     let destination = dir.path().join("review.jsonl");
     diagnostics::export(&destination).unwrap();
     let exported = std::fs::read_to_string(&destination).unwrap();
     assert!(exported.contains("local_save"));
+    assert!(exported.contains("scratchpad_load"));
+    assert!(exported.contains("scratchpad_navigation"));
     assert!(exported.contains("storage"));
     for sentinel in ["TOKEN_SENTINEL", "NOTE_BODY_SENTINEL", "PATH_SENTINEL"] {
         assert!(!exported.contains(sentinel));

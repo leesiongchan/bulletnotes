@@ -61,6 +61,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window.set_find_query("café".into());
         window.set_find_status("1 of 1".into());
     }
+    if args.iter().any(|arg| arg == "--appearance-layout-contract") {
+        window.set_active_view("appearance".into());
+    }
     if let Some(view) = argument("--view") {
         window.set_active_view(view.into());
     }
@@ -71,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: "Journal/Saturday.md".into(),
             excerpt: "Start with one thought. Let the rest follow.".into(),
             availability: "Cached".into(),
+            modified_label: "Edited 19 Oct 2026".into(),
         },
         bulletnotes::PageRow {
             key: "sample-2".into(),
@@ -78,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: "Personal/Weekend.md".into(),
             excerpt: "A walk, a book, and a few unhurried hours.".into(),
             availability: "Online only".into(),
+            modified_label: "Edited 18 Oct 2026".into(),
         },
     ])));
     window.set_index_status("Preview · 2 generated pages".into());
@@ -251,8 +256,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
-    window.set_current_path("Journal/Saturday.md".into());
+    window.set_current_path("Quick Notes/2026-10-19/Scratchpad.md".into());
+    window.set_note_date("19 Oct 2026".into());
+    window.set_note_counter("1 of 3".into());
+    window.set_can_go_older(true);
+    window.set_is_newest_scratchpad(true);
+    window.set_can_jump_to_newest(false);
     window.set_status_text("Preview · temporary text".into());
+    if args.iter().any(|arg| arg == "--attention") {
+        window.set_status_attention(true);
+        window.set_status_text("Local save failed · Command S to retry".into());
+    }
     let passed = Rc::new(Cell::new(false));
     if args.iter().any(|arg| arg == "--scrollbar-contract") {
         let weak = window.as_weak();
@@ -345,12 +359,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
-    if std::env::args().any(|arg| arg == "--contract") {
+    if std::env::args().any(|arg| arg == "--contract" || arg == "--appearance-layout-contract") {
         let weak = window.as_weak();
         let result = passed.clone();
         slint::Timer::single_shot(Duration::from_millis(420), move || {
             if let Some(window) = weak.upgrade() {
                 let check = || -> Result<(), Box<dyn std::error::Error>> {
+                    if std::env::args().any(|arg| arg == "--appearance-layout-contract")
+                        && !window.get_appearance_controls_first()
+                    {
+                        return Err("paper and text controls must precede themes".into());
+                    }
                     let themes = settings.themes()?;
                     for entry in &themes {
                         let mut appearance = settings.appearance.clone();
@@ -422,7 +441,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if capture_failed.get() {
         return Err("owned capture failed".into());
     }
-    if std::env::args().any(|arg| arg == "--contract") && !passed.get() {
+    if std::env::args().any(|arg| arg == "--contract" || arg == "--appearance-layout-contract")
+        && !passed.get()
+    {
         return Err("native UI contract failed".into());
     }
     if args.iter().any(|arg| arg == "--scrollbar-contract") && !passed.get() {
@@ -444,6 +465,8 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
         FindStep(i32),
         Save,
         History(i32),
+        Newest,
+        Pin,
         Hide,
         Quit,
     }
@@ -482,12 +505,14 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
     window.on_show_appearance(record(&actions, Action::Appearance));
     window.on_find_opened(record(&actions, Action::Find));
     window.on_save_now(record(&actions, Action::Save));
+    window.on_jump_to_newest(record(&actions, Action::Newest));
+    window.on_toggle_pin(record(&actions, Action::Pin));
     window.on_request_hide(record(&actions, Action::Hide));
     window.on_request_quit(record(&actions, Action::Quit));
     let observed = actions.clone();
     window.on_find_step(move |step| observed.borrow_mut().push(Action::FindStep(step)));
     let observed = actions.clone();
-    window.on_history_step(move |step| observed.borrow_mut().push(Action::History(step)));
+    window.on_scratchpad_step(move |step| observed.borrow_mut().push(Action::History(step)));
     let passed = Rc::new(Cell::new(false));
     let result = passed.clone();
     let weak = window.as_weak();
@@ -501,6 +526,8 @@ fn shortcut_contract() -> Result<(), Box<dyn std::error::Error>> {
             ("g", false, Action::FindStep(1)),
             ("G", true, Action::FindStep(-1)),
             ("s", false, Action::Save),
+            ("1", false, Action::Newest),
+            ("p", false, Action::Pin),
             ("[", false, Action::History(-1)),
             ("]", false, Action::History(1)),
             ("w", false, Action::Hide),
