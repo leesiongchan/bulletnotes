@@ -1,4 +1,6 @@
 //! Generated-content local milestone check; no HTTP client or real server access.
+#[path = "support/scratchpad_contract.rs"]
+mod scratchpad_contract;
 use bulletnotes::{
     AppWindow,
     app::{appearance_ui, coordinator::AppAction, local_ui},
@@ -9,6 +11,9 @@ use bulletnotes::{
 use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc, time::Duration};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--scratchpad-contract") {
+        return scratchpad_contract::run();
+    }
     let runtime = tokio::runtime::Runtime::new()?;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("review.sqlite");

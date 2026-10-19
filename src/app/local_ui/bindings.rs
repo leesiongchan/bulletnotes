@@ -57,12 +57,6 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     }
     {
         let state = state.clone();
-        window.on_history_step(move |step| {
-            state.dispatch(AppAction::StepHistory(step.signum() as i8))
-        });
-    }
-    {
-        let state = state.clone();
         window.on_query_changed(move |_| {
             state.dispatch(AppAction::CancelOpen);
             state.issue_search();
@@ -82,6 +76,16 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
                 state.dispatch(AppAction::OpenPage(key));
             }
         });
+    }
+    {
+        let state = state.clone();
+        window.on_scratchpad_step(move |step| {
+            state.dispatch(AppAction::StepScratchpad(step.signum() as i8))
+        });
+    }
+    {
+        let state = state.clone();
+        window.on_jump_to_newest(move || state.dispatch(AppAction::JumpToNewest));
     }
     {
         let weak = window.as_weak();

@@ -32,6 +32,8 @@ pub enum Operation {
     EditorReplay,
     Storage,
     CachedSearch,
+    ScratchpadLoad,
+    ScratchpadNavigation,
     CachedOpen,
     EditorPresentation,
     EditorSourceUpdate,

@@ -4,6 +4,7 @@ mod effects;
 mod lifecycle;
 mod metadata;
 mod presentation;
+mod scratchpads;
 mod search;
 mod synchronization;
 
@@ -39,6 +40,8 @@ pub enum LocalUiError {
     LoadFailed,
     #[error("search could not be completed")]
     SearchFailed,
+    #[error("note stack could not be loaded")]
+    StackFailed,
 }
 struct State {
     coordinator: RefCell<Coordinator>,
@@ -52,6 +55,7 @@ struct State {
     store: StoreHandle,
     lifecycle: Lifecycle,
     sync: Synchronization,
+    scratchpads: scratchpads::StackRefresh,
 }
 #[derive(Clone)]
 pub struct LocalUi(Rc<State>);
@@ -107,7 +111,10 @@ impl State {
             }
         } else if self.lifecycle.quitting()
             || (self.lifecycle.blocks_authoring()
-                && !matches!(&action, AppAction::Tick(_) | AppAction::Flush))
+                && !matches!(
+                    &action,
+                    AppAction::Tick(_) | AppAction::Flush | AppAction::RefreshScratchpads
+                ))
         {
             return;
         }
@@ -136,19 +143,17 @@ impl State {
     fn receive(self: &Rc<Self>, event: AppEvent) {
         let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
         let recovery = match &event {
-            AppEvent::RecoveryFinished { connection, result }
-                if connection == self.coordinator.borrow().connection() =>
-            {
-                Some((
-                    result.is_ok(),
-                    match result {
-                        Ok(_) => "Recovery action saved locally.".to_owned(),
-                        Err(error) => format!(
-                            "{error}. Review the latest version or choose another destination."
-                        ),
-                    },
-                ))
-            }
+            AppEvent::RecoveryFinished {
+                connection, result, ..
+            } if connection == self.coordinator.borrow().connection() => Some((
+                result.is_ok(),
+                match result {
+                    Ok(_) => "Recovery action saved locally.".to_owned(),
+                    Err(error) => {
+                        format!("{error}. Review the latest version or choose another destination.")
+                    }
+                },
+            )),
             _ => None,
         };
         let uncached = match &event {
@@ -228,9 +233,11 @@ pub fn bind(
         store: store.clone(),
         lifecycle: Lifecycle::default(),
         sync: Synchronization::default(),
+        scratchpads: Default::default(),
     });
     workers.start(&state, store)?;
     bindings::bind(window, &state);
+    state.dispatch(AppAction::RefreshScratchpads);
     state.render();
     Ok(LocalUi(state))
 }

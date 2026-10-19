@@ -1901,3 +1901,36 @@ fn sync_process_boundary_child() {
         drop(blocker);
     });
 }
+
+#[tokio::test]
+async fn offline_scratchpad_creation_restarts_then_syncs_in_same_stack_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("stack.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    let first = key("Quick Notes/first.md");
+    let empty = key("Quick Notes/empty.md");
+    store.create_draft(first.clone()).await.unwrap();
+    store
+        .save_local(first.clone(), "café\r\n日本語 💾".into(), LocalRevision(1))
+        .await
+        .unwrap();
+    store.create_draft(empty.clone()).await.unwrap();
+    let before = store.scratchpad_stack(config().id()).await.unwrap();
+    store.shutdown().await.unwrap();
+    let reopened = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(
+        reopened.scratchpad_stack(config().id()).await.unwrap(),
+        before
+    );
+    let fixture = SpaceFixture::start().await;
+    let sync = start(&reopened, &fixture).await;
+    until(|| fixture.body(first.path.as_str()).as_deref() == Some("café\r\n日本語 💾")).await;
+    until(|| sync.snapshot().pending == 0).await;
+    assert!(fixture.body(empty.path.as_str()).is_none());
+    assert_eq!(
+        reopened.scratchpad_stack(config().id()).await.unwrap(),
+        before
+    );
+    sync.shutdown().await.unwrap();
+    reopened.shutdown().await.unwrap();
+}

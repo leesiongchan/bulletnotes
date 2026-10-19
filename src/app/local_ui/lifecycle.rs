@@ -83,6 +83,7 @@ impl LocalUi {
             return Err(LocalUiError::SaveFailed);
         }
         self.0.presentation.reset();
+        self.0.dispatch(AppAction::RefreshScratchpads);
         self.0.sync.facts.borrow_mut().take();
         Ok(Some(match last {
             Some(key) => AppAction::OpenPage(key),
@@ -111,7 +112,7 @@ impl LocalUi {
             {
                 let app = self.0.coordinator.borrow();
                 match app.editor().map(|editor| editor.save_state()) {
-                    None | Some(LocalSaveState::Clean(_)) => return Ok(()),
+                    None | Some(LocalSaveState::Clean(_)) if !app.loading() => return Ok(()),
                     Some(LocalSaveState::Failed(_)) => return Err(LocalUiError::SaveFailed),
                     _ => {}
                 }
@@ -139,12 +140,11 @@ impl LocalUi {
                     .barrier()
                     .await
                     .map_err(|_| LocalUiError::MetadataFailed)?;
-                if self
-                    .0
-                    .coordinator
-                    .borrow()
-                    .editor()
-                    .is_none_or(|editor| !editor.dirty() && !editor.writing())
+                let app = self.0.coordinator.borrow();
+                if !app.loading()
+                    && app
+                        .editor()
+                        .is_none_or(|editor| !editor.dirty() && !editor.writing())
                 {
                     return Ok(());
                 }

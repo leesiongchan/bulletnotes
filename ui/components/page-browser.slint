@@ -8,7 +8,7 @@ component ResultRow inherits FocusScope {
     in property <bool> selected;
     callback opened();
     callback step(int);
-    height: 82px;
+    height: 94px;
     accessible-role: button;
     accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
     accessible-action-default => { root.opened(); }
@@ -25,7 +25,7 @@ component ResultRow inherits FocusScope {
         y: 2px;
         width: parent.width - 16px;
         height: parent.height - 4px;
-        border-radius: 7px;
+        border-radius: 12px;
         background: root.selected || touch.has-hover ? root.theme.selection : transparent;
         border-width: root.has-focus ? 1px : 0px;
         border-color: root.theme.accent;
@@ -36,7 +36,7 @@ component ResultRow inherits FocusScope {
             height: 16px;
             text: root.data.title;
             color: root.theme.ink;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 550;
             overflow: elide;
         }
@@ -71,9 +71,12 @@ component ResultRow inherits FocusScope {
             height: 15px;
             text: root.data.excerpt;
             color: root.theme.muted;
+            font-family:"Menlo";
             font-size: 11px;
             overflow: elide;
         }
+
+        Text {x:12px;y:69px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:9px;overflow:elide;}
 
         touch := TouchArea {
             clicked => { root.focus(); root.opened(); }
@@ -99,14 +102,14 @@ export component PageBrowser inherits Rectangle {
     function move-selection(step: int) {
         if (root.results.length > 0) {
             root.selected-index = max(0,min(root.results.length - 1,root.selected-index + step));
-            if (root.selected-index * 82px < -list.content-y) { list.content-y = -root.selected-index * 82px; }
-            else if ((root.selected-index + 1) * 82px > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * 82px); }
+            if (root.selected-index * 94px < -list.content-y) { list.content-y = -root.selected-index * 94px; }
+            else if ((root.selected-index + 1) * 94px > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * 94px); }
         }
     }
     Text {
         x: 24px;
         y: 14px;
-        text: "All pages";
+        text: "Search all pages";
         font-size: 17px;
         font-weight: 550;
         color: root.theme.ink;
@@ -126,9 +129,9 @@ export component PageBrowser inherits Rectangle {
         y: 52px;
         width: parent.width - 48px;
         height: 34px;
-        border-radius: 6px;
+        border-radius: 12px;
         background: root.theme.surface;
-        border-width: 1px;
+        border-width: query-input.has-focus ? 1px : 0px;
         border-color: query-input.has-focus ? root.theme.accent : root.theme.line;
         Image {
             x: 10px;
@@ -166,7 +169,7 @@ export component PageBrowser inherits Rectangle {
             width: parent.width - 42px;
             height: parent.height;
             vertical-alignment: center;
-            text: "Search titles, paths and note text";
+            text: "Search pages and note text";
             font-size: 12px;
             color: root.theme.muted;
             visible: root.query == "";

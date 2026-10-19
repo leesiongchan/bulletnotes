@@ -131,6 +131,7 @@ pub(super) fn create(db: &mut Connection, key: PageKey) -> Result<SavedRevision,
     }
     let tx = db.transaction()?;
     tx.execute("INSERT INTO pages(connection,path,title,body,local_revision,modified_ms) VALUES(?1,?2,?3,'','0',?4)",rusqlite::params![key.connection.as_str(),key.path.as_str(),key.title_from(""),now_ms()?])?;
+    super::scratchpads::admit(&tx, &key, None, true)?;
     tx.commit()?;
     Ok(SavedRevision {
         key,

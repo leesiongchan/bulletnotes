@@ -83,6 +83,7 @@ export component AppearancePanel inherits Rectangle {
     callback export-theme();
     callback apply-low-contrast();
     callback cancel-theme-import();
+    out property <bool> controls-first:paper-heading.y < theme-heading.y && font-controls.y < theme-heading.y;
     public function focus-panel() { system-button.focus(); }
     background: root.theme.paper;
     Text {
@@ -115,111 +116,8 @@ export component AppearancePanel inherits Rectangle {
             width: scroll.visible-width;
             padding: 0px;
             spacing: 12px;
-            Rectangle {
-                height: 34px;
-                background: root.theme.surface;
-                border-radius: 6px;
-                border-width: 1px;
-                border-color: root.theme.line;
-                HorizontalBox {
-                    padding: 3px;
-                    spacing: 3px;
-                    ChoiceButton {
-                        text: "Light";
-                        theme: root.theme;
-                        selected: root.mode == "light";
-                        clicked => { root.mode = "light"; root.changed(); }
-                    }
-
-                    ChoiceButton {
-                        text: "Dark";
-                        theme: root.theme;
-                        selected: root.mode == "dark";
-                        clicked => { root.mode = "dark"; root.changed(); }
-                    }
-
-                    system-button := ChoiceButton {
-                        text: "System";
-                        theme: root.theme;
-                        selected: root.mode == "system";
-                        clicked => { root.mode = "system"; root.changed(); }
-                    }
-                }
-            }
-
-            Text {
-                text: root.mode == "system" ? "Follows macOS · light and dark choices are saved separately" : "Your light and dark choices are saved separately";
-                font-size: 10px;
-                color: root.theme.muted;
-                wrap: word-wrap;
-            }
-
-            Text {
-                text: "THEME";
-                font-size: 10px;
-                font-weight: 600;
-                color: root.theme.muted;
-            }
-
-            for pair in root.theme-pairs: HorizontalBox {
-                padding: 0px;
-                spacing: 10px;
-                height: 78px;
-                ThemeCard {
-                    theme: root.theme;
-                    option: pair.left;
-                    selected: root.selected-theme == pair.left.id;
-                    clicked => { root.theme-selected(pair.left.id); }
-                }
-
-                ThemeCard {
-                    theme: root.theme;
-                    option: pair.right;
-                    selected: root.selected-theme == pair.right.id;
-                    visible: pair.has-right;
-                    clicked => { root.theme-selected(pair.right.id); }
-                }
-            }
-            Text {
-                text: "PAPER";
-                font-size: 10px;
-                font-weight: 600;
-                color: root.theme.muted;
-            }
-
-            HorizontalBox {
-                padding: 0px;
-                spacing: 4px;
-                ChoiceButton {
-                    text: "Plain";
-                    theme: root.theme;
-                    selected: root.paper-style == "plain";
-                    clicked => { root.paper-style = "plain"; root.changed(); }
-                }
-
-                ChoiceButton {
-                    text: "Dots";
-                    theme: root.theme;
-                    selected: root.paper-style == "dots";
-                    clicked => { root.paper-style = "dots"; root.changed(); }
-                }
-
-                ChoiceButton {
-                    text: "Ruled";
-                    theme: root.theme;
-                    selected: root.paper-style == "ruled";
-                    clicked => { root.paper-style = "ruled"; root.changed(); }
-                }
-
-                ChoiceButton {
-                    text: "Grid";
-                    theme: root.theme;
-                    selected: root.paper-style == "grid";
-                    clicked => { root.paper-style = "grid"; root.changed(); }
-                }
-            }
-
-            HorizontalBox {
+            Text {text:"TEXT AND PAPER";font-size:10px;font-weight:600;color:root.theme.muted;}
+            font-controls := HorizontalBox {
                 padding: 0px;
                 spacing: 8px;
                 Text {
@@ -260,6 +158,111 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
 
+            paper-heading := Text {
+                text: "PAPER";
+                font-size: 10px;
+                font-weight: 600;
+                color: root.theme.muted;
+            }
+
+            HorizontalBox {
+                padding: 0px;
+                spacing: 4px;
+                ChoiceButton {
+                    text: "Plain";
+                    theme: root.theme;
+                    selected: root.paper-style == "plain";
+                    clicked => { root.paper-style = "plain"; root.changed(); }
+                }
+
+                ChoiceButton {
+                    text: "Dots";
+                    theme: root.theme;
+                    selected: root.paper-style == "dots";
+                    clicked => { root.paper-style = "dots"; root.changed(); }
+                }
+
+                ChoiceButton {
+                    text: "Ruled";
+                    theme: root.theme;
+                    selected: root.paper-style == "ruled";
+                    clicked => { root.paper-style = "ruled"; root.changed(); }
+                }
+
+                ChoiceButton {
+                    text: "Grid";
+                    theme: root.theme;
+                    selected: root.paper-style == "grid";
+                    clicked => { root.paper-style = "grid"; root.changed(); }
+                }
+            }
+
+            Text {text:"APPEARANCE";font-size:10px;font-weight:600;color:root.theme.muted;}
+            Rectangle {
+                height: 34px;
+                background: root.theme.surface;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: root.theme.line;
+                HorizontalBox {
+                    padding: 3px;
+                    spacing: 3px;
+                    ChoiceButton {
+                        text: "Light";
+                        theme: root.theme;
+                        selected: root.mode == "light";
+                        clicked => { root.mode = "light"; root.changed(); }
+                    }
+
+                    ChoiceButton {
+                        text: "Dark";
+                        theme: root.theme;
+                        selected: root.mode == "dark";
+                        clicked => { root.mode = "dark"; root.changed(); }
+                    }
+
+                    system-button := ChoiceButton {
+                        text: "System";
+                        theme: root.theme;
+                        selected: root.mode == "system";
+                        clicked => { root.mode = "system"; root.changed(); }
+                    }
+                }
+            }
+
+            Text {
+                text: root.mode == "system" ? "Follows macOS · light and dark choices are saved separately" : "Your light and dark choices are saved separately";
+                font-size: 10px;
+                color: root.theme.muted;
+                wrap: word-wrap;
+            }
+
+            theme-heading := Text {
+                text: "THEME";
+                font-size: 10px;
+                font-weight: 600;
+                color: root.theme.muted;
+            }
+
+            for pair in root.theme-pairs: HorizontalBox {
+                padding: 0px;
+                spacing: 10px;
+                height: 78px;
+                ThemeCard {
+                    theme: root.theme;
+                    option: pair.left;
+                    selected: root.selected-theme == pair.left.id;
+                    clicked => { root.theme-selected(pair.left.id); }
+                }
+
+                ThemeCard {
+                    theme: root.theme;
+                    option: pair.right;
+                    selected: root.selected-theme == pair.right.id;
+                    visible: pair.has-right;
+                    clicked => { root.theme-selected(pair.right.id); }
+                }
+            }
             Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.theme.muted; }
             Rectangle {
                 height:34px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;border-radius:5px;
