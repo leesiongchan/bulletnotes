@@ -131,10 +131,11 @@ for layout, source/display mapping, selections, IME, and accessibility. Checked
 boxes use a filled center rather than a tick, and there are no independent widget
 focus or accessibility nodes. The underlying TextInput still exposes source text.
 
-Only macOS native and headless Skia have been exercised. The follow-up
-[cross-target audit](markdown-cross-platform.md) records source-check results and
-remaining platform/bootstrap blockers. iOS, Android, Windows,
-Linux, native OS IME, assistive technology, and other renderer paths require their
-own runtime checks. The private Slint API is not an upstream release. Full-note
-parsing and marker geometry still need release-mode interaction measurements on
+Native Winit window capture has only been exercised on macOS. The follow-up
+[cross-platform audit](markdown-cross-platform.md) records source checks, hosted
+native headless Skia results, and remaining platform/bootstrap blockers. Mobile
+runtime, Windows/Linux window integration, native OS IME, assistive technology,
+and other renderer paths require their own checks. The private Slint API is not
+an upstream release. Full-note parsing and marker geometry still need release-mode
+interaction measurements on
 representative devices. No cross-platform readiness claim follows from this probe.

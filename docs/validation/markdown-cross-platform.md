@@ -1,6 +1,6 @@
 # Markdown editor cross-platform validation
 
-Checked on 2026-10-19 using Rust 1.99.1, pinned Slint 1.18.1, and the maintained
+Checked on 2026-10-20 using Rust 1.99.1, pinned Slint 1.18.1, and the maintained
 source-decoration/marker patch. The scope is the standalone editor probe. The full
 Bulletnotes client still has a macOS-only application shell.
 
@@ -9,10 +9,10 @@ Bulletnotes client still has a macOS-only application shell.
 | Platform / target | Probe source check | Strict target Clippy | Native execution |
 | --- | --- | --- | --- |
 | macOS ARM64 | Passed previously and exercised by host tests | Passed, including probe tests | Marker verification passed; exact source, zero edits |
-| Windows x64 / `x86_64-pc-windows-msvc` | Passed | Passed | Not run; no Windows runtime on this host |
+| Windows x64 / `x86_64-pc-windows-msvc` | Passed | Passed natively | All 16 headless Skia tests passed on Windows Server 2025 |
 | iOS ARM64 Simulator / `aarch64-apple-ios-sim` | Passed | Passed | Not run; no installed iOS Simulator runtime |
 | Android ARM64 / `aarch64-linux-android` | Passed | Passed | Not run; activity bootstrap and configured SDK/NDK absent |
-| Linux x64 / `x86_64-unknown-linux-gnu` | Blocked by target Fontconfig configuration | Blocked | Not run; no Linux runtime/sysroot configured |
+| Linux x64 / `x86_64-unknown-linux-gnu` | Native build passed; macOS cross-check blocked by Fontconfig | Passed natively | All 16 headless Skia tests passed on Ubuntu 24.04 |
 
 `cargo check` and `cargo clippy` do not establish final linking, packaging, launch,
 input behavior, or accessibility. In particular, Android source-check success is
@@ -70,7 +70,7 @@ platforms. The mutation is now scoped to macOS, preserving its Metal override an
 using the unchanged WGPU defaults elsewhere. Host probe formatting, strict Clippy,
 all 16 regression tests, and native marker verification were rerun after this fix.
 
-### Linux blocker
+### macOS-to-Linux cross-compilation blocker
 
 The normal Linux check stopped in `yeslogic-fontconfig-sys` 6.0.1: cross-compiling
 pkg-config needs a target sysroot and Fontconfig metadata. Host macOS libraries
@@ -82,9 +82,9 @@ producing unresolved `FcCharSetAddChar` and related imports. This is not a suppo
 workaround for the current feature graph. No dependency feature or source patch
 was added to make the check appear green.
 
-Use a native Linux build environment with its Fontconfig and window-system build
-dependencies, or configure a genuine Linux cross sysroot, then rerun the same
-check and the rendered-pixel probe tests. The ordinary desktop backend supports
+The hosted Ubuntu job below supplies native Fontconfig and window-system build
+dependencies and passes the rendered-pixel probe tests. Cross-compiling from macOS
+still requires a genuine Linux target sysroot. The ordinary desktop backend supports
 Linux X11 and Wayland; its runtime prerequisites are documented by
 [Slint's Winit backend](https://docs.slint.dev/latest/docs/slint/guide/backends-and-renderers/backend_winit/).
 
@@ -130,11 +130,17 @@ and the actual shared verifier with all 16 editor tests, formatting, and strict
 Clippy. The failure tests use POSIX subprocess fixtures and run on Linux in CI;
 Windows runs the real native verifier. Review found no actionable issues.
 
-**Hosted Windows/Linux jobs have not been executed.** The workflow has not been
-pushed from this worktree, so it adds no new native platform pass to the table
-above. Run the configured jobs and inspect their artifacts before changing those
-runtime statuses. Font-dependent geometry assertions remain intact for native
-failures to diagnose rather than being weakened preemptively.
+The [first hosted run](https://github.com/leesiongchan/bulletnotes/actions/runs/39427569262)
+passed on Ubuntu. Windows passed preparation, formatting, and strict Clippy, then
+failed a visual test that assumed the undecorated Unicode fixture contained no
+red pixels; the observed baseline was one pixel. The test now compares decoration
+colors against the original baseline and retains exact full-snapshot restoration.
+The [corrected run](https://github.com/leesiongchan/bulletnotes/actions/runs/39428882095)
+passed on both runners at commit `7e2997b63a735b84fcaed8ee62f932bff0a808b7`.
+Downloaded artifacts confirm all five stages exited zero and `passed` is true on
+both platforms: seven coloring tests and nine marker tests passed on each.
+Font-dependent geometry assertions remain intact. The Windows preparation path
+also ran successfully; this does not exercise concurrent Windows bootstrapping.
 
 ## Full-client blockers found in the repository
 
@@ -164,10 +170,10 @@ The source audit found application work beyond the shared text renderer:
 
 ## Next executable milestones
 
-Execute the configured native Windows/Linux jobs and inspect their retained
-results. This workflow retains the existing Skia pixel, source, selection, undo,
-and preedit tests, keeping host-specific application examples outside the editor
-validation boundary.
+Exercise native Winit windows and OS input/accessibility on Windows and Linux.
+The hosted tests cover headless Skia pixels, source, selection, undo, and injected
+preedit events; they do not establish desktop window integration or full-client
+portability.
 
 For Android, extend the editor-only probe with the pinned Activity backend,
 `cdylib` entry point, and a generated-content mobile package before introducing
