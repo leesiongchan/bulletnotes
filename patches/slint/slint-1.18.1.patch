@@ -1,0 +1,594 @@
+--- a/i-slint-common-1.18.1/builtin_structs.rs
++++ b/i-slint-common-1.18.1/builtin_structs.rs
+@@ -52,6 +52,33 @@
+ macro_rules! for_each_builtin_structs {
+     ($macro:ident) => {
+         $macro! {
++            /// Experimental paint-only replacement over a source range, retaining its width.
++            /// Raw source is shown while the cursor, selection, or composition touches the range.
++            #[non_exhaustive]
++            pub struct TextInputMarker {
++                /// First UTF-8 source byte, inclusive.
++                start: i32,
++                /// First UTF-8 source byte after the range.
++                end: i32,
++                /// Vector shape drawn inside the source range.
++                kind: TextInputMarkerKind,
++                /// Marker foreground; transparent colors leave the source visible.
++                foreground: Color,
++            }
++
++            /// A foreground decoration over unchanged TextInput source.
++            /// Ranges are half-open UTF-8 byte offsets. Invalid, empty, overlapping,
++            /// or unsorted ranges are ignored. The composition keeps its base color.
++            #[non_exhaustive]
++            pub struct TextInputDecoration {
++                /// First source byte in the range.
++                start: i32,
++                /// First source byte after the range.
++                end: i32,
++                /// Foreground color, overridden by selected-text foreground.
++                foreground: Color,
++            }
++
+             /// The `KeyboardModifiers` struct provides booleans to indicate possible modifier keys on a keyboard, such as Shift, Control, etc.
+             /// It is provided as part of `KeyEvent`'s `modifiers` field.
+             ///
+--- a/i-slint-common-1.18.1/enums.rs
++++ b/i-slint-common-1.18.1/enums.rs
+@@ -24,6 +24,17 @@
+ macro_rules! for_each_enums {
+     ($macro:ident) => {
+         $macro! {
++            /// Experimental paint-only source marker shapes.
++            #[non_exhaustive]
++            pub enum TextInputMarkerKind {
++                /// A filled circular list marker.
++                Bullet,
++                /// An outlined box.
++                Checkbox,
++                /// An outlined box with a filled center.
++                CheckedCheckbox,
++            }
++
+             /// This enum describes the different types of alignment of text along the horizontal axis of a `Text` or `StyledText` element.
+             #[non_exhaustive]
+             enum TextHorizontalAlignment {
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -2244,6 +2244,11 @@
+     }
+ 
+     item! { TextInput {
++        /// Experimental paint-only markers. Invalid or fragmented ranges remain raw source.
++        in property <[TextInputMarker]> text-markers;
++        /// Experimental source decorations. Sorted non-overlapping UTF-8 byte ranges.
++        /// Empty by default; this property never modifies text or undo history.
++        in property <[TextInputDecoration]> text-decorations;
+         /// The text rendered and editable by the user.
+         /// \default ""
+         in-out property <string> text;
+--- a/i-slint-compiler-1.18.1/typeregister.rs
++++ b/i-slint-compiler-1.18.1/typeregister.rs
+@@ -702,6 +702,7 @@
+         ($pub_type:ident, f32) => { Type::Float32 };
+         ($pub_type:ident, SharedString) => { Type::String };
+         ($pub_type:ident, Image) => { Type::Image };
++        ($pub_type:ident, Color) => { Type::Color };
+         ($pub_type:ident, Coord) => { Type::LogicalLength };
+         ($pub_type:ident, Keys) => { Type::Keys };
+         ($pub_type:ident, DataTransfer) => { Type::DataTransfer };
+--- a/i-slint-core-1.18.1/item_rendering.rs
++++ b/i-slint-core-1.18.1/item_rendering.rs
+@@ -477,6 +477,9 @@
+ /// Trait for an item that represents an string towards the renderer
+ #[allow(missing_docs)]
+ pub trait RenderString: HasFont {
++    fn text_decorations(self: Pin<&Self>) -> alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan> {
++        alloc::vec::Vec::new()
++    }
+     fn text(self: Pin<&Self>) -> PlainOrStyledText;
+     fn max_lines(self: Pin<&Self>) -> i32 {
+         0
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -761,6 +761,8 @@
+ #[derive(FieldOffsets, Default, SlintElement)]
+ #[pin]
+ pub struct TextInput {
++    pub text_markers: Property<crate::model::ModelRc<super::TextInputMarker>>,
++    pub text_decorations: Property<crate::model::ModelRc<super::TextInputDecoration>>,
+     pub text: Property<SharedString>,
+     pub font_family: Property<SharedString>,
+     pub font_size: Property<LogicalLength>,
+@@ -1340,6 +1342,46 @@
+ }
+ 
+ impl RenderString for TextInput {
++    fn text_decorations(self: Pin<&Self>) -> alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan> {
++        use crate::model::Model;
++        use i_slint_common::styled_text::{FormattedSpan, Style};
++
++        let model = self.text_decorations();
++        let count = model.row_count();
++        model.model_tracker().track_any_change(count, crate::InternalToken);
++        if count == 0 || self.is_password() {
++            return alloc::vec::Vec::new();
++        }
++        let source = self.text();
++        let preedit = self.preedit_text();
++        // Cursor movement alone must not become a shaping dependency.
++        let insertion = (!preedit.is_empty()).then(|| self.cursor_position(&source));
++        let mut spans = alloc::vec::Vec::with_capacity(count);
++        let mut previous_end = 0;
++        for decoration in model.iter() {
++            let (Ok(start), Ok(end)) = (usize::try_from(decoration.start), usize::try_from(decoration.end)) else {
++                continue;
++            };
++            if start < previous_end || start >= end || end > source.len()
++                || !source.is_char_boundary(start) || !source.is_char_boundary(end) {
++                continue;
++            }
++            previous_end = end;
++            let style = Style::Color(decoration.foreground.as_argb_encoded());
++            if let Some(at) = insertion {
++                // Preedit is transient and must not inherit committed-source ranges.
++                if start < end.min(at) {
++                    spans.push(FormattedSpan { range: start..end.min(at), style: style.clone() });
++                }
++                if start.max(at) < end {
++                    spans.push(FormattedSpan { range: start.max(at) + preedit.len()..end + preedit.len(), style });
++                }
++            } else {
++                spans.push(FormattedSpan { range: start..end, style });
++            }
++        }
++        spans
++    }
+     fn text(self: Pin<&Self>) -> PlainOrStyledText {
+         // Deliberately not `visual_representation`, which would size the item off the cursor and
+         // the selection too -- see `text_with_preedit`.
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/draw.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/draw.rs
+@@ -5,6 +5,7 @@
+ //! capsules, and the clip-based recoloring of selected glyphs.
+ 
+ use super::layout::ElisionCut;
++use super::markers::MarkerRendering;
+ use super::selection::{RunCoverage, SelectionSpan, run_coverage};
+ use super::shaping::{Brush, TextParagraph};
+ use super::*;
+@@ -108,6 +109,7 @@
+         default_stroke_brush: &Option<<R as GlyphRenderer>::PlatformBrush>,
+         default_text_color: Color,
+         selection: Option<&SelectionRendering<'_, R>>,
++        markers: &[MarkerRendering],
+     ) {
+         let para_y = layout.y_offset + self.y;
+ 
+@@ -177,6 +179,10 @@
+             let vertically_truncated = last_line && vertical_truncation;
+             let line_spans =
+                 selection.map(|selection| selection.spans.for_line(paragraph_index, index));
++            let mut hidden_ranges = markers.iter()
++                .flat_map(|marker| marker.spans.for_line(paragraph_index, index))
++                .map(SelectionSpan::x).collect::<Vec<_>>();
++            hidden_ranges.sort_by(|a, b| a.start.total_cmp(&b.start));
+             // Padded for ink overhanging the advance, like the vertical filtering of lines.
+             let padded_x_range = visible_x_range
+                 .map(|x_range| (x_range.start - line_height)..(x_range.end + line_height));
+@@ -212,6 +218,7 @@
+                                 &mut truncated_glyphs.into_iter(),
+                                 selection.map(|selection| &selection.foreground),
+                                 line_spans.unwrap_or_default(),
++                                &hidden_ranges,
+                             );
+                             ellipsis
+                         } else {
+@@ -225,6 +232,7 @@
+                                 &mut glyph_run.positioned_glyphs(),
+                                 selection.map(|selection| &selection.foreground),
+                                 line_spans.unwrap_or_default(),
++                                &hidden_ranges,
+                             );
+                             None
+                         };
+@@ -382,8 +390,47 @@
+         // there is no selection, which `run_coverage` reports as `Unselected`.
+         selection_brush: Option<&<R as GlyphRenderer>::PlatformBrush>,
+         line_spans: &[SelectionSpan],
++        hidden_ranges: &[Range<f32>],
+     ) {
+         let run_x = glyph_run.offset()..glyph_run.offset() + glyph_run.advance();
++
++        if hidden_ranges.iter().any(|range| range.start < run_x.end && range.end > run_x.start) {
++            let glyphs = glyphs_it.collect::<Vec<_>>();
++            let original_x = item_renderer.get_current_clip().x_length_range();
++            let scale = item_renderer.scale_factor();
++            let clip_x = (original_x.start * scale).get()..(original_x.end * scale).get();
++            let mut draw_visible = |x: Range<f32>| {
++                if x.end <= x.start { return; }
++                item_renderer.save_state();
++                let scale = item_renderer.scale_factor();
++                let clip = item_renderer.get_current_clip();
++                let render = item_renderer.combine_clip(
++                    LogicalRect::new(
++                        LogicalPoint::from_lengths(PhysicalLength::new(x.start) / scale, clip.origin.y_length()),
++                        LogicalSize::from_lengths(PhysicalLength::new(x.end - x.start) / scale, clip.height_length()),
++                    ),
++                    LogicalBorderRadius::zero(),
++                );
++                if render {
++                    Self::draw_glyph_run_with_selection(
++                        glyph_run, item_renderer, default_fill_brush, default_stroke_brush,
++                        para_y, visible_x_range, &mut glyphs.iter().cloned(),
++                        selection_brush, line_spans, &[],
++                    );
++                }
++                item_renderer.restore_state();
++            };
++            let mut x = clip_x.start;
++            for range in hidden_ranges {
++                if range.end <= x { continue; }
++                let start = range.start.max(x).min(clip_x.end);
++                draw_visible(x..start);
++                x = range.end.max(x).min(clip_x.end);
++                if x >= clip_x.end { break; }
++            }
++            draw_visible(x..clip_x.end);
++            return;
++        }
+ 
+         // Bidirectional text reorders glyphs within a run, so this filters rather than truncating.
+         let x_range = visible_x_range.cloned();
+@@ -660,6 +707,7 @@
+         default_stroke_brush: Option<<R as GlyphRenderer>::PlatformBrush>,
+         default_text_color: Color,
+         selection: Option<&SelectionRendering<'_, R>>,
++        markers: &[MarkerRendering],
+     ) {
+         // Compute the cut once: explicit `\n` breaks produce one paragraph each, but they must
+         // elide as a single block (drop lines below the box, ellipsis on the last visible one).
+@@ -701,6 +749,7 @@
+                 &default_stroke_brush,
+                 default_text_color,
+                 selection,
++                markers,
+             );
+         }
+     }
+--- /dev/null
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
+@@ -0,0 +1,205 @@
++// Copyright © SixtyFPS GmbH <info@slint.dev>
++// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
++
++//! Experimental source-width-preserving markers. All decisions affect painting only.
++use super::*;
++use crate::items::{TextInput, TextInputMarkerKind};
++use crate::model::Model;
++
++pub(super) struct Marker {
++    range: Range<usize>,
++    kind: TextInputMarkerKind,
++    foreground: Color,
++}
++
++pub(super) struct MarkerRendering {
++    pub(super) spans: SelectionSpans,
++    shape: PhysicalRect,
++    kind: TextInputMarkerKind,
++    foreground: Color,
++}
++
++/// Evaluate model bindings before entering the font-context borrow.
++pub(super) fn prepare(input: Pin<&TextInput>) -> Vec<Marker> {
++    let model = input.text_markers();
++    let count = model.row_count();
++    model
++        .model_tracker()
++        .track_any_change(count, crate::InternalToken);
++    if count == 0 || input.is_password() {
++        return Vec::new();
++    }
++    let source = input.text();
++    let cursor = input.cursor_position(&source);
++    let (selection_start, selection_end) = input.selection_anchor_and_cursor();
++    let preedit = input.preedit_text();
++    let mut previous_end = 0;
++    let mut markers = Vec::new();
++    for marker in model.iter() {
++        let (Ok(start), Ok(end)) = (usize::try_from(marker.start), usize::try_from(marker.end))
++        else {
++            continue;
++        };
++        if start < previous_end
++            || start >= end
++            || end > source.len()
++            || !source.is_char_boundary(start)
++            || !source.is_char_boundary(end)
++            || [start, end].into_iter().any(|offset| {
++                unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
++                    .is_boundary(&source, 0)
++                    != Ok(true)
++            })
++            || source[start..end].contains(['\r', '\n'])
++            || marker.foreground.alpha() == 0
++        {
++            continue;
++        }
++        previous_end = end;
++        // Use the logical cursor, never cursor_visible: blinking cannot change syntax reveal.
++        if (start..=end).contains(&cursor) || (selection_start < end && selection_end > start) {
++            continue;
++        }
++        let shift = if !preedit.is_empty() && cursor < start {
++            preedit.len()
++        } else {
++            0
++        };
++        markers.push(Marker {
++            range: start + shift..end + shift,
++            kind: marker.kind,
++            foreground: marker.foreground,
++        });
++    }
++    markers
++}
++
++pub(super) fn resolve(
++    layout: &Layout,
++    markers: &[Marker],
++    renderer: &mut impl GlyphRenderer,
++) -> Vec<MarkerRendering> {
++    let mut result = Vec::new();
++    let band = draw::visible_band(renderer);
++    let scale = renderer.scale_factor().get();
++    for marker in markers {
++        let paragraphs = layout.visible_paragraphs();
++        let index = paragraphs
++            .partition_point(|p| p.range.start <= marker.range.start)
++            .saturating_sub(1);
++        let Some(paragraph) = paragraphs.get(index) else {
++            continue;
++        };
++        if marker.range.start < paragraph.range.start || marker.range.end > paragraph.range.end {
++            continue;
++        }
++        let top = layout.y_offset + paragraph.y;
++        let height = PhysicalLength::new(paragraph.layout.height());
++        let pad = height / paragraph.layout.lines().len().max(1) as f32;
++        // Offscreen paragraphs cannot paint markers; avoid a document-wide geometry scan for each.
++        if top + height + pad < band.start || top - pad > band.end {
++            continue;
++        }
++        // Cursor construction snaps to clusters. Reject any range that would hide extra bytes.
++        if [marker.range.start, marker.range.end]
++            .into_iter()
++            .any(|offset| {
++                let local = offset - paragraph.range.start;
++                parley::editing::Cursor::from_byte_index(
++                    &paragraph.layout,
++                    local,
++                    Default::default(),
++                )
++                .index()
++                    != local
++            })
++        {
++            continue;
++        }
++        // Validate the entire prefix, independently of which fragments are currently visible.
++        let all_lines = PhysicalLength::new(f32::NEG_INFINITY)..PhysicalLength::new(f32::INFINITY);
++        let spans = layout.selection_geometry(marker.range.clone(), &all_lines);
++        let mut rectangles = spans.backgrounds();
++        let Some(rect) = rectangles.next() else {
++            continue;
++        };
++        // Never hide source if wrapping or bidi splits its prefix into several fragments.
++        if rectangles.next().is_some()
++            || !rect.min_x().is_finite()
++            || !rect.min_y().is_finite()
++            || !rect.max_x().is_finite()
++            || !rect.max_y().is_finite()
++            || rect.width() <= 0.0
++            || rect.height() <= 0.0
++            || rect.max_y() < band.start.get()
++            || rect.min_y() > band.end.get()
++            || renderer
++                .platform_brush_for_color(&marker.foreground)
++                .is_none()
++        {
++            continue;
++        }
++        let side = match marker.kind {
++            TextInputMarkerKind::Bullet => rect.height() * 0.12,
++            _ => rect.height() * 0.45,
++        }
++        .min(rect.width() * 0.75);
++        if side < scale {
++            continue;
++        }
++        let shape = PhysicalRect::new(
++            PhysicalPoint::new(
++                rect.min_x() + (rect.width() * 0.1).min(2.0 * scale),
++                rect.min_y() + (rect.height() - side) / 2.0,
++            ),
++            PhysicalSize::new(side, side),
++        );
++        drop(rectangles);
++        result.push(MarkerRendering {
++            spans,
++            shape,
++            kind: marker.kind,
++            foreground: marker.foreground,
++        });
++    }
++    result
++}
++
++impl MarkerRendering {
++    pub(super) fn draw(&self, renderer: &mut impl GlyphRenderer) {
++        let Some(brush) = renderer.platform_brush_for_color(&self.foreground) else {
++            return;
++        };
++        let rect = self.shape;
++        if self.kind == TextInputMarkerKind::Bullet {
++            renderer.fill_rectangle(rect, brush, PhysicalLength::new(rect.width() / 2.0), None);
++            return;
++        }
++        // Opaque strips work on renderers that reject a transparent fill brush.
++        let border = (1.2 * renderer.scale_factor().get()).min(rect.width() / 4.0);
++        for edge in [
++            PhysicalRect::new(rect.origin, PhysicalSize::new(rect.width(), border)),
++            PhysicalRect::new(
++                PhysicalPoint::new(rect.min_x(), rect.max_y() - border),
++                PhysicalSize::new(rect.width(), border),
++            ),
++            PhysicalRect::new(rect.origin, PhysicalSize::new(border, rect.height())),
++            PhysicalRect::new(
++                PhysicalPoint::new(rect.max_x() - border, rect.min_y()),
++                PhysicalSize::new(border, rect.height()),
++            ),
++        ] {
++            renderer.fill_rectangle_with_color(edge, self.foreground);
++        }
++        if self.kind == TextInputMarkerKind::CheckedCheckbox {
++            let inset = rect.width() * 0.28;
++            renderer.fill_rectangle_with_color(
++                PhysicalRect::new(
++                    PhysicalPoint::new(rect.min_x() + inset, rect.min_y() + inset),
++                    PhysicalSize::new(rect.width() - inset * 2.0, rect.height() - inset * 2.0),
++                ),
++                self.foreground,
++            );
++        }
++    }
++}
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/shaping.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/shaping.rs
+@@ -275,6 +275,7 @@
+     font_context: &mut parley::FontContext,
+     text: PlainOrStyledText,
+     link_color: Color,
++    decorations: &[i_slint_common::styled_text::FormattedSpan],
+ ) -> Vec<TextParagraph> {
+     let paragraph_from_text =
+         |font_context: &mut parley::FontContext,
+@@ -301,8 +302,16 @@
+                 paragraphs.push(paragraph_from_text(
+                     font_context,
+                     &text[range.clone()],
+-                    range,
+-                    Default::default(),
++                    range.clone(),
++                    decorations[decorations.partition_point(|span| span.range.end <= range.start)..]
++                        .iter()
++                        .take_while(|span| span.range.start < range.end)
++                        .map(|span| i_slint_common::styled_text::FormattedSpan {
++                            range: span.range.start.max(range.start) - range.start
++                                ..span.range.end.min(range.end) - range.start,
++                            style: span.style.clone(),
++                        })
++                        .collect(),
+                     Default::default(),
+                 ));
+             }
+@@ -386,7 +395,7 @@
+     font_context: &mut parley::FontContext,
+ ) -> Vec<TextParagraph> {
+     let builder = shaping_builder(text, item_rc, text_wrap, scale_factor);
+-    create_text_paragraphs(&builder, font_context, text.text(), text.link_color())
++    create_text_paragraphs(&builder, font_context, text.text(), text.link_color(), &text.text_decorations())
+ }
+ 
+ pub(super) struct TextParagraph {
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/tests.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/tests.rs
+@@ -44,6 +44,7 @@
+         &mut font_ctx,
+         PlainOrStyledText::Plain(text.into()),
+         Color::default(),
++        &[],
+     );
+     layout(&builder, &mut font_ctx, paragraphs, ScaleFactor::new(1.0), options, None)
+ }
+--- a/i-slint-core-1.18.1/textlayout/sharedparley.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley.rs
+@@ -66,6 +66,7 @@
+ mod cache;
+ mod draw;
+ mod layout;
++mod markers;
+ mod selection;
+ mod shaping;
+ #[cfg(test)]
+@@ -104,6 +105,8 @@
+     f: impl FnOnce(&Layout) -> R,
+ ) -> Option<R> {
+     let ctx = crate::window::WindowInner::from_pub(window).try_context()?;
++    // Bindings can re-enter measurement; evaluate before borrowing the font context.
++    let _ = text.text_decorations();
+     let mut font_ctx = ctx.font_context().borrow_mut();
+ 
+     let text_wrap = layout_builder.text_wrap;
+@@ -221,6 +224,7 @@
+                     // `Text` has no selection today; the machinery is shared so wiring one up
+                     // later is a matter of passing spans here.
+                     None,
++                    &[],
+                 );
+             }
+ 
+@@ -314,6 +318,7 @@
+     }
+ 
+     let visual_representation = text_input.visual_representation();
++    let marker_data = markers::prepare(text_input);
+ 
+     let text_color = visual_representation.text_color.color();
+     let Some(platform_fill_brush) =
+@@ -391,13 +396,18 @@
+                     })
+                     .flatten();
+ 
++                let painted_markers = markers::resolve(layout, &marker_data, item_renderer);
+                 layout.draw(
+                     item_renderer,
+                     platform_fill_brush,
+                     None,
+                     text_color,
+                     selection.as_ref(),
++                    &painted_markers,
+                 );
++                for marker in &painted_markers {
++                    marker.draw(item_renderer);
++                }
+ 
+                 if let Some(cursor_pos) = visual_representation.cursor_position {
+                     let cursor_rect = layout.cursor_rect_for_byte_offset(
+@@ -457,6 +467,7 @@
+     let _ = text_item.stroke();
+     let _ = text_item.link_color();
+     let _ = text_item.text();
++    let _ = text_item.text_decorations();
+ 
+     let window_adapter = window_adapter?;
+ 
+@@ -513,6 +524,7 @@
+     // entry's dependency tracker.
+     let _ = text_item.font_request(item_rc);
+     let _ = text_item.text();
++    let _ = text_item.text_decorations();
+ 
+     let ctx = ctx?;
+     let mut font_ctx = ctx.font_context().borrow_mut();
+@@ -524,7 +536,7 @@
+             shaping::content_widths_builder(text_item.font_request(item_rc), scale_factor);
+ 
+         let paragraphs_without_linebreaks =
+-            create_text_paragraphs(&layout_builder, font_ctx, text_item.text(), Color::default());
++            create_text_paragraphs(&layout_builder, font_ctx, text_item.text(), Color::default(), &text_item.text_decorations());
+ 
+         // No line breaking needed: parley derives the content widths from the break
+         // opportunities. Paragraphs stack vertically, so both widths are the widest.

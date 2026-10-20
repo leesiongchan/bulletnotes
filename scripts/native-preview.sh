@@ -3,6 +3,7 @@
 set -euo pipefail
 probe_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$probe_root"
+python3 scripts/prepare-slint.py
 rustup run 1.99.1 cargo build --features native-validation --example native_gate --locked
 probe_target="${CARGO_TARGET_DIR:-$probe_root/target}"
 probe_app="$probe_target/native-preview/Bulletnotes Native Preview 2.app"

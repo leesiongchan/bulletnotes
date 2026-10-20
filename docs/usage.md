@@ -3,7 +3,13 @@
 Bulletnotes is a native Rust/Slint macOS client for a SilverBullet space. It is
 currently a development build. [Release evidence](validation/release-matrix.md)
 tracks the remaining input, accessibility, selection, performance, and distribution
-gates. The note window has solid paper; blur and inline Markdown coloring are
+gates. The note window has solid paper. Headings and Markdown links use the theme accent
+while keeping all Markdown syntax editable. Unordered lists paint bullets and tasks paint
+empty or filled boxes in theme ink. Their original prefix spacing stays reserved;
+moving the caret into a prefix or selecting across it reveals its raw syntax.
+Boxes are edited as Markdown rather than toggled by clicking. Standalone code and
+YAML frontmatter stay plain.
+A low-contrast accent falls back to ink; Increase Contrast uses ink. Blur remains
 deferred.
 
 ## Capture and browse

@@ -4,6 +4,7 @@
 set -euo pipefail
 app_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$app_root"
+python3 scripts/prepare-slint.py
 rustup run 1.99.1 cargo build --bin bulletnotes --locked
 app_target="${CARGO_TARGET_DIR:-$app_root/target}"
 mkdir -p "$app_target/local-preview"

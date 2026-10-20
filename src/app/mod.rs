@@ -30,3 +30,5 @@ pub mod native_ui;
 pub mod diagnostics_ui;
 
 mod lifecycle;
+
+mod markdown;

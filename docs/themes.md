@@ -4,6 +4,11 @@ Themes are UTF-8 JSON palette files, at most 32,768 bytes. Version 1 requires `s
 
 Optional `cursor` and `scrollbar` colors use the same `#RRGGBB` format and survive import, export, and saved settings. Older files keep their existing caret color and use `muted` for the scrollbar. On macOS, Slint renders the caret using the selection brush at full opacity; an explicit `cursor` supplies its RGB and a 20% matching selection tint, preserving native blinking, selection, and IME behavior.
 
+Headings and Markdown links use `accent` when its contrast against paper is at least
+4.5:1, otherwise `ink`. Increase Contrast uses `ink`. This adds no palette fields;
+selection foreground keeps the existing ink color. List bullets and task boxes
+always use `ink`, including Increase Contrast, with no additional palette fields.
+
 Unknown fields are ignored on import and omitted on export. Duplicate keys are rejected recursively, including inside unknown fields. Invalid JSON, missing fields, unsupported versions, and invalid values reject the entire import. Files are data only; they cannot execute code or load remote resources.
 
 Every import receives a new local ID, even when its display name matches a built-in theme. Light and dark assignments, paper pattern, and text size remain separate preferences. The first release uses solid paper; native blur and direct import of Antinote-format JSON remain deferred.

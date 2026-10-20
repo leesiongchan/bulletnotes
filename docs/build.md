@@ -3,7 +3,7 @@
 Bulletnotes supports **macOS 14+ on Apple Silicon only**. Intel and universal
 bundles are unsupported.
 
-Build requirements: macOS/Xcode CLI tools, Python 3.11+, Rust 1.99.1,
+Build requirements: macOS/Xcode CLI tools, Python 3.12+, `patch`, Rust 1.99.1,
 the `aarch64-apple-darwin` standard library, and cargo-about
 0.9.2. On the project's Nix setup, a missing CLI can be run through comma.
 The toolchain file pins Rust; commands use `rustup run` explicitly because an
@@ -34,6 +34,33 @@ local store and automatic connection/synchronization. Older live previews are no
 replaced or stopped by packaging. Close an older local app normally before trying
 a new client that uses the same store; the writer lock prevents simultaneous use.
 
+## Pinned Slint source decorations
+
+Application highlighting uses the foreground-decoration API in the maintained Slint
+1.18.1 patch in `patches/slint/`. The editor also uses its experimental marker API for
+[source-width-preserving bullets and task boxes](validation/markdown-markers.md). Run this before direct Cargo commands on a fresh checkout, after
+`cargo clean`, or after changing the patch:
+
+```sh
+python3 scripts/prepare-slint.py
+```
+
+The check, preview, lifecycle, notice-generation, and packaging scripts run it
+automatically. Preparation uses cached crate archives when their SHA256 matches
+`patches/slint/sources.json`; otherwise it downloads the exact archives from
+`static.crates.io`, verifies them, and patches private copies under
+`target/slint-source-highlighting/crates`. It does not modify Cargo's cache.
+Preparation has a per-project OS lock to protect simultaneous first builds.
+Cargo cannot bootstrap absent path patches itself, so `cargo fetch` is not a
+replacement for this step. Once prepared and dependencies cached, offline Cargo
+commands work normally. The generated path stays fixed even with `CARGO_TARGET_DIR`.
+
+The original archive checksums remain committed independently of Cargo.lock, whose
+three patched entries refer to local paths. Review those checksums, the compact
+patch, and both lockfiles together for a Slint upgrade; retain all upstream license
+files. [Highlighting evidence](validation/markdown-highlighting.md) records the
+editor contract and current verification scope.
+
 ## Production renderer
 
 Production explicitly selects Winit + Skia + WGPU 29 with Metal as the only GPU
@@ -42,7 +69,8 @@ backend before constructing Slint components. Inherited `SLINT_BACKEND` and
 main-thread-only and idempotent. Startup uses the corresponding rendering notifier.
 Slint 1.18.1's documented `unstable-wgpu-29` feature exposes a public, version-specific
 API; it is pinned and isolated in `src/platform/renderer.rs`. It requires review
-when upgrading Slint/WGPU. No private editor API or unstable winit API is enabled.
+when upgrading Slint/WGPU. The editor uses the locally maintained source-decoration property described above;
+no private selection getters or unstable winit API are enabled.
 The macOS 14 deployment target remains unchanged.
 
 [Renderer evaluation](validation/metal-renderer.md) records native checks,

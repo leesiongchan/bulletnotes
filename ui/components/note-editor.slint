@@ -3,6 +3,8 @@ import { UiTheme } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
     in-out property <string> text;
+    in property <[TextInputDecoration]> decorations;
+    in property <[TextInputMarker]> markers;
     in property <float> font-size-px:15;
     in property <string> paper-style:"plain";
     in property <bool> read-only:false;
@@ -117,6 +119,8 @@ export component NoteEditor inherits Rectangle {
                 width: max(1px,scroll.visible-width - 80px);
                 height: max(scroll.visible-height - root.top-clearance - 64px,self.preferred-height);
                 text <=> root.text;
+                text-decorations: root.decorations;
+                text-markers: root.markers;
                 single-line: false;
                 wrap: word-wrap;
                 read-only: root.read-only;

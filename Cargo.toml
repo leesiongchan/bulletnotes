@@ -12,6 +12,7 @@ native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor"
 renderer-review = ["slint/renderer-skia-opengl"]
 
 [dependencies]
+pulldown-cmark = { version = "=0.13.4", default-features = false }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["std", "fmt", "json", "registry"] }
 tracing-appender = "=0.2.5"
@@ -45,6 +46,7 @@ global-hotkey = "=0.9.0"
 slint-build = "=1.18.1"
 
 [dev-dependencies]
+i-slint-backend-testing = { version = "=1.18.1", features = ["renderer-skia"] }
 axum = { version = "=0.8.9", default-features = false, features = ["tokio", "http1", "json"] }
 png = "=0.18.1"
 
@@ -91,3 +93,8 @@ required-features = ["native-validation", "renderer-review"]
 [[example]]
 name = "editor_reconciliation_review"
 required-features = ["native-validation"]
+
+[patch.crates-io]
+i-slint-common = { path = "target/slint-source-highlighting/crates/i-slint-common-1.18.1" }
+i-slint-compiler = { path = "target/slint-source-highlighting/crates/i-slint-compiler-1.18.1" }
+i-slint-core = { path = "target/slint-source-highlighting/crates/i-slint-core-1.18.1" }
