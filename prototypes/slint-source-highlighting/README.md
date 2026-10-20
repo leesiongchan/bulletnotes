@@ -26,8 +26,8 @@ For the full native headless check sequence (prepare, compiler identity,
 formatting, strict Clippy, and the 16 tests), run `python3 scripts/check-markdown.py`
 from the root. Logs and a JSON status summary are written under
 `target/markdown-validation/`. The [native Windows/Linux workflow](../../.github/workflows/markdown-editor.yml)
-uses this same command. It is configured but has not yet run on hosted runners;
-see the [platform matrix](../../docs/validation/markdown-cross-platform.md).
+uses this same command. Hosted results and remaining runtime gates are recorded
+in the [platform matrix](../../docs/validation/markdown-cross-platform.md).
 
 The preparation script verifies the three Slint 1.18.1 archives against the committed
 `patches/slint/sources.json`, extracts private copies under `target/slint-source-highlighting`, and
@@ -88,8 +88,11 @@ state access in the fixture is test instrumentation, not a proposed application 
 
 This probe targets the shared Parley/Skia path and has a native macOS verification
 command. [Cross-target checks](../../docs/validation/markdown-cross-platform.md)
-now pass for Windows, iOS Simulator, and Android; Linux cross-compilation is
-blocked by Fontconfig setup. Native execution on those platforms remains unverified; existing platform IME and accessibility limitations remain.
+pass for Windows, iOS Simulator, and Android; macOS-to-Linux cross-compilation is
+blocked by Fontconfig setup. The platform matrix separately records hosted native
+headless tests: all 16 passed on Ubuntu 24.04 and Windows Server 2025. Native
+windows, OS IME, and accessibility outside macOS remain unverified; mobile
+packaging and runtime checks remain outstanding.
 Other renderer paths are not validated. There is no claim of complete CommonMark
 rendering, hidden syntax, inline checkbox widgets, per-span font metrics, mobile
 packaging, or upstream acceptance. Partial-ligature coloring follows Parley's

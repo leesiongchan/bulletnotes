@@ -72,8 +72,9 @@ The signed development app bundle also built successfully with
 Independent review found a concurrent-bootstrap race; the preparation script now
 holds a per-project OS lock before its cache check through materialization and
 stamp writing. The macOS fix was independently reproduced. The Windows lock path
-uses the standard library and retries only lock-contention errors; Windows runtime
-validation remains outstanding.
+uses the standard library and retries only lock-contention errors. Preparation
+completed in the [hosted Windows job](markdown-cross-platform.md); concurrent
+Windows bootstrap remains unverified.
 
 ## Scope and remaining gates
 
@@ -87,10 +88,11 @@ task boxes while retaining prefix width. Heading font metrics, compact hidden-sy
 layout, and clickable links remain unimplemented. Color changes invalidate shaping;
 there is no paint-only optimization. Parsing is synchronous over current source;
 large-note interaction performance needs separate measurement. Partial-ligature
-coloring follows existing Parley behavior. Native OS IME/VoiceOver and runtime
-coverage on iOS, Android, Windows, and Linux remain separate gates; headless events
-are not a substitute for those device checks. Existing release limitations still
-apply.
+coloring follows existing Parley behavior. The [platform matrix](markdown-cross-platform.md)
+records hosted native headless results. Native OS IME/VoiceOver, Windows/Linux
+window integration, and iOS/Android runtime coverage remain separate gates;
+headless events are not a substitute for those device checks. Existing release
+limitations still apply.
 
 Primary references: [Slint TextInput](https://docs.slint.dev/latest/docs/slint/reference/keyboard-input/textinput/),
 [pulldown-cmark releases](https://github.com/pulldown-cmark/pulldown-cmark/releases).
