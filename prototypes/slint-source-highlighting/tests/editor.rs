@@ -44,16 +44,17 @@ fn red_pixels(ui: &EditorHarness) -> usize {
 fn recoloring_changes_pixels_and_tracks_model_mutation() {
     let ui = setup("Hello café 👩🏽‍💻\r\nsecond line");
     let before = ui.window().take_snapshot().unwrap();
-    assert_eq!(red_pixels(&ui), 0);
+    // Platform fonts can contribute colored pixels before decorations are applied.
+    let baseline_red = red_pixels(&ui);
     let model = Rc::new(VecModel::from(vec![span(0, 5)]));
     ui.set_decorations(ModelRc::from(model.clone()));
-    assert!(red_pixels(&ui) > 10);
+    assert!(red_pixels(&ui) > baseline_red + 10);
     let mut updated = span(0, 5);
     updated.foreground = slint::Color::from_rgb_u8(0, 0, 255);
     model.set_row_data(0, updated);
-    assert_eq!(red_pixels(&ui), 0);
+    assert_eq!(red_pixels(&ui), baseline_red);
     model.set_row_data(0, span(0, 5));
-    assert!(red_pixels(&ui) > 10);
+    assert!(red_pixels(&ui) > baseline_red + 10);
     model.remove(0);
     assert_eq!(
         before.as_bytes(),
