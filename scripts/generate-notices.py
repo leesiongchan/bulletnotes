@@ -11,6 +11,7 @@ import tempfile
 import tomllib
 
 root = pathlib.Path(__file__).resolve().parent.parent
+subprocess.run([sys.executable, str(root / "scripts/prepare-slint.py")], check=True)
 config = tomllib.loads((root / "packaging/about.toml").read_text())
 metadata = json.loads(subprocess.check_output(
     ["rustup", "run", "1.99.1", "cargo", "metadata", "--locked", "--filter-platform", "aarch64-apple-darwin", "--format-version", "1"], cwd=root))

@@ -2,7 +2,7 @@
 
 A native Rust/Slint macOS quick-note development client for SilverBullet, with automatic sync, whole-space browsing, and custom themes.
 
-**Current state: implemented development build.** Local persistence, themes, automatic guarded synchronization, compatible-edit merging and separate recovery copies are implemented. The note window uses Antinote-style circular header controls and an independent capsule footer, with a durable synced scratchpad stack under `Quick Notes/`. Inline Markdown coloring and blur remain deferred; exact selection/IME/VoiceOver, hardware/OS coverage, performance and distribution gates remain explicit.
+**Current state: implemented development build.** Local persistence, themes, automatic guarded synchronization, compatible-edit merging and separate recovery copies are implemented. The note window uses Antinote-style circular header controls and an independent capsule footer, with a durable synced scratchpad stack under `Quick Notes/`. Headings and links use source-preserving, theme-aware Markdown colors, and list/task prefixes paint bullets and boxes through a pinned Slint extension; blur remains deferred. Exact selection/IME/VoiceOver, hardware/OS coverage, performance and distribution gates remain explicit.
 
 See [Antinote UI and navigation evidence](docs/validation/antinote-ui-ux.md), [development usage](docs/usage.md), [current automatic-sync acceptance](docs/validation/automatic-sync-acceptance.md), and the [release matrix](docs/validation/release-matrix.md). The [original approved design](docs/superpowers/specs/2026-10-17-bulletnotes-design.md), [implementation plan](docs/superpowers/plans/2026-10-17-bulletnotes.md), and [native feasibility record](docs/validation/native-gate.md) provide historical context.
 

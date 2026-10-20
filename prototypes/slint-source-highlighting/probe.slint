@@ -1,0 +1,43 @@
+// Feasibility fixture. Internal state outputs below are for regression tests only.
+export component EditorHarness inherits Window {
+    width: 600px;
+    height: 420px;
+    background: #f4f1e9;
+    forward-focus: input;
+    in-out property <string> source;
+    in property <[TextInputDecoration]> decorations;
+    in property <[TextInputMarker]> markers;
+    in property <bool> italic: false;
+    in property <length> editor-width: root.width - 72px;
+    out property <Point> caret-point;
+    out property <length> text-height: input.preferred-height;
+    out property <int> anchor: input.anchor-position-byte-offset;
+    out property <int> caret: input.cursor-position-byte-offset;
+    out property <string> preedit: input.preedit-text;
+    out property <int> edits: 0;
+    callback source-edited();
+    out property <length> text-width: input.preferred-width;
+    public function select(a: int, c: int) { input.set-selection-offsets(a, c); }
+    public function undo-input() { input.undo(); }
+    public function redo-input() { input.redo(); }
+    input := TextInput {
+        x: 36px; y: 36px;
+        width: root.editor-width;
+        height: parent.height - 72px;
+        text <=> root.source;
+        text-decorations: root.decorations;
+        text-markers: root.markers;
+        cursor-position-changed(pos) => { root.caret-point = pos; }
+        single-line: false;
+        wrap: word-wrap;
+        font-family: "Menlo";
+        font-italic: root.italic;
+        font-size: 22px;
+        line-height-factor: 1.5;
+        color: #3c2e18;
+        selection-background-color: #2859b5;
+        selection-foreground-color: white;
+        input-method-hints: { capitalization: none, auto-correct: false, auto-complete: false };
+        edited => { root.edits += 1; root.source-edited(); }
+    }
+}

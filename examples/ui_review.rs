@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         });
     }
-    let original = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n";
+    let original = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n\r\n- [ ] Task\r\n- [x] Done\r\n- List\r\n";
     window.set_note_text(original.into());
     if args
         .iter()

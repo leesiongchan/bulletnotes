@@ -1,0 +1,17 @@
+[
+  {
+    "name": "i-slint-common",
+    "version": "1.18.1",
+    "sha256": "68a578f3e4b681b2b9cbd326d3be19716e2fac51d00a8a5b00c0ef4ae923b5e6"
+  },
+  {
+    "name": "i-slint-compiler",
+    "version": "1.18.1",
+    "sha256": "f55d48ebef05e2bf09ba5a1fc67bcb11033b9e12a2a50ed3105c7d25e2b539d0"
+  },
+  {
+    "name": "i-slint-core",
+    "version": "1.18.1",
+    "sha256": "ed2ea15059d70bc31b1a8b1eb4c34f2c5df04cb7e53f36179b43c0261231d646"
+  }
+]

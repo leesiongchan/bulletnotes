@@ -28,6 +28,10 @@ export component AppWindow inherits Window {
     in-out property <string> active-view:"note";
     in property <string> current-path;
     in-out property <string> note-text;
+    pure callback mark-markdown(string, UiTheme) -> [TextInputMarker];
+    private property <[TextInputMarker]> note-markers: root.mark-markdown(root.note-text,root.theme);
+    pure callback highlight-markdown(string, UiTheme, bool) -> [TextInputDecoration];
+    private property <[TextInputDecoration]> note-decorations: root.highlight-markdown(root.note-text,root.theme,root.system-high-contrast);
     in property <string> status-text;
     in-out property <bool> is-pinned:false;
     in-out property <bool> header-hovered:false;
@@ -254,6 +258,8 @@ export component AppWindow inherits Window {
                     top-clearance:root.find-visible ? 92px : 32px;
                     theme: root.theme;
                     text <=> root.note-text;
+                    decorations: root.note-decorations;
+                    markers: root.note-markers;
                     font-size-px: root.font-size-px;
                     paper-style: root.paper-style;
                     read-only: root.note-read-only || root.recovery-busy || root.lifecycle-pending;

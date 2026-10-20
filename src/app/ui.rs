@@ -30,6 +30,17 @@ fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
 }
 /// Change presentation without replacing the editor or modifying its source text.
 pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
+    // The pure callback binding refreshes for every source and effective palette change.
+    window.on_highlight_markdown(|source, palette, high_contrast| {
+        ModelRc::from(super::markdown::decorations(&source, &palette, high_contrast).as_slice())
+    });
+    window.on_mark_markdown(|source, palette| {
+        ModelRc::from(super::markdown::markers(&source, &palette).as_slice())
+    });
+    tracing::debug!(
+        slint_version = "1.18.1",
+        "Markdown highlighting and marker palette applied"
+    );
     let adjusted = window
         .get_system_high_contrast()
         .then(|| theme::accessibility::high_contrast(&resolved.palette));
