@@ -44,6 +44,103 @@ fn red_mask(ui: &EditorHarness) -> Vec<bool> {
 }
 
 #[test]
+fn compact_tasks_align_with_bullets_and_keep_source_hit_testing() {
+    use slint::platform::PointerEventButton;
+    let source = "- [ ] café 日本語\n- café 日本語";
+    let ui = setup(source);
+    let raw_height = ui.get_text_height();
+    ui.invoke_select(6, 6);
+    let raw_prefix_width = ui.get_caret_point().x;
+    ui.invoke_select(8, 8);
+    let body_advance = ui.get_caret_point().x - raw_prefix_width;
+    let mut task = marker(0, 6, Kind::Checkbox);
+    task.compact = true;
+    let start = source.find("\n-").unwrap() as i32 + 1;
+    let mut bullet = marker(start, start + 2, Kind::Bullet);
+    bullet.compact = true;
+    ui.set_markers(ModelRc::from([task, bullet]));
+    ui.invoke_select(8, 8);
+    let _ = ui.window().take_snapshot().unwrap();
+    let task_point = ui.get_caret_point();
+    assert!((task_point.x - body_advance - 22.0 * 2.0).abs() < 0.1);
+    ui.invoke_select(start + 4, start + 4);
+    let _ = ui.window().take_snapshot().unwrap();
+    assert!((task_point.x - ui.get_caret_point().x).abs() < 0.1);
+    assert_eq!(ui.get_text_height(), raw_height);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: slint::LogicalPosition::new(task_point.x + 36.2, task_point.y + 42.0),
+        button: PointerEventButton::Left,
+    });
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: slint::LogicalPosition::new(task_point.x + 36.2, task_point.y + 42.0),
+        button: PointerEventButton::Left,
+    });
+    assert_eq!((ui.get_anchor(), ui.get_caret()), (8, 8));
+    ui.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: "X".into() });
+    ui.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: "X".into() });
+    assert_eq!(
+        ui.get_source(),
+        format!("{}X{}", &source[..8], &source[8..])
+    );
+    ui.invoke_undo_input();
+    assert_eq!(ui.get_source(), source);
+    ui.invoke_redo_input();
+    assert_eq!(
+        ui.get_source(),
+        format!("{}X{}", &source[..8], &source[8..])
+    );
+}
+
+#[test]
+fn compact_prefix_reveal_and_narrow_fallback_preserve_raw_geometry() {
+    let ui = setup("- [ ] Task");
+    let mut task = marker(0, 6, Kind::Checkbox);
+    task.compact = true;
+    for offset in 0..=6 {
+        ui.set_markers(ModelRc::default());
+        ui.invoke_select(offset, offset);
+        let raw = ui.window().take_snapshot().unwrap();
+        ui.set_markers(ModelRc::from([task.clone()]));
+        assert_eq!(
+            raw.as_bytes(),
+            ui.window().take_snapshot().unwrap().as_bytes()
+        );
+    }
+    ui.invoke_select(9, 2);
+    let selected = ui.window().take_snapshot().unwrap();
+    ui.set_markers(ModelRc::default());
+    assert_eq!(
+        selected.as_bytes(),
+        ui.window().take_snapshot().unwrap().as_bytes()
+    );
+    ui.invoke_select(10, 10);
+    ui.set_editor_width(20.0);
+    let narrow = ui.window().take_snapshot().unwrap();
+    ui.set_markers(ModelRc::from([task]));
+    assert_eq!(
+        narrow.as_bytes(),
+        ui.window().take_snapshot().unwrap().as_bytes()
+    );
+    assert_eq!(ui.get_source(), "- [ ] Task");
+    assert_eq!(ui.get_edits(), 0);
+}
+
+#[test]
+fn task_only_lines_keep_their_height_when_compacted() {
+    let ui = setup("- [ ] \n");
+    let height = ui.get_text_height();
+    let mut task = marker(0, 6, Kind::Checkbox);
+    task.compact = true;
+    ui.set_markers(ModelRc::from([task]));
+    assert!(red_mask(&ui).iter().any(|pixel| *pixel));
+    assert_eq!(ui.get_text_height(), height);
+    assert_eq!(ui.get_source(), "- [ ] \n");
+    assert_eq!(ui.get_edits(), 0);
+}
+
+#[test]
 fn marker_model_changes_pixels_without_changing_source_metrics_or_undo() {
     let source = "- [ ] café 👩🏽‍💻\r\n- List 日本語";
     let ui = setup(source);
@@ -112,7 +209,12 @@ fn caret_and_selection_reveal_the_exact_original_prefix() {
 }
 
 #[test]
-fn preedit_before_a_marker_keeps_source_offsets_and_inside_reveals_raw() {
+fn preedit_before_a_compact_marker_keeps_source_offsets_and_inside_reveals_raw() {
+    let marker = |start, end, kind| {
+        let mut value = marker(start, end, kind);
+        value.compact = true;
+        value
+    };
     let source = "é \r\n- [ ] Task";
     let ui = setup(source);
     let start = source.find('-').unwrap() as i32;

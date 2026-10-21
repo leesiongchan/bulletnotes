@@ -23,7 +23,7 @@ CARGO_TARGET_DIR="$PWD/target" rustup run 1.99.1 cargo run --locked \
 ```
 
 For the full native headless check sequence (prepare, compiler identity,
-formatting, strict Clippy, and the 16 tests), run `python3 scripts/check-markdown.py`
+formatting, strict Clippy, and the probe tests), run `python3 scripts/check-markdown.py`
 from the root. Logs and a JSON status summary are written under
 `target/markdown-validation/`. The [native Windows/Linux workflow](../../.github/workflows/markdown-editor.yml)
 uses this same command. Hosted results and remaining runtime gates are recorded
@@ -50,14 +50,20 @@ prefix. See [marker evidence](../../docs/validation/markdown-markers.md).
 ## Experimental contract
 
 `TextInput.text-decorations` accepts a model of `TextInputDecoration` values with
-`start`, `end`, and `foreground` fields. Offsets address half-open UTF-8 byte ranges
+`start`, `end`, and `foreground` fields, plus `bold`, `italic`, `strikethrough`,
+`underline`, and `code` flags (all false by default). Flags compose within a single
+range; nested source formatting must be flattened into disjoint combined runs.
+Code uses monospace and a subtle capsule at the input's base font size.
+Offsets address half-open UTF-8 byte ranges
 in the current committed source, including Markdown punctuation. Submit ranges in
 ascending, non-overlapping order. Invalid bounds, empty ranges, split UTF-8 code
-points, overlaps, and out-of-order entries are ignored; accepted earlier ranges
+points, overlaps, and out-of-order entries are ignored; font-changing flags also
+reject split graphemes. Accepted earlier ranges
 win. Recompute ranges when the source changes. Password inputs ignore decorations.
 
 The patch maps committed-source offsets around transient IME preedit without
-coloring the preedit itself. Selection foreground overrides decorations. Existing
+styling the preedit itself. All styles for each fragment are emitted together so
+multiline source remains ordered around composition. Selection foreground overrides decorations. Existing
 Slint input handling continues to own selection, editing, and undo. Model mutations
 are tracked by the shaping cache. Changing colors invalidates shaping; this is not
 a separate paint-only overlay. The Parley path clips global ranges into each
@@ -72,9 +78,9 @@ links. No Markdown serialization or source replacement is involved.
 Verified on macOS with Rust 1.99.1:
 
 - Preparation applied the patch to fresh checksum-verified crate copies.
-- All 16 probe tests passed (seven coloring tests and nine marker tests); probe
+- All 23 probe tests passed (11 source-style tests and 12 marker tests); probe
   formatting and strict Clippy passed.
-- `scripts/check.sh` passed: 341 tests passed, 24 ignored.
+- `scripts/check.sh` passed: 348 tests passed, 24 ignored.
 - The native Winit/Skia/Metal capture preserved exact source bytes with zero edit
   callbacks. Visually inspected [before](evidence/before.png) and
   [after](evidence/after.png): headings and links acquire color at unchanged
@@ -100,6 +106,10 @@ existing behavior and is not independently guaranteed for part of one glyph.
 
 The application maintains this compact local patch; upstream acceptance remains
 unconfirmed. See [application integration evidence](../../docs/validation/markdown-highlighting.md).
-The marker mode proves source-width-preserving painting only. Compact AntiNote-like
-spacing, clickable task boxes, and heading sizing
-require separate work.
+The interactive marker mode retains its original source-width-preserving painting.
+The application opts into `TextInputMarker.compact`; regression tests exercise its
+two-em slots, body hit testing, undo, raw-source reveal, IME, and narrow fallback.
+Compaction adjusts source-cluster letter spacing while preserving font metrics
+and UTF-8 offsets. It rejects RTL paragraphs, invalid cluster advances, overlapping
+formatting, and slots that do not fit. Checked boxes use ticks and rounded outlines.
+Clickable task boxes and variable heading sizes remain outside this change.

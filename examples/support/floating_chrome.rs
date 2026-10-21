@@ -163,8 +163,8 @@ pub fn run() -> Result<()> {
             assert!(close.isHidden());
             // The first writing line remains clickable while the header controls are hidden.
             window.invoke_restore_editor_position(6, 6, 0.0);
-            mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseDown)?;
-            mouse(&window, 42.0, size.height - 43.0, NSEventType::LeftMouseUp)?;
+            mouse(&window, 47.0, size.height - 43.0, NSEventType::LeftMouseDown)?;
+            mouse(&window, 47.0, size.height - 43.0, NSEventType::LeftMouseUp)?;
             pause(40).await?;
             edges(&window, (false, false))?;
             key(&window, "X".into());

@@ -1,14 +1,15 @@
-# Source-width-preserving Markdown markers
+# Markdown source markers
 
 The note editor paints bullets, outlined task boxes, and checked boxes with a
-filled center over unchanged Markdown source. The standalone probe exercises the
+tick over unchanged Markdown source. The standalone probe exercises the
 same maintained Slint extension with fixed colors independently of the app.
 
 The implementation extends the existing Slint 1.18.1 TextInput/Parley painting path.
-It retains the full source prefix width, so text does not move and the task box
-has more following space than AntiNote's compact rendering. It adds no alternate
-text buffer or source/display offset mapping. Existing editing, selection, undo,
-IME, and hit testing continue to use the source layout. Boxes are not clickable.
+The original probe retains full source prefix width. The application now opts
+into compact two-em slots so task and bullet text align. Source-cluster letter
+spacing changes while font metrics and UTF-8 offsets remain intact. It adds no
+alternate text buffer or source/display offset mapping. Editing, selection, undo,
+IME, and hit testing share the shaped source layout. Boxes are not clickable.
 
 ## Reproduce
 
@@ -38,7 +39,11 @@ and zero edit callbacks, and exits. It uses generated content without a user sto
 `TextInput.text-markers` takes sorted, non-overlapping `TextInputMarker` entries:
 `start` and `end` are half-open UTF-8 source byte offsets; `kind` is `bullet`,
 `checkbox`, or `checked-checkbox`; `foreground` supplies the marker color.
-The model defaults to empty. Password inputs ignore it.
+The model defaults to empty. Password inputs ignore it. Optional `compact`
+defaults to false. When true, simple ASCII prefixes use a two-em slot; caret or
+selection reveal restores their original spacing. RTL paragraphs, unsafe cluster
+advances, overlapping formatting, and slots that cannot fit remain raw. An empty
+task-only line keeps its original line height.
 
 Invalid, empty, overlapping, unsorted, multiline, transparent, or grapheme-splitting
 ranges remain raw source. Existing Unicode segmentation validates grapheme
@@ -125,11 +130,12 @@ Initial source assignment plus the first snapshot for 5,000 tasks still took
 latency, display frame rate, or device readiness. The temporary diagnostic was
 removed after measurement; it does not add a timing threshold to the test suite.
 
-This implements a bounded painting extension, not compact Markdown layout or complete
-CommonMark rendering. Suppressing source advances would require a separate design
-for layout, source/display mapping, selections, IME, and accessibility. Checked
-boxes use a filled center rather than a tick, and there are no independent widget
-focus or accessibility nodes. The underlying TextInput still exposes source text.
+The compact-slot follow-up adds rounded outlines and actual ticks. It does not
+add independent widget focus or accessibility nodes; the underlying TextInput
+still exposes source text. Earlier captures and timings above describe the
+original width-preserving implementation. See the
+[updated native capture](markdown-highlighting/antinote-tartan-after.png) and
+[follow-up checks](markdown-highlighting.md#native-antinote-palette-and-task-spacing).
 
 Native Winit window capture has only been exercised on macOS. The follow-up
 [cross-platform audit](markdown-cross-platform.md) records source checks, hosted

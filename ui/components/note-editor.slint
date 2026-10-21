@@ -10,7 +10,8 @@ export component NoteEditor inherits Rectangle {
     in property <bool> read-only:false;
     in property <length> top-clearance:16px;
     out property <float> scroll-y:-scroll.content-y / 1px;
-    out property <length> line-height:max(1px,measure-two.preferred-height - measure-one.preferred-height);
+    out property <length> line-height:root.font-size-px * 1.6px;
+    private property <float> line-factor:root.line-height / max(1px,measure-one.font-metrics.ascent - measure-one.font-metrics.descent);
     callback edited(string);
     callback move-to-trash();
     callback key-pressed(KeyEvent) -> EventResult;
@@ -24,26 +25,17 @@ export component NoteEditor inherits Rectangle {
         text: "Ag";
         font-family: "Menlo";
         font-size: root.font-size-px * 1px;
-        line-height-factor: 1.5;
+        line-height-factor: 1;
         wrap: no-wrap;
     }
 
-    measure-two := Text {
-        visible: false;
-        text: "Ag\nAg";
-        font-family: "Menlo";
-        font-size: root.font-size-px * 1px;
-        line-height-factor: 1.5;
-        wrap: no-wrap;
-    }
-
-    private property <length> decoration-step:root.paper-style == "ruled" ? root.line-height : 18px;
-    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? root.top-clearance : 0px)) / root.decoration-step);
+    private property <length> decoration-step:root.paper-style == "ruled" || root.paper-style == "grid" ? root.line-height : 18px;
+    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? root.top-clearance : root.paper-style == "grid" ? 5.35px : 0px)) / root.decoration-step);
     private property <int> rows:ceil(root.height / root.decoration-step) + 2;
-    private property <int> columns:ceil(root.width / 18px) + 1;
+    private property <int> columns:ceil(root.width / root.decoration-step) + 1;
     for row in root.rows: Rectangle {
-        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? root.top-clearance : 0px) - 3px;
-        height: root.paper-style == "dots" ? 2px : 1px;
+        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? root.top-clearance - 3px : root.paper-style == "grid" ? 5.35px : -3px);
+        height: root.paper-style == "dots" ? 2px : root.paper-style == "grid" ? max(0.5px,1phx) : 1px;
         width: parent.width;
         visible: root.paper-style != "plain";
         accessible-role: none;
@@ -60,8 +52,8 @@ export component NoteEditor inherits Rectangle {
     }
     for col in root.columns: Rectangle {
         visible: root.paper-style == "grid";
-        x: col * 18px + 8px;
-        width: 1px;
+        x: col * root.decoration-step;
+        width: max(0.5px,1phx);
         height: parent.height;
         background: root.theme.pattern;
         accessible-role: none;
@@ -114,9 +106,9 @@ export component NoteEditor inherits Rectangle {
             content-width: self.visible-width;
             content-height: max(self.visible-height,input.preferred-height + root.top-clearance + 64px);
             input := TextInput {
-                x: 40px;
+                x: 45px;
                 y: root.top-clearance;
-                width: max(1px,scroll.visible-width - 80px);
+                width: max(1px,scroll.visible-width - 90px);
                 height: max(scroll.visible-height - root.top-clearance - 64px,self.preferred-height);
                 text <=> root.text;
                 text-decorations: root.decorations;
@@ -126,7 +118,7 @@ export component NoteEditor inherits Rectangle {
                 read-only: root.read-only;
                 font-family: "Menlo";
                 font-size: root.font-size-px * 1px;
-                line-height-factor: 1.5;
+                line-height-factor: root.line-factor;
                 color: root.theme.ink;
                 selection-background-color: root.theme.cursor;
                 selection-foreground-color: root.theme.ink;

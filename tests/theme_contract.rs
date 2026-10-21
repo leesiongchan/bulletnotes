@@ -81,14 +81,25 @@ fn export_roundtrips_version_one() -> Result<(), ThemeError> {
     Ok(())
 }
 #[test]
-fn cursor_and_scrollbar_colors_survive_export_and_settings_roundtrips() {
+fn optional_colors_survive_export_and_settings_roundtrips() {
     let mut input: Value = serde_json::from_slice(VALID).unwrap();
     input["cursor"] = json!("#19A2E6");
     input["scrollbar"] = json!("#E69A19");
+    input["grid"] = json!("#DEDAD0");
+    input["swatches"] = json!([
+        "#FF7828", "#C85A1E", "#FFA050", "#4BA64B", "#6E8CA0", "#42230F", "#422323", "#F6BF9F"
+    ]);
+    input["markdown"] = json!({
+        "heading1": "#FF8D33", "heading2": "#D46F27", "heading3": "#FFB062",
+        "link": "#9F5910", "syntax": "#949494"
+    });
     let theme = decode_theme(&serde_json::to_vec(&input).unwrap()).unwrap();
     let exported: Value = serde_json::from_slice(&encode_theme(&theme).unwrap()).unwrap();
     assert_eq!(exported["cursor"], "#19A2E6");
     assert_eq!(exported["scrollbar"], "#E69A19");
+    assert_eq!(exported["grid"], input["grid"]);
+    assert_eq!(exported["swatches"], input["swatches"]);
+    assert_eq!(exported["markdown"], input["markdown"]);
     let settings = bulletnotes::store::settings::AppSettings {
         imported_themes: vec![ThemeEntry::import(theme)],
         ..Default::default()
@@ -99,7 +110,14 @@ fn cursor_and_scrollbar_colors_survive_export_and_settings_roundtrips() {
 }
 #[test]
 fn cursor_and_scrollbar_reject_invalid_colors() {
-    for field in ["cursor", "scrollbar"] {
+    for value in [
+        json!(vec!["#FFFFFF"; 7]),
+        json!(vec!["invalid"; 8]),
+        json!(vec![Value::Null; 8]),
+    ] {
+        assert!(decode_theme(&modified("swatches", value)).is_err());
+    }
+    for field in ["cursor", "scrollbar", "grid"] {
         for value in [json!("#fff"), json!("#FFFFFF00"), json!(17)] {
             assert!(decode_theme(&modified(field, value)).is_err(), "{field}");
         }

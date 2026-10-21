@@ -1,10 +1,10 @@
 --- a/i-slint-common-1.18.1/builtin_structs.rs
 +++ b/i-slint-common-1.18.1/builtin_structs.rs
-@@ -52,6 +52,33 @@
+@@ -52,6 +52,45 @@
  macro_rules! for_each_builtin_structs {
      ($macro:ident) => {
          $macro! {
-+            /// Experimental paint-only replacement over a source range, retaining its width.
++            /// Vector replacement over unchanged source, with optional compact spacing.
 +            /// Raw source is shown while the cursor, selection, or composition touches the range.
 +            #[non_exhaustive]
 +            pub struct TextInputMarker {
@@ -16,11 +16,13 @@
 +                kind: TextInputMarkerKind,
 +                /// Marker foreground; transparent colors leave the source visible.
 +                foreground: Color,
++                /// Use a compact two-em slot while the marker is painted.
++                compact: bool,
 +            }
 +
-+            /// A foreground decoration over unchanged TextInput source.
++            /// Combined styling over unchanged TextInput source.
 +            /// Ranges are half-open UTF-8 byte offsets. Invalid, empty, overlapping,
-+            /// or unsorted ranges are ignored. The composition keeps its base color.
++            /// or unsorted ranges are ignored. The composition keeps its base style.
 +            #[non_exhaustive]
 +            pub struct TextInputDecoration {
 +                /// First source byte in the range.
@@ -29,6 +31,16 @@
 +                end: i32,
 +                /// Foreground color, overridden by selected-text foreground.
 +                foreground: Color,
++                /// Render the range in bold; false preserves the input's base weight.
++                bold: bool,
++                /// Render the range in italics.
++                italic: bool,
++                /// Draw a line through the range.
++                strikethrough: bool,
++                /// Underline the range without making it interactive.
++                underline: bool,
++                /// Monospace code with a subtle background, retaining the base font size.
++                code: bool,
 +            }
 +
              /// The `KeyboardModifiers` struct provides booleans to indicate possible modifier keys on a keyboard, such as Shift, Control, etc.
@@ -58,9 +70,9 @@
 +++ b/i-slint-compiler-1.18.1/builtin_elements.rs
 @@ -2244,6 +2244,11 @@
      }
- 
+
      item! { TextInput {
-+        /// Experimental paint-only markers. Invalid or fragmented ranges remain raw source.
++        /// Experimental source markers. Invalid or fragmented ranges remain raw source.
 +        in property <[TextInputMarker]> text-markers;
 +        /// Experimental source decorations. Sorted non-overlapping UTF-8 byte ranges.
 +        /// Empty by default; this property never modifies text or undo history.
@@ -78,6 +90,17 @@
          ($pub_type:ident, Coord) => { Type::LogicalLength };
          ($pub_type:ident, Keys) => { Type::Keys };
          ($pub_type:ident, DataTransfer) => { Type::DataTransfer };
+--- a/i-slint-common-1.18.1/styled_text.rs
++++ b/i-slint-common-1.18.1/styled_text.rs
+@@ -9,6 +9,8 @@
+     Strong,
+     Strikethrough,
+     Code,
++    SourceCode,
++    CompactMarker { max_width: f32 },
+     Link,
+     Underline,
+     // ARGB encoded
 --- a/i-slint-core-1.18.1/item_rendering.rs
 +++ b/i-slint-core-1.18.1/item_rendering.rs
 @@ -477,6 +477,9 @@
@@ -92,7 +115,15 @@
          0
 --- a/i-slint-core-1.18.1/items/text.rs
 +++ b/i-slint-core-1.18.1/items/text.rs
-@@ -761,6 +761,8 @@
+@@ -744,6 +744,7 @@
+ enum UndoItemKind {
+     TextInsert,
+     TextRemove,
++    TextReplace(SharedString),
+ }
+
+ #[repr(C)]
+@@ -761,6 +762,8 @@
  #[derive(FieldOffsets, Default, SlintElement)]
  #[pin]
  pub struct TextInput {
@@ -101,58 +132,289 @@
      pub text: Property<SharedString>,
      pub font_family: Property<SharedString>,
      pub font_size: Property<LogicalLength>,
-@@ -1340,6 +1342,46 @@
+@@ -1131,20 +1134,21 @@
+                     return KeyEventResult::EventIgnored;
+                 }
+
+-                self.delete_selection(window_adapter, self_rc, TextChangeNotify::SkipCallbacks);
+-
++                let (insert_pos, selection_end) = self.selection_anchor_and_cursor();
+                 let mut text: String = self.text().into();
+-
+-                // FIXME: respect grapheme boundaries
+-                let insert_pos = self.selection_anchor_and_cursor().1;
+-                text.insert_str(insert_pos, &event.key_event.text);
++                let kind = if insert_pos == selection_end {
++                    UndoItemKind::TextInsert
++                } else {
++                    UndoItemKind::TextReplace(text[insert_pos..selection_end].into())
++                };
++                text.replace_range(insert_pos..selection_end, &event.key_event.text);
+
+                 self.add_undo_item(UndoItem {
+                     pos: insert_pos,
+                     text: event.key_event.text.clone(),
+                     cursor: real_cursor,
+                     anchor: real_anchor,
+-                    kind: UndoItemKind::TextInsert,
++                    kind,
+                 });
+
+                 self.as_ref().set_text_internal(text.into());
+@@ -1339,7 +1343,166 @@
+     }
  }
- 
+
++impl TextInput {
++    pub(crate) fn visual_markers(self: Pin<&Self>) -> alloc::vec::Vec<super::TextInputMarker> {
++        use crate::model::Model;
++        let model = self.text_markers();
++        model.model_tracker().track_any_change(model.row_count(), crate::InternalToken);
++        if model.row_count() == 0 || self.is_password() {
++            return alloc::vec::Vec::new();
++        }
++        let source = self.text();
++        let cursor = self.cursor_position(&source);
++        let (selection_start, selection_end) = self.selection_anchor_and_cursor();
++        let preedit = self.preedit_text();
++        let mut previous_end = 0;
++        let mut result = alloc::vec::Vec::new();
++        for mut marker in model.iter() {
++            let (Ok(start), Ok(end)) = (usize::try_from(marker.start), usize::try_from(marker.end))
++            else {
++                continue;
++            };
++            if start < previous_end
++                || start >= end
++                || end > source.len()
++                || !source.is_char_boundary(start)
++                || !source.is_char_boundary(end)
++                || [start, end].into_iter().any(|offset| {
++                    unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
++                        .is_boundary(&source, 0)
++                        != Ok(true)
++                })
++                || source[start..end].contains(['\r', '\n'])
++                || marker.foreground.alpha() == 0
++            {
++                continue;
++            }
++            previous_end = end;
++            if (start..=end).contains(&cursor) || (selection_start < end && selection_end > start) {
++                continue;
++            }
++            let shift = if !preedit.is_empty() && cursor < start { preedit.len() } else { 0 };
++            let (Ok(start), Ok(end)) = (i32::try_from(start + shift), i32::try_from(end + shift))
++            else {
++                continue;
++            };
++            marker.start = start;
++            marker.end = end;
++            result.push(marker);
++        }
++        result
++    }
++}
++
  impl RenderString for TextInput {
-+    fn text_decorations(self: Pin<&Self>) -> alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan> {
++    fn text_decorations(
++        self: Pin<&Self>,
++    ) -> alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan> {
 +        use crate::model::Model;
 +        use i_slint_common::styled_text::{FormattedSpan, Style};
 +
 +        let model = self.text_decorations();
 +        let count = model.row_count();
 +        model.model_tracker().track_any_change(count, crate::InternalToken);
-+        if count == 0 || self.is_password() {
++        let marker_model = self.text_markers();
++        marker_model
++            .model_tracker()
++            .track_any_change(marker_model.row_count(), crate::InternalToken);
++        let markers = if marker_model.iter().any(|marker| marker.compact) {
++            self.visual_markers()
++        } else {
++            alloc::vec::Vec::new()
++        };
++        if (count == 0 && markers.is_empty()) || self.is_password() {
 +            return alloc::vec::Vec::new();
 +        }
 +        let source = self.text();
 +        let preedit = self.preedit_text();
-+        // Cursor movement alone must not become a shaping dependency.
++        // Formatting alone is cursor-independent; compact markers track reveal separately.
 +        let insertion = (!preedit.is_empty()).then(|| self.cursor_position(&source));
 +        let mut spans = alloc::vec::Vec::with_capacity(count);
 +        let mut previous_end = 0;
 +        for decoration in model.iter() {
-+            let (Ok(start), Ok(end)) = (usize::try_from(decoration.start), usize::try_from(decoration.end)) else {
++            let (Ok(start), Ok(end)) =
++                (usize::try_from(decoration.start), usize::try_from(decoration.end))
++            else {
 +                continue;
 +            };
-+            if start < previous_end || start >= end || end > source.len()
-+                || !source.is_char_boundary(start) || !source.is_char_boundary(end) {
++            if start < previous_end
++                || start >= end
++                || end > source.len()
++                || !source.is_char_boundary(start)
++                || !source.is_char_boundary(end)
++            {
++                continue;
++            }
++            if (decoration.bold || decoration.italic || decoration.code)
++                && [start, end].into_iter().any(|offset| {
++                    unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
++                        .is_boundary(&source, 0)
++                        != Ok(true)
++                })
++            {
 +                continue;
 +            }
 +            previous_end = end;
-+            let style = Style::Color(decoration.foreground.as_argb_encoded());
++            let mut append = |range: core::ops::Range<usize>| {
++                if range.is_empty() {
++                    return;
++                }
++                for (enabled, style) in [
++                    (true, Style::Color(decoration.foreground.as_argb_encoded())),
++                    (decoration.bold, Style::Strong),
++                    (decoration.italic, Style::Emphasis),
++                    (decoration.strikethrough, Style::Strikethrough),
++                    (decoration.underline, Style::Underline),
++                    (decoration.code, Style::SourceCode),
++                ] {
++                    if enabled {
++                        spans.push(FormattedSpan { range: range.clone(), style });
++                    }
++                }
++            };
 +            if let Some(at) = insertion {
 +                // Preedit is transient and must not inherit committed-source ranges.
 +                if start < end.min(at) {
-+                    spans.push(FormattedSpan { range: start..end.min(at), style: style.clone() });
++                    append(start..end.min(at));
 +                }
 +                if start.max(at) < end {
-+                    spans.push(FormattedSpan { range: start.max(at) + preedit.len()..end + preedit.len(), style });
++                    append(start.max(at) + preedit.len()..end + preedit.len());
 +                }
 +            } else {
-+                spans.push(FormattedSpan { range: start..end, style });
++                append(start..end);
 +            }
++        }
++        if !markers.is_empty() {
++            let visual = self.text_with_preedit().0;
++            let mut compact = alloc::vec::Vec::new();
++            for marker in markers.into_iter().filter(|marker| marker.compact) {
++                let range = marker.start as usize..marker.end as usize;
++                let prefix = &visual[range.clone()];
++                // Compact only simple list prefixes; unsupported source keeps its native layout.
++                if !prefix.ends_with(' ')
++                    || !prefix
++                        .bytes()
++                        .all(|b| matches!(b, b'-' | b'+' | b'*' | b'[' | b']' | b' ' | b'x' | b'X'))
++                {
++                    continue;
++                }
++                let next = spans.partition_point(|span| span.range.end <= range.start);
++                if spans.get(next).is_some_and(|span| span.range.start < range.end) {
++                    continue;
++                }
++                compact.push(FormattedSpan {
++                    range,
++                    style: Style::CompactMarker { max_width: self.width().get() },
++                });
++            }
++            spans.extend(compact);
++            spans.sort_by_key(|span| (span.range.start, span.range.end));
 +        }
 +        spans
 +    }
      fn text(self: Pin<&Self>) -> PlainOrStyledText {
          // Deliberately not `visual_representation`, which would size the item off the cursor and
          // the selection too -- see `text_with_preedit`.
+@@ -1955,15 +2118,19 @@
+             (self.cursor_position(&text), self.anchor_position(&text))
+         };
+
+-        self.delete_selection(window_adapter, self_rc, TextChangeNotify::SkipCallbacks);
++        let (cursor_pos, selection_end) = self.selection_anchor_and_cursor();
+         let mut text: String = self.text().into();
+-        let cursor_pos = self.selection_anchor_and_cursor().1;
++        let kind = if cursor_pos == selection_end {
++            UndoItemKind::TextInsert
++        } else {
++            UndoItemKind::TextReplace(text[cursor_pos..selection_end].into())
++        };
+         let mut inserted_text: SharedString = text_to_insert.into();
+         if text_to_insert.contains('\n') && self.single_line() {
+             inserted_text = text_to_insert.replace('\n', " ").into();
+-            text.insert_str(cursor_pos, &inserted_text);
++            text.replace_range(cursor_pos..selection_end, &inserted_text);
+         } else {
+-            text.insert_str(cursor_pos, text_to_insert);
++            text.replace_range(cursor_pos..selection_end, text_to_insert);
+         }
+
+         self.add_undo_item(UndoItem {
+@@ -1971,7 +2138,7 @@
+             text: inserted_text,
+             cursor: real_cursor,
+             anchor: real_anchor,
+-            kind: UndoItemKind::TextInsert,
++            kind,
+         });
+
+         let cursor_pos = cursor_pos + text_to_insert.len();
+@@ -2259,6 +2426,7 @@
+     }
+
+     fn add_undo_item(self: Pin<&Self>, item: UndoItem) {
++        self.redo_items.set(Default::default());
+         let mut items = self.undo_items.take();
+         // try to merge with the last item
+         if let Some(last) = items.make_mut_slice().last_mut() {
+@@ -2330,6 +2498,19 @@
+                     self_rc,
+                 );
+             }
++            UndoItemKind::TextReplace(ref removed) => {
++                let mut text: String = self.text().into();
++                text.replace_range(last.pos..last.pos + last.text.len(), removed);
++                self.set_text_internal(text.into());
++                self.anchor_position_byte_offset.set(last.anchor as i32);
++                self.set_cursor_position(
++                    last.cursor as i32,
++                    true,
++                    TextChangeNotify::TriggerCallbacks,
++                    window_adapter,
++                    self_rc,
++                );
++            }
+         }
+         self.undo_items.set(items);
+
+@@ -2375,6 +2556,20 @@
+                     self_rc,
+                 );
+             }
++            UndoItemKind::TextReplace(ref removed) => {
++                let mut text: String = self.text().into();
++                text.replace_range(last.pos..last.pos + removed.len(), &last.text);
++                self.set_text_internal(text.into());
++                let cursor = (last.pos + last.text.len()) as i32;
++                self.anchor_position_byte_offset.set(cursor);
++                self.set_cursor_position(
++                    cursor,
++                    true,
++                    TextChangeNotify::TriggerCallbacks,
++                    window_adapter,
++                    self_rc,
++                );
++            }
+         }
+
+         self.redo_items.set(items);
 --- a/i-slint-core-1.18.1/textlayout/sharedparley/draw.rs
 +++ b/i-slint-core-1.18.1/textlayout/sharedparley/draw.rs
 @@ -5,6 +5,7 @@
  //! capsules, and the clip-based recoloring of selected glyphs.
- 
+
  use super::layout::ElisionCut;
 +use super::markers::MarkerRendering;
  use super::selection::{RunCoverage, SelectionSpan, run_coverage};
@@ -165,7 +427,7 @@
 +        markers: &[MarkerRendering],
      ) {
          let para_y = layout.y_offset + self.y;
- 
+
 @@ -177,6 +179,10 @@
              let vertically_truncated = last_line && vertical_truncation;
              let line_spans =
@@ -238,7 +500,7 @@
 +            draw_visible(x..clip_x.end);
 +            return;
 +        }
- 
+
          // Bidirectional text reorders glyphs within a run, so this filters rather than truncating.
          let x_range = visible_x_range.cloned();
 @@ -660,6 +707,7 @@
@@ -259,19 +521,20 @@
      }
 --- /dev/null
 +++ b/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,187 @@
 +// Copyright © SixtyFPS GmbH <info@slint.dev>
 +// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
 +
-+//! Experimental source-width-preserving markers. All decisions affect painting only.
++//! Source markers with optional compact slots over unchanged source offsets.
 +use super::*;
 +use crate::items::{TextInput, TextInputMarkerKind};
-+use crate::model::Model;
++use crate::lengths::LogicalVector;
 +
 +pub(super) struct Marker {
 +    range: Range<usize>,
 +    kind: TextInputMarkerKind,
 +    foreground: Color,
++    compact: bool,
 +}
 +
 +pub(super) struct MarkerRendering {
@@ -283,72 +546,31 @@
 +
 +/// Evaluate model bindings before entering the font-context borrow.
 +pub(super) fn prepare(input: Pin<&TextInput>) -> Vec<Marker> {
-+    let model = input.text_markers();
-+    let count = model.row_count();
-+    model
-+        .model_tracker()
-+        .track_any_change(count, crate::InternalToken);
-+    if count == 0 || input.is_password() {
-+        return Vec::new();
-+    }
-+    let source = input.text();
-+    let cursor = input.cursor_position(&source);
-+    let (selection_start, selection_end) = input.selection_anchor_and_cursor();
-+    let preedit = input.preedit_text();
-+    let mut previous_end = 0;
-+    let mut markers = Vec::new();
-+    for marker in model.iter() {
-+        let (Ok(start), Ok(end)) = (usize::try_from(marker.start), usize::try_from(marker.end))
-+        else {
-+            continue;
-+        };
-+        if start < previous_end
-+            || start >= end
-+            || end > source.len()
-+            || !source.is_char_boundary(start)
-+            || !source.is_char_boundary(end)
-+            || [start, end].into_iter().any(|offset| {
-+                unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
-+                    .is_boundary(&source, 0)
-+                    != Ok(true)
-+            })
-+            || source[start..end].contains(['\r', '\n'])
-+            || marker.foreground.alpha() == 0
-+        {
-+            continue;
-+        }
-+        previous_end = end;
-+        // Use the logical cursor, never cursor_visible: blinking cannot change syntax reveal.
-+        if (start..=end).contains(&cursor) || (selection_start < end && selection_end > start) {
-+            continue;
-+        }
-+        let shift = if !preedit.is_empty() && cursor < start {
-+            preedit.len()
-+        } else {
-+            0
-+        };
-+        markers.push(Marker {
-+            range: start + shift..end + shift,
++    input
++        .visual_markers()
++        .into_iter()
++        .map(|marker| Marker {
++            range: marker.start as usize..marker.end as usize,
 +            kind: marker.kind,
 +            foreground: marker.foreground,
-+        });
-+    }
-+    markers
++            compact: marker.compact,
++        })
++        .collect()
 +}
 +
 +pub(super) fn resolve(
 +    layout: &Layout,
 +    markers: &[Marker],
 +    renderer: &mut impl GlyphRenderer,
++    font_size: LogicalLength,
 +) -> Vec<MarkerRendering> {
 +    let mut result = Vec::new();
 +    let band = draw::visible_band(renderer);
 +    let scale = renderer.scale_factor().get();
 +    for marker in markers {
 +        let paragraphs = layout.visible_paragraphs();
-+        let index = paragraphs
-+            .partition_point(|p| p.range.start <= marker.range.start)
-+            .saturating_sub(1);
++        let index =
++            paragraphs.partition_point(|p| p.range.start <= marker.range.start).saturating_sub(1);
 +        let Some(paragraph) = paragraphs.get(index) else {
 +            continue;
 +        };
@@ -363,19 +585,12 @@
 +            continue;
 +        }
 +        // Cursor construction snaps to clusters. Reject any range that would hide extra bytes.
-+        if [marker.range.start, marker.range.end]
-+            .into_iter()
-+            .any(|offset| {
-+                let local = offset - paragraph.range.start;
-+                parley::editing::Cursor::from_byte_index(
-+                    &paragraph.layout,
-+                    local,
-+                    Default::default(),
-+                )
++        if [marker.range.start, marker.range.end].into_iter().any(|offset| {
++            let local = offset - paragraph.range.start;
++            parley::editing::Cursor::from_byte_index(&paragraph.layout, local, Default::default())
 +                .index()
-+                    != local
-+            })
-+        {
++                != local
++        }) {
 +            continue;
 +        }
 +        // Validate the entire prefix, independently of which fragments are currently visible.
@@ -395,15 +610,17 @@
 +            || rect.height() <= 0.0
 +            || rect.max_y() < band.start.get()
 +            || rect.min_y() > band.end.get()
-+            || renderer
-+                .platform_brush_for_color(&marker.foreground)
-+                .is_none()
++            || renderer.platform_brush_for_color(&marker.foreground).is_none()
 +        {
 +            continue;
 +        }
++        // A declined compaction must leave the original source visible.
++        if marker.compact && (rect.width() - font_size.get() * scale * 2.0).abs() > scale * 0.1 {
++            continue;
++        }
 +        let side = match marker.kind {
-+            TextInputMarkerKind::Bullet => rect.height() * 0.12,
-+            _ => rect.height() * 0.45,
++            TextInputMarkerKind::Bullet => font_size.get() * scale * 0.4,
++            _ => font_size.get() * scale * (6.0 / 7.0),
 +        }
 +        .min(rect.width() * 0.75);
 +        if side < scale {
@@ -411,7 +628,12 @@
 +        }
 +        let shape = PhysicalRect::new(
 +            PhysicalPoint::new(
-+                rect.min_x() + (rect.width() * 0.1).min(2.0 * scale),
++                rect.min_x()
++                    + if marker.compact {
++                        font_size.get() * scale * 0.75 - side / 2.0
++                    } else {
++                        (rect.width() * 0.1).min(2.0 * scale)
++                    },
 +                rect.min_y() + (rect.height() - side) / 2.0,
 +            ),
 +            PhysicalSize::new(side, side),
@@ -437,8 +659,17 @@
 +            renderer.fill_rectangle(rect, brush, PhysicalLength::new(rect.width() / 2.0), None);
 +            return;
 +        }
-+        // Opaque strips work on renderers that reject a transparent fill brush.
-+        let border = (1.2 * renderer.scale_factor().get()).min(rect.width() / 4.0);
++        let scale = renderer.scale_factor().get();
++        renderer.save_state();
++        // Round the outer outline without painting over the paper or its pattern.
++        renderer.combine_clip(
++            LogicalRect::new(
++                LogicalPoint::new(rect.min_x() / scale, rect.min_y() / scale),
++                LogicalSize::new(rect.width() / scale, rect.height() / scale),
++            ),
++            LogicalBorderRadius::new_uniform(2.0_f32.min(rect.width() / scale / 4.0)),
++        );
++        let border = (1.1 * scale).min(rect.width() / 4.0);
 +        for edge in [
 +            PhysicalRect::new(rect.origin, PhysicalSize::new(rect.width(), border)),
 +            PhysicalRect::new(
@@ -454,20 +685,267 @@
 +            renderer.fill_rectangle_with_color(edge, self.foreground);
 +        }
 +        if self.kind == TextInputMarkerKind::CheckedCheckbox {
-+            let inset = rect.width() * 0.28;
-+            renderer.fill_rectangle_with_color(
-+                PhysicalRect::new(
-+                    PhysicalPoint::new(rect.min_x() + inset, rect.min_y() + inset),
-+                    PhysicalSize::new(rect.width() - inset * 2.0, rect.height() - inset * 2.0),
-+                ),
-+                self.foreground,
-+            );
++            for (a, b) in [((0.23, 0.50), (0.43, 0.70)), ((0.43, 0.70), (0.78, 0.30))] {
++                let dx: f32 = (b.0 - a.0) * rect.width();
++                let dy: f32 = (b.1 - a.1) * rect.height();
++                renderer.save_state();
++                renderer.translate(LogicalVector::new(
++                    (rect.min_x() + a.0 * rect.width()) / scale,
++                    (rect.min_y() + a.1 * rect.height()) / scale,
++                ));
++                renderer.rotate(dy.atan2(dx).to_degrees());
++                renderer.fill_rectangle(
++                    PhysicalRect::new(
++                        PhysicalPoint::new(-border / 2.0, -border / 2.0),
++                        PhysicalSize::new(dx.hypot(dy) + border, border),
++                    ),
++                    brush.clone(),
++                    PhysicalLength::new(border / 2.0),
++                    None,
++                );
++                renderer.restore_state();
++            }
 +        }
++        renderer.restore_state();
 +    }
 +}
 --- a/i-slint-core-1.18.1/textlayout/sharedparley/shaping.rs
 +++ b/i-slint-core-1.18.1/textlayout/sharedparley/shaping.rs
-@@ -275,6 +275,7 @@
+@@ -155,10 +155,7 @@
+         builder
+     }
+
+-    /// Note that the selection is deliberately absent here: it is a rendering concern, not a
+-    /// styling one, and baking it into the layout both makes the layout uncacheable across
+-    /// selection changes and makes sub-glyph selection boundaries unrepresentable. See
+-    /// [`SelectionSpan`].
++    /// Selection geometry is painted separately; only compact-prefix reveal affects shaping.
+     pub(super) fn build(
+         &self,
+         font_context: &mut parley::FontContext,
+@@ -168,74 +165,157 @@
+     ) -> parley::Layout<Brush> {
+         use i_slint_common::styled_text::Style;
+
++        let formatting: Vec<_> = formatting.into_iter().filter(|s| !s.range.is_empty()).collect();
+         LAYOUT_CONTEXT.with_borrow_mut(|layout_ctx| {
+-            let mut builder = self.ranged_builder(layout_ctx, font_context, text);
+-
+-            // filter empty ranges otherwise parley will panic on assert
+-            for span in formatting.into_iter().filter(|s| !s.range.is_empty()) {
+-                match span.style {
+-                    Style::Emphasis => {
+-                        builder.push(
+-                            parley::StyleProperty::FontStyle(parley::style::FontStyle::Italic),
+-                            span.range,
+-                        );
+-                    }
+-                    Style::Strikethrough => {
+-                        builder.push(parley::StyleProperty::Strikethrough(true), span.range);
+-                    }
+-                    Style::Strong => {
+-                        builder.push(
+-                            parley::StyleProperty::FontWeight(parley::style::FontWeight::BOLD),
+-                            span.range,
+-                        );
+-                    }
+-                    Style::Code => {
+-                        builder.push(
+-                            parley::StyleProperty::FontFamily(parley::style::FontFamily::Single(
+-                                parley::style::FontFamilyName::Generic(
+-                                    parley::style::GenericFamily::Monospace,
++            let build = |layout_ctx: &mut parley::LayoutContext<Brush>,
++                         font_context: &mut parley::FontContext,
++                         compact: &[(Range<usize>, f32)]| {
++                let mut builder = self.ranged_builder(layout_ctx, font_context, text);
++                for span in formatting.iter().cloned() {
++                    match span.style {
++                        Style::Emphasis => {
++                            builder.push(
++                                parley::StyleProperty::FontStyle(parley::style::FontStyle::Italic),
++                                span.range,
++                            );
++                        }
++                        Style::Strikethrough => {
++                            builder.push(parley::StyleProperty::Strikethrough(true), span.range);
++                        }
++                        Style::Strong => {
++                            builder.push(
++                                parley::StyleProperty::FontWeight(parley::style::FontWeight::BOLD),
++                                span.range,
++                            );
++                        }
++                        Style::Code | Style::SourceCode => {
++                            builder.push(
++                                parley::StyleProperty::FontFamily(
++                                    parley::style::FontFamily::Single(
++                                        parley::style::FontFamilyName::Generic(
++                                            parley::style::GenericFamily::Monospace,
++                                        ),
++                                    ),
+                                 ),
+-                            )),
+-                            span.range.clone(),
+-                        );
+-                        // Inline `code` reads as slightly smaller text on top of a
+-                        // translucent capsule (drawn separately in `TextParagraph::draw`),
+-                        // matching the convention used by common markdown renderers.
+-                        builder.push(
+-                            parley::StyleProperty::FontSize(
+-                                self.pixel_size.get() * INLINE_CODE_FONT_SCALE,
+-                            ),
+-                            span.range,
+-                        );
+-                    }
+-                    Style::Underline => {
+-                        builder.push(parley::StyleProperty::Underline(true), span.range);
+-                    }
+-                    Style::Link => {
+-                        builder.push(parley::StyleProperty::Underline(true), span.range.clone());
+-                        builder.push(
+-                            parley::StyleProperty::Brush(Brush {
+-                                override_fill_color: None,
+-                                stroke: self.stroke,
+-                                link_color,
+-                            }),
+-                            span.range,
+-                        );
+-                    }
+-                    Style::Color(color) => {
+-                        builder.push(
+-                            parley::StyleProperty::Brush(Brush {
+-                                override_fill_color: Some(crate::Color::from_argb_encoded(color)),
+-                                stroke: self.stroke,
+-                                link_color: None,
+-                            }),
+-                            span.range,
+-                        );
++                                span.range.clone(),
++                            );
++                            // Inline `code` reads as slightly smaller text on top of a
++                            // translucent capsule (drawn separately in `TextParagraph::draw`),
++                            // matching the convention used by common markdown renderers.
++                            builder.push(
++                                parley::StyleProperty::FontSize(
++                                    self.pixel_size.get()
++                                        * if matches!(span.style, Style::SourceCode) {
++                                            1.0
++                                        } else {
++                                            INLINE_CODE_FONT_SCALE
++                                        },
++                                ),
++                                span.range,
++                            );
++                        }
++                        Style::Underline => {
++                            builder.push(parley::StyleProperty::Underline(true), span.range);
++                        }
++                        Style::Link => {
++                            builder
++                                .push(parley::StyleProperty::Underline(true), span.range.clone());
++                            builder.push(
++                                parley::StyleProperty::Brush(Brush {
++                                    override_fill_color: None,
++                                    stroke: self.stroke,
++                                    link_color,
++                                }),
++                                span.range,
++                            );
++                        }
++                        Style::CompactMarker { .. } => {}
++                        Style::Color(color) => {
++                            builder.push(
++                                parley::StyleProperty::Brush(Brush {
++                                    override_fill_color: Some(crate::Color::from_argb_encoded(
++                                        color,
++                                    )),
++                                    stroke: self.stroke,
++                                    link_color: None,
++                                }),
++                                span.range,
++                            );
++                        }
+                     }
+                 }
+-            }
+-
+-            builder.build(text)
++
++                for (range, spacing) in compact {
++                    builder.push(parley::StyleProperty::LetterSpacing(*spacing), range.clone());
++                }
++                builder.build(text)
++            };
++            let mut normal = build(layout_ctx, font_context, &[]);
++            if !formatting.iter().any(|span| matches!(span.style, Style::CompactMarker { .. })) {
++                return normal;
++            }
++            normal.break_all_lines(None);
++            // RTL and narrow prefixes retain raw advances, matching the painting fallback.
++            if normal.lines().flat_map(|line| line.runs()).any(|run| run.is_rtl()) {
++                return normal;
++            }
++            let scale = self.scale_factor.get();
++            let target = self.pixel_size.get() * scale * 2.0;
++            let base_spacing = self
++                .font_request
++                .as_ref()
++                .and_then(|font| font.letter_spacing)
++                .map_or(0.0, |spacing| spacing.get());
++            let mut compact = Vec::new();
++            for span in &formatting {
++                let Style::CompactMarker { max_width } = span.style else {
++                    continue;
++                };
++                let start = parley::editing::Cursor::from_byte_index(
++                    &normal,
++                    span.range.start,
++                    Default::default(),
++                );
++                let end = parley::editing::Cursor::from_byte_index(
++                    &normal,
++                    span.range.end,
++                    Default::default(),
++                );
++                let a = start.geometry(&normal, 0.0);
++                let b = end.geometry(&normal, 0.0);
++                let advance = (b.x0 - a.x0) as f32;
++                if start.index() != span.range.start
++                    || end.index() != span.range.end
++                    || !advance.is_finite()
++                    || advance <= 0.0
++                    || a.x0 as f32 + target > max_width * scale
++                {
++                    continue;
++                }
++                let delta = (target - advance) / span.range.len() as f32;
++                // Keep every source cluster's advance positive, including variable-width fonts.
++                let safe = span.range.clone().all(|offset| {
++                    let left = parley::editing::Cursor::from_byte_index(
++                        &normal,
++                        offset,
++                        Default::default(),
++                    );
++                    let right = parley::editing::Cursor::from_byte_index(
++                        &normal,
++                        offset + 1,
++                        Default::default(),
++                    );
++                    left.index() == offset
++                        && right.index() == offset + 1
++                        && (right.geometry(&normal, 0.0).x0 - left.geometry(&normal, 0.0).x0) as f32
++                            + delta
++                            > 0.0
++                });
++                if safe {
++                    compact.push((span.range.clone(), base_spacing + delta / scale));
++                }
++            }
++            if compact.is_empty() { normal } else { build(layout_ctx, font_context, &compact) }
+         })
+     }
+ }
+@@ -275,6 +355,7 @@
      font_context: &mut parley::FontContext,
      text: PlainOrStyledText,
      link_color: Color,
@@ -475,7 +953,16 @@
  ) -> Vec<TextParagraph> {
      let paragraph_from_text =
          |font_context: &mut parley::FontContext,
-@@ -301,8 +302,16 @@
+@@ -284,7 +365,7 @@
+          links: Vec<(std::ops::Range<usize>, std::string::String)>| {
+             let code_ranges: alloc::vec::Vec<Range<usize>> = formatting
+                 .iter()
+-                .filter(|s| matches!(s.style, i_slint_common::styled_text::Style::Code))
++                .filter(|s| matches!(s.style, i_slint_common::styled_text::Style::Code | i_slint_common::styled_text::Style::SourceCode))
+                 .map(|s| s.range.clone())
+                 .collect();
+
+@@ -301,8 +382,16 @@
                  paragraphs.push(paragraph_from_text(
                      font_context,
                      &text[range.clone()],
@@ -494,14 +981,14 @@
                      Default::default(),
                  ));
              }
-@@ -386,7 +395,7 @@
+@@ -386,7 +475,7 @@
      font_context: &mut parley::FontContext,
  ) -> Vec<TextParagraph> {
      let builder = shaping_builder(text, item_rc, text_wrap, scale_factor);
 -    create_text_paragraphs(&builder, font_context, text.text(), text.link_color())
 +    create_text_paragraphs(&builder, font_context, text.text(), text.link_color(), &text.text_decorations())
  }
- 
+
  pub(super) struct TextParagraph {
 --- a/i-slint-core-1.18.1/textlayout/sharedparley/tests.rs
 +++ b/i-slint-core-1.18.1/textlayout/sharedparley/tests.rs
@@ -530,7 +1017,7 @@
 +    // Bindings can re-enter measurement; evaluate before borrowing the font context.
 +    let _ = text.text_decorations();
      let mut font_ctx = ctx.font_context().borrow_mut();
- 
+
      let text_wrap = layout_builder.text_wrap;
 @@ -221,6 +224,7 @@
                      // `Text` has no selection today; the machinery is shared so wiring one up
@@ -539,20 +1026,36 @@
 +                    &[],
                  );
              }
- 
+
 @@ -314,6 +318,7 @@
      }
- 
+
      let visual_representation = text_input.visual_representation();
 +    let marker_data = markers::prepare(text_input);
- 
+
      let text_color = visual_representation.text_color.color();
      let Some(platform_fill_brush) =
-@@ -391,13 +396,18 @@
+@@ -335,13 +340,8 @@
+
+     let window_adapter = item_renderer.window().window_adapter();
+
+-    // The visual text shapes through the shared cache entry like any other text: a selection
+-    // doesn't make the entry unshareable, because it is applied when drawing, by clipping the
+-    // runs it cuts across, and never reaches shaping. Cluster ranges and advances are identical
+-    // with and without one, so a selected `TextInput` hits the same entry as an unselected one --
+-    // which is what keeps dragging a selection, or composing with an IME, from re-shaping the
+-    // document on every event. A password field shapes a substituted text, but the substitution
+-    // is the same everywhere, so it is cacheable too.
++    // Selection colors stay paint-only. Compact prefixes additionally track logical endpoints
++    // to reveal raw source without changing source offsets.
+     let _ = with_text_layout(
+         Some(cache),
+         Some(item_rc),
+@@ -391,13 +391,18 @@
                      })
                      .flatten();
- 
-+                let painted_markers = markers::resolve(layout, &marker_data, item_renderer);
+
++                let painted_markers = markers::resolve(layout, &marker_data, item_renderer, layout_builder.pixel_size);
                  layout.draw(
                      item_renderer,
                      platform_fill_brush,
@@ -564,31 +1067,31 @@
 +                for marker in &painted_markers {
 +                    marker.draw(item_renderer);
 +                }
- 
+
                  if let Some(cursor_pos) = visual_representation.cursor_position {
                      let cursor_rect = layout.cursor_rect_for_byte_offset(
-@@ -457,6 +467,7 @@
+@@ -457,6 +462,7 @@
      let _ = text_item.stroke();
      let _ = text_item.link_color();
      let _ = text_item.text();
 +    let _ = text_item.text_decorations();
- 
+
      let window_adapter = window_adapter?;
- 
-@@ -513,6 +524,7 @@
+
+@@ -513,6 +519,7 @@
      // entry's dependency tracker.
      let _ = text_item.font_request(item_rc);
      let _ = text_item.text();
 +    let _ = text_item.text_decorations();
- 
+
      let ctx = ctx?;
      let mut font_ctx = ctx.font_context().borrow_mut();
-@@ -524,7 +536,7 @@
+@@ -524,7 +531,7 @@
              shaping::content_widths_builder(text_item.font_request(item_rc), scale_factor);
- 
+
          let paragraphs_without_linebreaks =
 -            create_text_paragraphs(&layout_builder, font_ctx, text_item.text(), Color::default());
 +            create_text_paragraphs(&layout_builder, font_ctx, text_item.text(), Color::default(), &text_item.text_decorations());
- 
+
          // No line breaking needed: parley derives the content widths from the break
          // opportunities. Paragraphs stack vertically, so both widths are the widest.

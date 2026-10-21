@@ -3,13 +3,23 @@
 Bulletnotes is a native Rust/Slint macOS client for a SilverBullet space. It is
 currently a development build. [Release evidence](validation/release-matrix.md)
 tracks the remaining input, accessibility, selection, performance, and distribution
-gates. The note window has solid paper. Headings and Markdown links use the theme accent
-while keeping all Markdown syntax editable. Unordered lists paint bullets and tasks paint
-empty or filled boxes in theme ink. Their original prefix spacing stays reserved;
-moving the caret into a prefix or selecting across it reveals its raw syntax.
-Boxes are edited as Markdown rather than toggled by clicking. Standalone code and
-YAML frontmatter stay plain.
-A low-contrast accent falls back to ink; Increase Contrast uses ink. Blur remains
+gates. The note window has solid paper. Markdown source stays visible and editable,
+with bold first/second-level headings, regular-weight lower headings, true bold and
+italics (including combined emphasis), muted punctuation and strikethrough text,
+underlined link destinations, and subtle code backgrounds. Heading, link, and syntax colors
+follow the theme’s Markdown roles when supplied; text keeps the selected base size and line spacing.
+Rows and grid cells use 1.6 times the selected font size, with half-point grid
+lines (at least one physical pixel) and a 45-point text inset. Font and paper
+choices remain independent.
+Unordered lists paint bullets and tasks paint rounded outlined boxes, with a tick
+for completed tasks, in theme ink. Their text aligns in compact two-em slots;
+moving the caret into a prefix or selecting across it reveals its raw syntax
+and original spacing. Unsupported or narrow prefixes remain raw.
+Boxes are edited as Markdown rather than toggled by clicking. Markdown inside code
+stays literal, and YAML frontmatter stays plain. Standard Markdown semantics apply,
+including `__bold__` rather than Antinote's underline convention.
+Themes without explicit Markdown colors retain contrast-based fallbacks;
+Increase Contrast uses ink. Blur remains
 deferred.
 
 ## Capture and browse
@@ -57,6 +67,14 @@ open supported-API requirement; see the [selection investigation](validation/sel
 Text size and paper controls appear before the theme collection. Command+comma
 opens these settings.
 
+Themes use AntiNote's grid-backed cards, eight color swatches, and separate sun
+and moon buttons. The sun assigns a palette to Light; the moon assigns it to Dark.
+Both preserve the current Light/Dark/System mode. Clicking the rest of a card
+assigns the currently effective slot. The 14 AntiNote built-ins appear first in
+their original order, followed by the remaining palettes. Cards use two columns
+when space permits and a single column in narrow windows. Settings controls use
+the macOS light/dark appearance independently of note colors.
+
 Paper, Graphite, Matcha and Rose are built in. Light and Dark assignments are
 independent; System follows macOS appearance notifications. Font size (11–24
 points) and Plain/Dots/Ruled/Grid paper are independent of the palette. macOS
@@ -65,7 +83,9 @@ colors. Solid paper and static transitions honor reduced transparency/motion.
 
 Import/export uses Bulletnotes JSON schema version 1, at most 32 KiB. Theme names
 contain 1–32 Unicode scalars after trimming; colors are opaque `#RRGGBB`. Duplicate
-JSON keys are rejected. Low contrast requires explicit confirmation. Imported
+JSON keys are rejected. New low-contrast imports require confirmation before
+adding them. Existing themes, including every bundled AntiNote palette, apply
+and save immediately when selected. Imported
 names cannot overwrite a built-in theme identity. Antinote theme import is deferred.
 
 ```json

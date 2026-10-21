@@ -1,3 +1,10 @@
+export struct UiMarkdownColors {
+    heading1: color,
+    heading2: color,
+    heading3: color,
+    link: color,
+    syntax: color
+}
 export struct UiTheme {
     paper: color,
     surface: color,
@@ -9,8 +16,13 @@ export struct UiTheme {
     cursor: color,
     scrollbar: color,
     pattern: color,
+    markdown: UiMarkdownColors,
     dark: bool
 }
 export struct PageRow { key: string, title: string, path: string, excerpt: string, availability: string, modified-label: string }
-export struct ThemeOption { id: string, name: string, palette: UiTheme }
+export struct UiThemeSwatches {
+    primary: color, secondary: color, tertiary: color,
+    accent2: color, accent3: color, accent4: color, accent5: color, highlight: color
+}
+export struct ThemeOption { id: string, name: string, palette: UiTheme, swatches: UiThemeSwatches }
 export struct ThemePair { left: ThemeOption, right: ThemeOption, has-right: bool }

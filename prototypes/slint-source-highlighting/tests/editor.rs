@@ -228,3 +228,109 @@ fn empty_overlapping_and_out_of_order_ranges_are_ignored() {
     ]));
     assert_eq!(expected, red_mask(&ui));
 }
+
+#[test]
+fn combined_styles_preserve_directed_unicode_selection_and_undo() {
+    let source = "café e\u{301} 👩🏽‍💻\r\n日本語";
+    let ui = setup(source);
+    ui.invoke_select(source.len() as i32, source.len() as i32);
+    ui.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: "X".into() });
+    ui.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: "X".into() });
+    ui.invoke_select(source.len() as i32, 0);
+    let state = (ui.get_anchor(), ui.get_caret(), ui.get_edits());
+    let before = ui.window().take_snapshot().unwrap();
+    let mut decorated = span(0, source.len() as i32);
+    decorated.bold = true;
+    decorated.italic = true;
+    decorated.strikethrough = true;
+    decorated.underline = true;
+    let model = Rc::new(VecModel::from(vec![decorated.clone()]));
+    ui.set_decorations(ModelRc::from(model.clone()));
+    assert_ne!(
+        before.as_bytes(),
+        ui.window().take_snapshot().unwrap().as_bytes()
+    );
+    assert_eq!((ui.get_anchor(), ui.get_caret(), ui.get_edits()), state);
+    decorated.bold = false;
+    decorated.italic = false;
+    decorated.strikethrough = false;
+    decorated.underline = false;
+    model.set_row_data(0, decorated);
+    assert_eq!(
+        before.as_bytes(),
+        ui.window().take_snapshot().unwrap().as_bytes()
+    );
+    ui.invoke_undo_input();
+    assert_eq!(ui.get_source().as_bytes(), source.as_bytes());
+    ui.invoke_redo_input();
+    assert_eq!(ui.get_source(), format!("{source}X"));
+}
+
+#[test]
+fn combined_styles_split_around_preedit_across_paragraphs() {
+    let ui = setup("MMMM\nMMMM");
+    let decorate = |start, end| {
+        let mut value = span(start, end);
+        value.bold = true;
+        value.italic = true;
+        value.underline = true;
+        value.strikethrough = true;
+        value
+    };
+    ui.invoke_select(2, 2);
+    ui.set_decorations(ModelRc::from([decorate(0, 9)]));
+    ui.window()
+        .dispatch_event(WindowEvent::internal(InternalKeyEvent {
+            event_type: KeyEventType::UpdateComposition,
+            preedit_text: "にに".into(),
+            ..Default::default()
+        }));
+    let composing = red_mask(&ui);
+    assert_eq!(ui.get_source(), "MMMM\nMMMM");
+    assert_eq!(ui.get_preedit(), "にに");
+    assert_eq!(ui.get_edits(), 0);
+    ui.window()
+        .dispatch_event(WindowEvent::internal(InternalKeyEvent {
+            event_type: KeyEventType::UpdateComposition,
+            ..Default::default()
+        }));
+    ui.set_source("MMににMM\nMMMM".into());
+    ui.set_decorations(ModelRc::from([decorate(0, 2), decorate(8, 15)]));
+    assert_eq!(composing, red_mask(&ui));
+}
+
+#[test]
+fn typography_rejects_ranges_that_split_graphemes() {
+    let ui = setup("e\u{301} 👩🏽‍💻");
+    let baseline = ui.window().take_snapshot().unwrap();
+    for (start, end) in [(0, 1), (1, 3), (4, 8)] {
+        let mut decorated = span(start, end);
+        decorated.bold = true;
+        decorated.italic = true;
+        ui.set_decorations(ModelRc::from([decorated]));
+        assert_eq!(
+            baseline.as_bytes(),
+            ui.window().take_snapshot().unwrap().as_bytes()
+        );
+    }
+}
+
+#[test]
+fn source_code_retains_base_line_height_and_source() {
+    let ui = setup("MMMM");
+    let before = ui.window().take_snapshot().unwrap();
+    let height = ui.get_text_height();
+    let mut decorated = span(0, 4);
+    decorated.foreground = slint::Color::from_rgb_u8(60, 46, 24);
+    decorated.code = true;
+    ui.set_decorations(ModelRc::from([decorated]));
+    assert_ne!(
+        before.as_bytes(),
+        ui.window().take_snapshot().unwrap().as_bytes()
+    );
+    assert_eq!(ui.get_text_height(), height);
+    assert_eq!(ui.get_source(), "MMMM");
+    assert_eq!(ui.get_edits(), 0);
+}
