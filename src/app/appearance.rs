@@ -113,6 +113,26 @@ impl AppearanceController {
         )?;
         Ok(candidate)
     }
+    pub fn assignment_candidate(
+        &self,
+        id: ThemeId,
+        slot: SystemAppearance,
+    ) -> Result<AppSettings, ThemeError> {
+        let mut candidate = self.displayed.clone();
+        if !candidate
+            .themes()
+            .map_err(|_| ThemeError::InvalidSettings)?
+            .iter()
+            .any(|entry| entry.id == id)
+        {
+            return Err(ThemeError::UnknownTheme);
+        }
+        match slot {
+            SystemAppearance::Light => candidate.appearance.light_theme = id,
+            SystemAppearance::Dark => candidate.appearance.dark_theme = id,
+        }
+        Ok(candidate)
+    }
     /// Produces a separate candidate; neither persisted settings nor preview changes here.
     pub fn confirm_import(
         &mut self,

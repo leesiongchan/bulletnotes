@@ -1,10 +1,10 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
 use crate::{
-    AppWindow, ThemeOption, ThemePair, UiTheme,
+    AppWindow, ThemeOption, ThemePair, UiMarkdownColors, UiTheme, UiThemeSwatches,
     store::settings::AppSettings,
     theme::{self, AppearanceMode, PaperStyle, ResolvedTheme, SystemAppearance, Theme, ThemeError},
 };
-use slint::{ModelRc, VecModel};
+use slint::{Model, ModelRc, VecModel};
 
 fn color(value: theme::Color) -> slint::Color {
     slint::Color::from_rgb_u8(value.r, value.g, value.b)
@@ -25,6 +25,17 @@ fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
             .unwrap_or_else(|| color(theme.selection)),
         scrollbar: color(theme.scrollbar.unwrap_or(theme.muted)),
         pattern: color(pattern),
+        markdown: theme
+            .markdown
+            .as_ref()
+            .map(|colors| UiMarkdownColors {
+                heading1: color(colors.heading1),
+                heading2: color(colors.heading2),
+                heading3: color(colors.heading3),
+                link: color(colors.link),
+                syntax: color(colors.syntax),
+            })
+            .unwrap_or_default(),
         dark: theme.dark,
     }
 }
@@ -39,7 +50,7 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
     });
     tracing::debug!(
         slint_version = "1.18.1",
-        "Markdown highlighting and marker palette applied"
+        "Markdown source styles and marker palette applied"
     );
     let adjusted = window
         .get_system_high_contrast()
@@ -71,12 +82,76 @@ pub fn present_settings(
         .map_err(|_| ThemeError::InvalidSettings)?;
     let themes = settings.themes().map_err(|_| ThemeError::InvalidSettings)?;
     let resolved = theme::resolve_theme(&settings.appearance, system, &themes)?;
-    let options: Vec<_> = themes
-        .iter()
+    let native_order = [
+        "antinote-vancouver",
+        "antinote-tokyo-drift",
+        "antinote-gundam-wing",
+        "antinote-vendetta",
+        "antinote-totoro",
+        "antinote-mononoke",
+        "antinote-piccolo",
+        "antinote-a24",
+        "antinote-tartan",
+        "antinote-agrabah",
+        "antinote-muad-dib",
+        "antinote-knight",
+        "antinote-sanrio",
+        "antinote-shadow-moses",
+    ];
+    let mut ordered: Vec<_> = themes.iter().collect();
+    ordered.sort_by_key(|entry| {
+        native_order
+            .iter()
+            .position(|id| *id == entry.id.0)
+            .unwrap_or(native_order.len())
+    });
+    let options: Vec<_> = ordered
+        .into_iter()
         .map(|entry| ThemeOption {
             id: entry.id.0.as_str().into(),
             name: entry.theme.name.as_str().into(),
-            palette: palette(&entry.theme, entry.theme.paper.mix(entry.theme.ink, 0.10)),
+            palette: palette(
+                &entry.theme,
+                entry
+                    .theme
+                    .grid
+                    .unwrap_or_else(|| entry.theme.paper.mix(entry.theme.ink, 0.10)),
+            ),
+            swatches: {
+                let theme = &entry.theme;
+                let [
+                    primary,
+                    secondary,
+                    tertiary,
+                    accent2,
+                    accent3,
+                    accent4,
+                    accent5,
+                    highlight,
+                ] = theme
+                    .swatches
+                    .unwrap_or([
+                        theme.accent,
+                        theme.markdown.as_ref().map_or(theme.muted, |c| c.heading2),
+                        theme.markdown.as_ref().map_or(theme.line, |c| c.heading3),
+                        theme.ink,
+                        theme.muted,
+                        theme.line,
+                        theme.selection,
+                        theme.scrollbar.unwrap_or(theme.muted),
+                    ])
+                    .map(color);
+                UiThemeSwatches {
+                    primary,
+                    secondary,
+                    tertiary,
+                    accent2,
+                    accent3,
+                    accent4,
+                    accent5,
+                    highlight,
+                }
+            },
         })
         .collect();
     let pairs = options
@@ -87,7 +162,13 @@ pub fn present_settings(
             has_right: chunk.len() == 2,
         })
         .collect::<Vec<_>>();
-    window.set_theme_options(ModelRc::new(VecModel::from(pairs)));
+    // Replacing an unchanged catalog destroys the focused theme card.
+    if !window.get_theme_options().iter().eq(pairs.iter().cloned()) {
+        window.set_theme_options(ModelRc::new(VecModel::from(pairs)));
+    }
+    window.set_selected_light_theme_id(settings.appearance.light_theme.0.as_str().into());
+    window.set_selected_dark_theme_id(settings.appearance.dark_theme.0.as_str().into());
+    window.set_system_appearance_dark(system == SystemAppearance::Dark);
     window.set_appearance_mode(
         match settings.appearance.mode {
             AppearanceMode::Light => "light",

@@ -219,7 +219,31 @@ pub fn bind(
     {
         let state = state.clone();
         window.on_theme_selected(move |id| {
-            state.choose(Pending::Selection(ThemeId(id.to_string())), false);
+            tracing::debug!(theme_id = %id, "Theme selection requested");
+            // Choosing an existing theme accepts its palette; only new imports need review.
+            state.choose(Pending::Selection(ThemeId(id.to_string())), true);
+        });
+    }
+    {
+        let state = state.clone();
+        window.on_theme_assigned(move |id, dark| {
+            let slot = if dark {
+                SystemAppearance::Dark
+            } else {
+                SystemAppearance::Light
+            };
+            tracing::debug!(theme_id = %id, ?slot, "Theme assignment requested");
+            let candidate = state
+                .controller
+                .borrow()
+                .assignment_candidate(ThemeId(id.to_string()), slot);
+            match candidate {
+                Ok(candidate) => {
+                    state.clear_pending();
+                    state.submit(candidate, true);
+                }
+                Err(error) => state.message(&error.to_string()),
+            }
         });
     }
     {

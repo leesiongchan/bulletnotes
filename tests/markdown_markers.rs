@@ -181,3 +181,110 @@ fn marker_colors_follow_ink_and_code_remains_raw() {
     );
     assert_eq!(window.get_note_text(), code);
 }
+
+#[test]
+fn tasks_and_bullets_align_their_body_text_in_compact_slots() {
+    let source = "- [ ] MMMM\n- MMMM\n";
+    let window = setup(source);
+    let image = window.window().take_snapshot().unwrap();
+    let scale = window.window().scale_factor();
+    let line_height = window.get_editor_line_height() * scale;
+    let ink = window.get_theme().ink;
+    let last_body_pixel = |row| {
+        image
+            .as_bytes()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+            .filter_map(|(index, pixel)| {
+                let x = index % image.width() as usize;
+                let y = (index / image.width() as usize) as f32;
+                (y >= 32.0 * scale + row as f32 * line_height
+                    && y < 32.0 * scale + (row + 1) as f32 * line_height
+                    && pixel[0..3] == [ink.red(), ink.green(), ink.blue()])
+                .then_some(x)
+            })
+            .max()
+            .unwrap()
+    };
+    assert!(last_body_pixel(0).abs_diff(last_body_pixel(1)) <= 1);
+    assert_eq!(window.get_note_text().as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn editor_rows_follow_antinote_font_spacing() {
+    let source = "MMMM\nMMMM\n";
+    let window = setup(source);
+    for font in [11.0, 15.0, 24.0] {
+        window.set_font_size_px(font);
+        let _ = snapshot(&window);
+        assert!(
+            (window.get_editor_line_height() - font * 1.6).abs() < 0.1,
+            "{font}pt text must use 1.6em rows; got {}",
+            window.get_editor_line_height()
+        );
+    }
+    assert_eq!(window.get_note_text(), source);
+}
+
+#[test]
+fn grid_pitch_and_text_inset_match_antinote() {
+    let window = setup("MMMM\nMMMM\n");
+    window.set_font_size_px(14.0);
+    window.set_paper_style("grid".into());
+    let mut theme = window.get_theme();
+    theme.paper = slint::Color::from_rgb_u8(255, 255, 255);
+    theme.pattern = slint::Color::from_rgb_u8(0, 0, 255);
+    theme.ink = slint::Color::from_rgb_u8(255, 0, 0);
+    window.set_theme(theme);
+    let image = window.window().take_snapshot().unwrap();
+    let scale = window.window().scale_factor();
+    let pixels = image.as_bytes().as_chunks::<4>().0;
+    let first_ink = pixels
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            (p[0] > 180 && p[1] < 80 && p[2] < 80)
+                .then_some((i % image.width() as usize) as f32 / scale)
+        })
+        .min_by(f32::total_cmp)
+        .unwrap();
+    assert!((45.0..47.0).contains(&first_ink), "text inset: {first_ink}");
+    let ink_rows: Vec<_> = (0..image.height() as usize)
+        .filter(|&y| {
+            pixels[y * image.width() as usize..(y + 1) * image.width() as usize]
+                .iter()
+                .any(|p| p[0] > 180 && p[1] < 80 && p[2] < 80)
+        })
+        .collect();
+    let row_starts: Vec<_> = ink_rows
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &y)| (i == 0 || y > ink_rows[i - 1] + 1).then_some(y as f32 / scale))
+        .collect();
+    assert_eq!(row_starts.len(), 2);
+    assert!(
+        (row_starts[1] - row_starts[0] - 22.4).abs() <= 0.65,
+        "rendered text rows: {row_starts:?}"
+    );
+    let y = (300.0 * scale) as usize;
+    let columns: Vec<_> = (0..image.width() as usize)
+        .filter(|&x| {
+            let p = pixels[y * image.width() as usize + x];
+            p[2] > 180 && p[0] < 250 && p[1] < 250
+        })
+        .collect();
+    let starts: Vec<_> = columns
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &x)| (i == 0 || x > columns[i - 1] + 1).then_some(x as f32 / scale))
+        .collect();
+    assert!(starts.len() > 10);
+    assert!(
+        starts
+            .windows(2)
+            .all(|x| (x[1] - x[0] - 22.4).abs() <= 0.65),
+        "grid columns: {starts:?}"
+    );
+}

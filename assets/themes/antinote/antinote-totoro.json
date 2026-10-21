@@ -10,5 +10,23 @@
   "line": "#B4B4B4",
   "selection": "#D9DDD1",
   "cursor": "#557D69",
-  "scrollbar": "#FFE6A0"
+  "scrollbar": "#FFE6A0",
+  "markdown": {
+    "heading1": "#557D69",
+    "heading2": "#3C6450",
+    "heading3": "#8CAA64",
+    "link": "#6E5541",
+    "syntax": "#B4B4B4"
+  },
+  "grid": "#E5E3D7",
+  "swatches": [
+    "#557D69",
+    "#3C6450",
+    "#8CAA64",
+    "#D2B48C",
+    "#FFA59B",
+    "#C8A078",
+    "#78AA5A",
+    "#FFE6A0"
+  ]
 }

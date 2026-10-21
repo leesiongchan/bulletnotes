@@ -50,11 +50,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|arg| arg == "--ruled") {
         settings.appearance.paper = bulletnotes::theme::PaperStyle::Ruled;
     }
+    if args.iter().any(|arg| arg == "--grid") {
+        settings.appearance.paper = bulletnotes::theme::PaperStyle::Grid;
+    }
     present_settings(&window, &settings, SystemAppearance::Light)?;
     if args.iter().any(|arg| arg == "--minimum") {
         window
             .window()
             .set_size(slint::LogicalSize::new(400.0, 440.0));
+    }
+    if args.iter().any(|arg| arg == "--themes-config") {
+        if !args.iter().any(|arg| arg == "--minimum") {
+            window
+                .window()
+                .set_size(slint::LogicalSize::new(800.0, 588.0));
+        }
+        window.set_active_view("appearance".into());
+        let weak = window.as_weak();
+        let light = args.iter().any(|arg| arg == "--settings-light");
+        slint::Timer::single_shot(Duration::from_millis(350), move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_system_appearance_dark(!light);
+                window.invoke_reveal_theme_choices();
+            }
+        });
     }
     if args.iter().any(|arg| arg == "--find") {
         window.set_find_visible(true);
@@ -111,16 +130,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     let capture_failed = Rc::new(Cell::new(false));
+    let appearance_passed = Rc::new(Cell::new(false));
+    #[cfg(all(target_os = "macos", feature = "native-validation"))]
+    let capture_timer = slint::Timer::default();
     #[cfg(all(target_os = "macos", feature = "native-validation"))]
     if let Some(path) = argument("--capture") {
         let capture_failed = capture_failed.clone();
         let weak = window.as_weak();
-        slint::Timer::single_shot(Duration::from_millis(1000), move || {
-            let capture = || -> Result<(), Box<dyn std::error::Error>> {
+        let frames = Rc::new(Cell::new(0_u64));
+        let rendered = frames.clone();
+        window.window().set_rendering_notifier(move |state, _| {
+            if matches!(state, slint::RenderingState::AfterRendering) {
+                rendered.set(rendered.get() + 1);
+            }
+        })?;
+        let start = std::time::Instant::now();
+        let mut finished = false;
+        let mut presented = false;
+        capture_timer.start(slint::TimerMode::Repeated, Duration::from_millis(50), move || {
+            // Keep the settling period for delayed chrome setup, then require an actual frame.
+            if finished || start.elapsed() < Duration::from_secs(1) { return; }
+            let mut capture = || -> Result<bool, Box<dyn std::error::Error>> {
                 let window = weak.upgrade().ok_or("review window was closed")?;
                 let native = chrome::native_window(window.window())?;
+                let ready = frames.get() > 0 && native.isVisible() && native.alphaValue() > 0.0
+                    && native.occlusionState().contains(objc2_app_kit::NSWindowOcclusionState::Visible);
+                // Let the reveal transaction reach WindowServer before blocking this run loop.
+                if ready && !presented { presented = true; return Ok(false); }
+                if !ready { presented = false; }
+                if !ready && start.elapsed() < Duration::from_secs(8) { return Ok(false); }
                 println!(
-                    "capture_chrome_state: {},{}; visible={} key={} alpha={} occlusion={:?} frame={:?} metal={:?}",
+                    "capture_chrome_state: {},{}; visible={} key={} alpha={} occlusion={:?} frame={:?} metal={:?} frames={} elapsed_ms={}",
                     window.get_header_revealed(),
                     window.get_footer_revealed(),
                     native.isVisible(),
@@ -128,8 +168,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     native.alphaValue(),
                     native.occlusionState(),
                     native.frame(),
-                    bulletnotes::platform::renderer::uses_metal(window.window())
+                    bulletnotes::platform::renderer::uses_metal(window.window()),
+                    frames.get(),
+                    start.elapsed().as_millis()
                 );
+                if !ready { return Err("capture timed out waiting for a visible rendered frame".into()); }
                 // This native handle belongs to this fixture. Never select a desktop or another app.
                 let status = std::process::Command::new("/usr/sbin/screencapture")
                     .args(["-x", "-o", &format!("-l{}", native.windowNumber()), &path])
@@ -137,12 +180,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if !status.success() {
                     return Err("native window capture failed".into());
                 }
-                Ok(())
+                Ok(true)
             };
-            if let Err(error) = capture() {
-                capture_failed.set(true);
-                eprintln!("capture: {error}");
+            match capture() {
+                Ok(false) => return,
+                Ok(true) => {},
+                Err(error) => {
+                    capture_failed.set(true);
+                    eprintln!("capture: {error}");
+                }
             }
+            finished = true;
             let _ = slint::quit_event_loop();
         });
     }
@@ -161,12 +209,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|arg| arg == "--appearance-contract") {
         let weak = window.as_weak();
         let binding = appearance_ui.clone();
+        let result = appearance_passed.clone();
         let saved = store.clone();
         let path = directory.path().join("review.sqlite");
         slint::spawn_local(async move {
             let check = async {
                 let window = weak.upgrade().ok_or("review window closed")?;
                 window.set_note_text("original\r\n日本語 👩🏽‍💻".into());
+                let themes = saved.load_settings().await?.themes()?;
+                let cards = window.get_theme_options();
+                let mut selections = 0;
+                for (mode, system, dark) in [
+                    ("light", SystemAppearance::Light, false),
+                    ("dark", SystemAppearance::Light, true),
+                    ("system", SystemAppearance::Light, false),
+                    ("system", SystemAppearance::Dark, true),
+                ] {
+                    binding.set_system_appearance(system);
+                    window.set_appearance_mode(mode.into());
+                    window.invoke_appearance_changed();
+                    binding.flush().await?;
+                    for entry in &themes {
+                        let previous = saved.load_settings().await?;
+                        window.invoke_theme_selected(entry.id.0.as_str().into());
+                        binding.flush().await?;
+                        let settings = saved.load_settings().await?;
+                        let (active, inactive, previous_inactive) = if dark {
+                            (&settings.appearance.dark_theme, &settings.appearance.light_theme, &previous.appearance.light_theme)
+                        } else {
+                            (&settings.appearance.light_theme, &settings.appearance.dark_theme, &previous.appearance.dark_theme)
+                        };
+                        if active != &entry.id || inactive != previous_inactive
+                            || window.get_selected_theme_id() != entry.id.0.as_str()
+                            || window.get_low_contrast_warning() {
+                            return Err(format!("theme selection failed: {} in {mode}/{system:?}", entry.id.0).into());
+                        }
+                        if window.get_theme().paper != slint::Color::from_rgb_u8(entry.theme.paper.r, entry.theme.paper.g, entry.theme.paper.b)
+                            || window.get_theme_options() != cards {
+                            return Err("palette application replaced theme cards or showed the wrong colors".into());
+                        }
+                        let pixels = window.window().take_snapshot()?;
+                        if pixels.width() == 0 || window.get_note_text() != "original\r\n日本語 👩🏽‍💻" {
+                            return Err("theme rendering failed or changed note source".into());
+                        }
+                        selections += 1;
+                    }
+                }
+                println!("native_theme_selections_verified: {selections}");
+                let mode = saved.load_settings().await?.appearance.mode;
+                window.invoke_theme_assigned("antinote-tartan".into(), false);
+                binding.flush().await?;
+                window.invoke_theme_assigned("antinote-mononoke".into(), true);
+                binding.flush().await?;
+                let assigned = saved.load_settings().await?;
+                if assigned.appearance.light_theme.0 != "antinote-tartan"
+                    || assigned.appearance.dark_theme.0 != "antinote-mononoke"
+                    || assigned.appearance.mode != mode
+                    || window.get_selected_light_theme_id() != "antinote-tartan"
+                    || window.get_selected_dark_theme_id() != "antinote-mononoke" {
+                    return Err("sun/moon assignments did not persist independently".into());
+                }
+                binding.set_system_appearance(SystemAppearance::Light);
+                window.set_appearance_mode("light".into());
+                window.invoke_appearance_changed();
+                binding.flush().await?;
                 window.invoke_theme_selected("matcha".into());
                 binding.flush().await?;
                 if saved.load_settings().await?.appearance.light_theme != ThemeId("matcha".into()) { return Err("theme callback did not persist settings".into()); }
@@ -179,7 +285,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok::<(),Box<dyn std::error::Error>>(())
             }.await;
             match check {
-                Ok(()) => println!("native_appearance_contract_passed: true"),
+                Ok(()) => {
+                    result.set(true);
+                    println!("native_appearance_contract_passed: true");
+                }
                 Err(error) => eprintln!("appearance contract: {error}"),
             }
             let _ = slint::quit_event_loop();
@@ -235,7 +344,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         });
     }
-    let original = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n\r\n- [ ] Task\r\n- [x] Done\r\n- List\r\n";
+    let original = if args.iter().any(|arg| arg == "--markdown-style") {
+        "# Header 1\n## Header 2\n### Header 3\n- [ ] Task\n- [x] Done\n- List\n[link](https://example.com)\n*Italic text*\n**Bold text**\n***Bold and Italic***\n~~Strikethrough text~~\n`inline code`\n"
+    } else {
+        "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n# A little space to think\r\n\r\nPlain Markdown, exactly as typed.\r\n\r\n- [ ] Task\r\n- [x] Done\r\n- List\r\n"
+    };
     window.set_note_text(original.into());
     if args
         .iter()
@@ -438,6 +551,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     application.activate();
     slint::run_event_loop()?;
     window.hide()?;
+    if args.iter().any(|arg| arg == "--appearance-contract") && !appearance_passed.get() {
+        return Err("native appearance contract failed".into());
+    }
     if capture_failed.get() {
         return Err("owned capture failed".into());
     }

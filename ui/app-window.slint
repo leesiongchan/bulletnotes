@@ -85,6 +85,9 @@ export component AppWindow inherits Window {
     in-out property <string> paper-style:"plain";
     in-out property <string> appearance-mode:"system";
     in property <string> selected-theme-id;
+    in property <string> selected-light-theme-id;
+    in property <string> selected-dark-theme-id;
+    in property <bool> system-appearance-dark:false;
     in property <[PageRow]> page-results;
     in property <bool> can-load-more-pages:false;
     callback load-more-pages();
@@ -182,6 +185,7 @@ export component AppWindow inherits Window {
     callback note-edited(string);
     callback appearance-changed();
     callback theme-selected(string);
+    callback theme-assigned(string, bool);
     callback import-theme();
     callback export-theme();
     callback query-changed(string);
@@ -191,6 +195,7 @@ export component AppWindow inherits Window {
     callback cancel-theme-import();
     public function focus-editor() { editor.focus-editor(); }
     public function restore-editor-position(anchor: int, caret: int, y: float) { editor.restore-selection(anchor,caret,y); }
+    public function reveal-theme-choices() { appearance.reveal-themes(); }
     function shortcut(event: KeyEvent) -> EventResult {
         if (event.text == Key.F6) {
             root.chrome-active = true;
@@ -238,7 +243,7 @@ export component AppWindow inherits Window {
         if (root.active-view != "connection") { root.connection-token = ""; }
     }
     Rectangle {
-        background: root.theme.paper;
+        background: root.active-view == "appearance" ? (root.system-appearance-dark ? #1e1f21 : #f4f4f4) : root.theme.paper;
         border-radius: 16px;
         clip: true;
         keys := FocusScope {
@@ -255,7 +260,7 @@ export component AppWindow inherits Window {
                 editor := NoteEditor {
                     width: parent.width;
                     height: parent.height;
-                    top-clearance:root.find-visible ? 92px : 32px;
+                    top-clearance:root.find-visible ? 93.75px : 33.75px;
                     theme: root.theme;
                     text <=> root.note-text;
                     decorations: root.note-decorations;
@@ -302,9 +307,11 @@ export component AppWindow inherits Window {
                 height: parent.height - 44px;
                 width: parent.width;
                 visible: root.active-view == "appearance";
-                theme: root.theme;
                 theme-pairs: root.theme-options;
-                selected-theme: root.selected-theme-id;
+                light-theme: root.selected-light-theme-id;
+                dark-theme: root.selected-dark-theme-id;
+                system-dark: root.system-appearance-dark;
+                high-contrast: root.system-high-contrast;
                 mode <=> root.appearance-mode;
                 paper-style <=> root.paper-style;
                 font-size-px <=> root.font-size-px;
@@ -314,6 +321,7 @@ export component AppWindow inherits Window {
                 apply-hotkey => { root.apply-hotkey(); }
                 changed => { root.appearance-changed(); }
                 theme-selected(id) => { root.theme-selected(id); }
+                theme-assigned(id,dark) => { root.theme-assigned(id,dark); }
                 import-theme => { root.import-theme(); }
                 export-theme => { root.export-theme(); }
                 return-to-note => { root.return-to-note(); }

@@ -53,6 +53,16 @@ impl<'de> Deserialize<'de> for Color {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MarkdownColors {
+    pub heading1: Color,
+    pub heading2: Color,
+    pub heading3: Color,
+    pub link: Color,
+    pub syntax: Color,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Theme {
     pub schema_version: u32,
     pub name: String,
@@ -68,6 +78,12 @@ pub struct Theme {
     pub cursor: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scrollbar: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markdown: Option<MarkdownColors>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swatches: Option<[Color; 8]>,
 }
 impl Theme {
     pub fn validate(&self) -> Result<(), ThemeError> {
@@ -171,7 +187,10 @@ pub fn resolve_theme(
         palette: entry.theme.clone(),
         paper: settings.paper,
         font_size: settings.font_size,
-        pattern: entry.theme.paper.mix(entry.theme.ink, 0.10),
+        pattern: entry
+            .theme
+            .grid
+            .unwrap_or_else(|| entry.theme.paper.mix(entry.theme.ink, 0.10)),
     })
 }
 

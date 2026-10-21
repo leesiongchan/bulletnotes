@@ -2,70 +2,102 @@ import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, ThemeOption, ThemePair } from "../types.slint";
 import { ActionButton, ChoiceButton } from "action-button.slint";
-component ThemeCard inherits FocusScope {
-    in property <UiTheme> theme;
-    in property <ThemeOption> option;
+component ThemeModeButton inherits FocusScope {
+    in property <bool> dark;
+    in property <bool> high-contrast;
+    in property <bool> dark-paper;
     in property <bool> selected;
+    in property <string> name;
     callback clicked();
-    min-height: 78px;
-    preferred-height: 78px;
-    horizontal-stretch: 1;
-    accessible-role: button;
-    accessible-label: root.option.name + (root.selected ? ", selected" : "");
+    width:32px; height:32px;
+    accessible-role:button;
+    accessible-label: root.name + (root.dark ? ", dark appearance" : ", light appearance") + (root.selected ? ", selected" : "");
     accessible-action-default => { root.clicked(); }
     key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
     Rectangle {
-        background: root.option.palette.paper;
-        border-radius: 7px;
-        border-width: root.selected || root.has-focus ? 2px : 1px;
-        border-color: root.selected || root.has-focus ? root.theme.accent : root.theme.line;
-        Text {
-            x: 12px;
-            y: 10px;
-            text: "Aa";
-            font-family: "Menlo";
-            font-size: 16px;
-            color: root.option.palette.ink;
+        border-radius:7px;
+        border-width:root.selected || root.has-focus ? 2px : 1px;
+        border-color:root.high-contrast ? (root.dark-paper ? white : black) : (root.has-focus ? #0091ff : (root.selected ? #0091ff80 : #80808066));
+        background:touch.has-hover ? #0091ff12 : transparent;
+        Image {
+            source:root.dark ? @image-url("../../assets/icons/moon.svg") : @image-url("../../assets/icons/sun.svg");
+            colorize:root.high-contrast ? (root.dark-paper ? white : black) : (root.dark ? #007aff : #ffd600);
+            opacity:root.selected || root.high-contrast ? 1 : 0.2;
+            x:8px; y:8px; width:16px; height:16px;
         }
-
+        touch := TouchArea { clicked => { root.focus(); root.clicked(); } }
+    }
+}
+component ThemeCard inherits FocusScope {
+    in property <ThemeOption> option;
+    in property <bool> high-contrast;
+    in property <bool> light-selected;
+    in property <bool> dark-selected;
+    callback clicked();
+    callback assigned(bool);
+    width:250px; height:100px;
+    accessible-role:button;
+    accessible-label:root.option.name;
+    accessible-action-default => { root.clicked(); }
+    key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
+    Rectangle {
+        border-radius:4px;
+        clip:true;
+        background:root.option.palette.paper;
+        for row in 5: Rectangle {
+            y:(row + 1) * 22.5px;
+            height:0.5px; width:parent.width;
+            background:root.option.palette.pattern;
+            accessible-role:none;
+        }
+        for col in 12: Rectangle {
+            x:9px + col * 22.5px;
+            width:0.5px; height:parent.height;
+            background:root.option.palette.pattern;
+            accessible-role:none;
+        }
+        TouchArea { clicked => { root.focus(); root.clicked(); } }
+        Text {
+            x:16px; y:14px; width:139px; height:24px;
+            text:root.option.name;
+            font-family:"Menlo"; font-size:15px;
+            color:root.option.palette.ink;
+            overflow:elide;
+        }
+        for shade[index] in [root.option.swatches.primary, root.option.swatches.secondary, root.option.swatches.tertiary, root.option.swatches.accent2, root.option.swatches.accent3, root.option.swatches.accent4, root.option.swatches.accent5, root.option.swatches.highlight]: Rectangle {
+            x:15px + index * 28px; y:60px;
+            width:24px; height:24px; border-radius:12px;
+            background:shade;
+            accessible-role:none;
+        }
         Rectangle {
-            x: 43px;
-            y: 22px;
-            width: 26px;
-            height: 2px;
-            background: root.option.palette.accent;
+            border-radius:4px;
+            border-width:root.light-selected || root.dark-selected || root.has-focus ? 2px : 0px;
+            border-color:root.high-contrast ? (root.option.palette.dark ? white : black) : #0091ff;
+            background:transparent;
+            accessible-role:none;
         }
-
-        Text {
-            x: 12px;
-            y: 46px;
-            width: max(1px,parent.width - (root.selected ? 90px : 24px));
-            overflow: elide;
-            text: root.option.name;
-            font-size: 11px;
-            color: root.option.palette.ink;
+        ThemeModeButton {
+            x:165px; y:7px;
+            high-contrast:root.high-contrast; dark-paper:root.option.palette.dark;
+            name:root.option.name; dark:false; selected:root.light-selected;
+            clicked => { root.assigned(false); }
         }
-
-        Text {
-            x: parent.width - 66px;
-            y: 48px;
-            width: 54px;
-            text: root.selected ? "Selected" : "";
-            horizontal-alignment: right;
-            font-size: 9px;
-            color: root.option.palette.muted;
-        }
-
-        TouchArea {
-            clicked => { root.focus(); root.clicked(); }
+        ThemeModeButton {
+            x:202px; y:7px;
+            high-contrast:root.high-contrast; dark-paper:root.option.palette.dark;
+            name:root.option.name; dark:true; selected:root.dark-selected;
+            clicked => { root.assigned(true); }
         }
     }
 }
 
 export component AppearancePanel inherits Rectangle {
-    in property <UiTheme> theme;
+    in property <bool> system-dark:false;
+    in property <bool> high-contrast:false;
+    in property <string> light-theme;
+    in property <string> dark-theme;
     in property <[ThemePair]> theme-pairs;
-    in property <string> selected-theme;
     in-out property <string> mode:"system";
     in-out property <string> paper-style:"plain";
     in-out property <float> font-size-px:15;
@@ -79,36 +111,51 @@ export component AppearancePanel inherits Rectangle {
     callback apply-hotkey();
     callback changed();
     callback theme-selected(string);
+    callback theme-assigned(string, bool);
     callback import-theme();
     callback export-theme();
     callback apply-low-contrast();
     callback cancel-theme-import();
     out property <bool> controls-first:paper-heading.y < theme-heading.y && font-controls.y < theme-heading.y;
     public function focus-panel() { system-button.focus(); }
-    background: root.theme.paper;
+    private property <UiTheme> chrome: {
+        paper:root.high-contrast ? (root.system-dark ? black : white) : (root.system-dark ? #1e1f21 : #f4f4f4),
+        surface:root.high-contrast ? (root.system-dark ? black : white) : (root.system-dark ? #252628 : #ffffff),
+        ink:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #dedede : #242424),
+        muted:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #999999 : #686868),
+        accent:root.high-contrast ? (root.system-dark ? white : black) : #0091ff,
+        line:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #48484a : #c9c9c9),
+        selection:root.system-dark ? #3b3b3d : #e3e3e6,
+        cursor:#0091ff, scrollbar:root.system-dark ? #666666 : #aaaaaa,
+        pattern:transparent, dark:root.system-dark,
+        markdown:{heading1:transparent,heading2:transparent,heading3:transparent,link:transparent,syntax:transparent}
+    };
+    private property <length> inset:root.width >= 696px ? 48px : 20px;
+    public function reveal-themes() { scroll.content-y = -max(0px,theme-heading.y - 12px); }
+    background:root.chrome.paper;
     Text {
-        x: 24px;
+        x: root.inset;
         y: 14px;
         text: "Appearance";
         font-size: 17px;
         font-weight: 550;
-        color: root.theme.ink;
+        color: root.chrome.ink;
     }
 
     ActionButton {
         x: parent.width - 44px;
         y: 9px;
-        theme: root.theme;
+        theme: root.chrome;
         icon: @image-url("../../assets/icons/close.svg");
         label: "Return to note";
         clicked => { root.return-to-note(); }
     }
 
     scroll := ThemeScrollView {
-        scrollbar-color: root.theme.scrollbar;
-        x: 24px;
+        scrollbar-color: root.chrome.scrollbar;
+        x: root.inset;
         y: 53px;
-        width: parent.width - 48px;
+        width: parent.width - 2 * root.inset;
         height: parent.height - 101px;
         content-width: self.visible-width;
         content-height: content.preferred-height;
@@ -116,14 +163,14 @@ export component AppearancePanel inherits Rectangle {
             width: scroll.visible-width;
             padding: 0px;
             spacing: 12px;
-            Text {text:"TEXT AND PAPER";font-size:10px;font-weight:600;color:root.theme.muted;}
+            Text {text:"TEXT AND PAPER";font-size:10px;font-weight:600;color:root.chrome.muted;}
             font-controls := HorizontalBox {
                 padding: 0px;
                 spacing: 8px;
                 Text {
                     text: "Text size";
                     font-size: 11px;
-                    color: root.theme.ink;
+                    color: root.chrome.ink;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -131,7 +178,7 @@ export component AppearancePanel inherits Rectangle {
                 ChoiceButton {
                     text: "−";
                     label: "Decrease text size";
-                    theme: root.theme;
+                    theme: root.chrome;
                     width: 32px;
                     horizontal-stretch: 0;
                     accessible-label: "Decrease text size";
@@ -141,7 +188,7 @@ export component AppearancePanel inherits Rectangle {
                 Text {
                     text: root.font-size-px + " px";
                     font-size: 11px;
-                    color: root.theme.muted;
+                    color: root.chrome.muted;
                     width: 38px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -150,7 +197,7 @@ export component AppearancePanel inherits Rectangle {
                 ChoiceButton {
                     text: "+";
                     label: "Increase text size";
-                    theme: root.theme;
+                    theme: root.chrome;
                     width: 32px;
                     horizontal-stretch: 0;
                     accessible-label: "Increase text size";
@@ -162,7 +209,7 @@ export component AppearancePanel inherits Rectangle {
                 text: "PAPER";
                 font-size: 10px;
                 font-weight: 600;
-                color: root.theme.muted;
+                color: root.chrome.muted;
             }
 
             HorizontalBox {
@@ -170,60 +217,60 @@ export component AppearancePanel inherits Rectangle {
                 spacing: 4px;
                 ChoiceButton {
                     text: "Plain";
-                    theme: root.theme;
+                    theme: root.chrome;
                     selected: root.paper-style == "plain";
                     clicked => { root.paper-style = "plain"; root.changed(); }
                 }
 
                 ChoiceButton {
                     text: "Dots";
-                    theme: root.theme;
+                    theme: root.chrome;
                     selected: root.paper-style == "dots";
                     clicked => { root.paper-style = "dots"; root.changed(); }
                 }
 
                 ChoiceButton {
                     text: "Ruled";
-                    theme: root.theme;
+                    theme: root.chrome;
                     selected: root.paper-style == "ruled";
                     clicked => { root.paper-style = "ruled"; root.changed(); }
                 }
 
                 ChoiceButton {
                     text: "Grid";
-                    theme: root.theme;
+                    theme: root.chrome;
                     selected: root.paper-style == "grid";
                     clicked => { root.paper-style = "grid"; root.changed(); }
                 }
             }
 
-            Text {text:"APPEARANCE";font-size:10px;font-weight:600;color:root.theme.muted;}
+            Text {text:"APPEARANCE";font-size:10px;font-weight:600;color:root.chrome.muted;}
             Rectangle {
                 height: 34px;
-                background: root.theme.surface;
+                background: root.chrome.surface;
                 border-radius: 6px;
                 border-width: 1px;
-                border-color: root.theme.line;
+                border-color: root.chrome.line;
                 HorizontalBox {
                     padding: 3px;
                     spacing: 3px;
                     ChoiceButton {
                         text: "Light";
-                        theme: root.theme;
+                        theme: root.chrome;
                         selected: root.mode == "light";
                         clicked => { root.mode = "light"; root.changed(); }
                     }
 
                     ChoiceButton {
                         text: "Dark";
-                        theme: root.theme;
+                        theme: root.chrome;
                         selected: root.mode == "dark";
                         clicked => { root.mode = "dark"; root.changed(); }
                     }
 
                     system-button := ChoiceButton {
                         text: "System";
-                        theme: root.theme;
+                        theme: root.chrome;
                         selected: root.mode == "system";
                         clicked => { root.mode = "system"; root.changed(); }
                     }
@@ -233,48 +280,72 @@ export component AppearancePanel inherits Rectangle {
             Text {
                 text: root.mode == "system" ? "Follows macOS · light and dark choices are saved separately" : "Your light and dark choices are saved separately";
                 font-size: 10px;
-                color: root.theme.muted;
+                color: root.chrome.muted;
                 wrap: word-wrap;
             }
 
             theme-heading := Text {
-                text: "THEME";
-                font-size: 10px;
+                text: "Themes";
+                font-size: 13px;
                 font-weight: 600;
-                color: root.theme.muted;
+                color: root.chrome.ink;
             }
 
-            for pair in root.theme-pairs: HorizontalBox {
-                padding: 0px;
-                spacing: 10px;
-                height: 78px;
-                ThemeCard {
-                    theme: root.theme;
-                    option: pair.left;
-                    selected: root.selected-theme == pair.left.id;
-                    clicked => { root.theme-selected(pair.left.id); }
-                }
-
-                ThemeCard {
-                    theme: root.theme;
-                    option: pair.right;
-                    selected: root.selected-theme == pair.right.id;
-                    visible: pair.has-right;
-                    clicked => { root.theme-selected(pair.right.id); }
-                }
-            }
-            Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.theme.muted; }
             Rectangle {
-                height:34px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;border-radius:5px;
-                TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.theme.ink;font-size:12px;selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
+                height:theme-rows.preferred-height + 32px;
+                background:root.chrome.surface;
+                border-radius:10px;
+                theme-rows := VerticalBox {
+                    y:16px; width:parent.width; padding:0px; spacing:16px;
+                    for pair in root.theme-pairs: Rectangle {
+                        private property <bool> two-columns:self.width >= 600px;
+                        height:self.two-columns || !pair.has-right ? 100px : 216px;
+                        ThemeCard {
+                            x:parent.two-columns ? (parent.width - 600px) / 2 : (parent.width - 250px) / 2;
+                            y:0px;
+                            high-contrast:root.high-contrast;
+                            option:pair.left;
+                            light-selected:root.light-theme == pair.left.id;
+                            dark-selected:root.dark-theme == pair.left.id;
+                            clicked => { root.theme-selected(pair.left.id); }
+                            assigned(dark) => { root.theme-assigned(pair.left.id,dark); }
+                        }
+                        ThemeCard {
+                            x:parent.two-columns ? (parent.width - 600px) / 2 + 350px : (parent.width - 250px) / 2;
+                            y:parent.two-columns ? 0px : 116px;
+                            high-contrast:root.high-contrast;
+                            option:pair.right;
+                            visible:pair.has-right;
+                            light-selected:root.light-theme == pair.right.id;
+                            dark-selected:root.dark-theme == pair.right.id;
+                            clicked => { root.theme-selected(pair.right.id); }
+                            assigned(dark) => { root.theme-assigned(pair.right.id,dark); }
+                        }
+                    }
+                }
             }
-            Text {text:"For example, Option+A or Control+Shift+Space.";font-size:10px;color:root.theme.muted;wrap:word-wrap;}
-            ChoiceButton {theme:root.theme;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}
-            Text {text:root.native-message;font-size:11px;color:root.theme.muted;wrap:word-wrap;}
+            Rectangle {
+                height:68px; background:root.chrome.surface; border-radius:10px;
+                Text {x:10px;y:10px;text:"Custom themes";font-size:13px;color:root.chrome.ink;}
+                Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:11px;color:root.chrome.muted;wrap:word-wrap;}
+                HorizontalBox {
+                    x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:8px;
+                    ChoiceButton {text:"Import…";label:"Import theme";theme:root.chrome;clicked => {root.import-theme();}}
+                    ChoiceButton {text:"Export…";label:"Export theme";theme:root.chrome;clicked => {root.export-theme();}}
+                }
+            }
+            Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.chrome.muted; }
+            Rectangle {
+                height:34px;background:root.chrome.surface;border-width:1px;border-color:root.chrome.line;border-radius:5px;
+                TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.chrome.ink;font-size:12px;selection-background-color:root.chrome.cursor;selection-foreground-color:root.chrome.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
+            }
+            Text {text:"For example, Option+A or Control+Shift+Space.";font-size:10px;color:root.chrome.muted;wrap:word-wrap;}
+            ChoiceButton {theme:root.chrome;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}
+            Text {text:root.native-message;font-size:11px;color:root.chrome.muted;wrap:word-wrap;}
             Text {
                 visible: root.message != "";
                 text: root.message;
-                color: root.theme.ink;
+                color: root.chrome.ink;
                 font-size: 11px;
                 wrap: word-wrap;
             }
@@ -284,7 +355,7 @@ export component AppearancePanel inherits Rectangle {
                 spacing: 8px;
                 Text {
                     text: "This theme has low contrast. Text or controls may be difficult to see.";
-                    color: root.theme.ink;
+                    color: root.chrome.ink;
                     font-size: 11px;
                     wrap: word-wrap;
                 }
@@ -294,13 +365,13 @@ export component AppearancePanel inherits Rectangle {
                     spacing: 8px;
                     ChoiceButton {
                         text: "Cancel";
-                        theme: root.theme;
+                        theme: root.chrome;
                         clicked => { root.cancel-theme-import(); }
                     }
 
                     ChoiceButton {
                         text: "Apply anyway";
-                        theme: root.theme;
+                        theme: root.chrome;
                         clicked => { root.apply-low-contrast(); }
                     }
                 }
@@ -309,26 +380,21 @@ export component AppearancePanel inherits Rectangle {
     }
 
     HorizontalBox {
-        x: 24px;
+        x: root.inset;
         y: parent.height - 39px;
-        width: parent.width - 48px;
+        width: parent.width - 2 * root.inset;
         height: 29px;
         padding: 0px;
         spacing: 8px;
-        ChoiceButton {
-            text: "Import theme…";
-            theme: root.theme;
-            clicked => { root.import-theme(); }
-        }
-
-        ChoiceButton {
-            text: "Export theme…";
-            theme: root.theme;
-            clicked => { root.export-theme(); }
+        Text {
+            text:root.message;
+            font-size:11px; color:root.chrome.muted;
+            vertical-alignment:center; overflow:elide;
+            horizontal-stretch:1;
         }
         ChoiceButton {
             text: "Connection…";
-            theme: root.theme;
+            theme: root.chrome;
             clicked => { root.show-connection(); }
         }
     }

@@ -327,8 +327,32 @@ async fn blocked_handoffs_bound_reads_and_replay_latest_after_settlement() {
             reads <= 3,
             "blocked handoff hot-looped: {reads} reads/500ms"
         );
+        if !fenced && !read_only {
+            // A writable readback can replay the handoff before the next denied PUT.
+            sync.refresh();
+            tokio::time::timeout(Duration::from_secs(8), async {
+                while store
+                    .load_editor_page(&target)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .authored
+                    .is_some()
+                {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("writable readback must replay the latest authored source");
+        }
         let restored = store.load_editor_page(&target).await.unwrap().unwrap();
-        assert_eq!(restored.authored.unwrap().body, latest);
+        assert_eq!(restored.presented().body, latest);
+        if fenced {
+            assert!(
+                restored.authored.is_some(),
+                "unacknowledged recovery must retain the authored branch"
+            );
+        }
         until(|| f.body("peer.md").as_deref() == Some("unrelated peer")).await;
         eprintln!("fenced={fenced}: unrelated peer progressed");
         assert!(sync.snapshot().pending > 0);
@@ -797,11 +821,21 @@ async fn current_recovery_ack_settles_obligation_while_old_attempt_stays_unknown
     assert!(heads.iter().any(|h| h.operation_id == old.operation.id
         && h.state == RecoveryUploadState::Unknown
         && !h.current));
+    // Make remote visibility precede acknowledgment even without scheduler pressure.
+    f.data.lock().unwrap().lost_put = Some(head.key.path.as_str().into());
     store
         .save_local(head.key.clone(), "edited occupied".into(), LocalRevision(2))
         .await
         .unwrap();
     until(|| f.body(head.key.path.as_str()).as_deref() == Some("edited occupied")).await;
+    // A remote body or stale zero-valued snapshot does not prove a durable acknowledgment.
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while store.cache_progress(config().id()).await.unwrap().pending != 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("final upload must settle durably before shutdown");
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
     let store = StoreHandle::open(&path).await.unwrap();
