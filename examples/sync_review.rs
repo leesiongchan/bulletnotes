@@ -34,7 +34,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-const OFFLINE_SOURCE: &str = "Saved offline\r\n日本語 café 👩🏽‍💻\r\n";
+const OFFLINE_SOURCE: &str = "Saved offline\r\n日本語 café 👩🏽‍💻\r\n- [x] source command\r\n";
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 struct SessionOnly(Arc<AtomicUsize>);
 impl CredentialBackend for SessionOnly {
@@ -288,8 +288,33 @@ fn main() -> Result<()> {
             fixture.fault(http_fixture::Fault::Status(503));
             local.refresh_sync();
             until(|| window.get_status_text().contains("Offline")).await?;
-            window.set_note_text(OFFLINE_SOURCE.into());
-            window.invoke_note_edited(OFFLINE_SOURCE.into());
+            let source = OFFLINE_SOURCE.replacen("- [x] source command", "- [ ] source command", 1);
+            window.set_note_text(source.as_str().into());
+            window.invoke_note_edited(source.as_str().into());
+            let task = source
+                .find("- [ ] source command")
+                .ok_or("generated task absent")?
+                + "- [ ] source command".len();
+            window.invoke_focus_editor();
+            window.invoke_restore_editor_position(task as i32, task as i32, 0.0);
+            use slint::platform::{Key, WindowEvent};
+            for (text, down) in [
+                (Key::Control.into(), true),
+                (Key::Shift.into(), true),
+                ("k".into(), true),
+                ("k".into(), false),
+                (Key::Shift.into(), false),
+                (Key::Control.into(), false),
+            ] {
+                window.window().dispatch_event(if down {
+                    WindowEvent::KeyPressed { text }
+                } else {
+                    WindowEvent::KeyReleased { text }
+                });
+            }
+            if window.get_note_text() != OFFLINE_SOURCE {
+                return Err("real task command did not edit offline source".into());
+            }
             local.wait_until_saved().await?;
             if saved.load_page(&key()).await?.unwrap().body != OFFLINE_SOURCE {
                 return Err("offline source was not durable".into());

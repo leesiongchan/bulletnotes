@@ -1,6 +1,7 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
 use crate::{
-    AppWindow, ThemeOption, ThemePair, UiMarkdownColors, UiTheme, UiThemeSwatches,
+    AppWindow, MarkdownCommand, MarkdownEdit, ThemeOption, ThemePair, UiMarkdownColors, UiTheme,
+    UiThemeSwatches,
     store::settings::AppSettings,
     theme::{self, AppearanceMode, PaperStyle, ResolvedTheme, SystemAppearance, Theme, ThemeError},
 };
@@ -41,6 +42,70 @@ fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
 }
 /// Change presentation without replacing the editor or modifying its source text.
 pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
+    window.on_edit_markdown(|source, anchor, caret, command, marker_start, marker_end| {
+        use super::source_commands::{CommandResult, Selection, SourceCommand, compute};
+        let (Ok(anchor), Ok(caret)) = (usize::try_from(anchor), usize::try_from(caret)) else {
+            return MarkdownEdit::default();
+        };
+        let command = match command {
+            MarkdownCommand::ToggleTask if marker_start >= 0 && marker_end >= 0 => {
+                SourceCommand::ToggleTaskAt {
+                    start: marker_start as usize,
+                    end: marker_end as usize,
+                }
+            }
+            MarkdownCommand::ToggleTask => SourceCommand::ToggleTask,
+            MarkdownCommand::ContinueList => SourceCommand::ContinueList,
+            MarkdownCommand::IndentList => SourceCommand::IndentList,
+            MarkdownCommand::OutdentList => SourceCommand::OutdentList,
+            MarkdownCommand::Bold => SourceCommand::Bold,
+            MarkdownCommand::Italic => SourceCommand::Italic,
+            MarkdownCommand::Strikethrough => SourceCommand::Strikethrough,
+            MarkdownCommand::CycleHeading => SourceCommand::CycleHeading,
+            MarkdownCommand::MoveUp => SourceCommand::MoveUp,
+            MarkdownCommand::MoveDown => SourceCommand::MoveDown,
+        };
+        let result = compute(&source, Selection { anchor, caret }, command);
+        tracing::debug!(
+            ?command,
+            outcome = match &result {
+                CommandResult::Native => "native",
+                CommandResult::NoChange => "unchanged",
+                CommandResult::Edit(_) => "edit",
+            },
+            "Markdown source command computed"
+        );
+        match result {
+            CommandResult::Native => MarkdownEdit::default(),
+            CommandResult::NoChange => MarkdownEdit {
+                handled: true,
+                ..Default::default()
+            },
+            CommandResult::Edit(edit) => {
+                let (Ok(start), Ok(end), Ok(anchor), Ok(caret)) = (
+                    i32::try_from(edit.range.start),
+                    i32::try_from(edit.range.end),
+                    i32::try_from(edit.selection.anchor),
+                    i32::try_from(edit.selection.caret),
+                ) else {
+                    return MarkdownEdit {
+                        handled: true,
+                        ..Default::default()
+                    };
+                };
+                MarkdownEdit {
+                    handled: true,
+                    changed: true,
+                    start,
+                    end,
+                    replacement: edit.replacement.into(),
+                    anchor,
+                    caret,
+                    preserve_scroll: edit.preserve_scroll,
+                }
+            }
+        }
+    });
     // The pure callback binding refreshes for every source and effective palette change.
     window.on_highlight_markdown(|source, palette, high_contrast| {
         ModelRc::from(super::markdown::decorations(&source, &palette, high_contrast).as_slice())

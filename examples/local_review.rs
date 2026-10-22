@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 local.dispatch(AppAction::NewNote);
                 local.flush().await?;
                 let original_key = local.current_key().ok_or("draft absent")?;
-                let source = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n    indented source\r\n";
+                let source = "---\r\ntitle: café\r\n---\r\n\t👩🏽‍💻 日本語\r\n    indented source\r\n- [ ] source command\r\n";
                 window.set_note_text(source.into());
                 window.invoke_note_edited(source.into());
                 // Observe automatic durability; do not request a manual flush here.
@@ -73,6 +73,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let failed_text = format!("{source}# keep this failed-save buffer\r\n");
                 window.set_note_text(failed_text.as_str().into());
                 window.invoke_note_edited(failed_text.as_str().into());
+                let task = failed_text.find("- [ ] source command").ok_or("generated task absent")? + "- [ ] source command".len();
+                window.invoke_focus_editor();
+                window.invoke_restore_editor_position(task as i32, task as i32, 0.0);
+                use slint::platform::{Key, WindowEvent};
+                for (text, down) in [(Key::Control.into(), true), (Key::Shift.into(), true), ("k".into(), true), ("k".into(), false), (Key::Shift.into(), false), (Key::Control.into(), false)] {
+                    window.window().dispatch_event(if down { WindowEvent::KeyPressed { text } } else { WindowEvent::KeyReleased { text } });
+                }
+                let failed_text = failed_text.replacen("- [ ] source command", "- [x] source command", 1);
                 if local.flush().await.is_ok() || window.get_note_text().as_str() != failed_text {
                     return Err("failed save lost or acknowledged the buffer".into());
                 }
@@ -85,9 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if store.load_page(&original_key).await?.ok_or("retry page absent")?.body != failed_text {
                     return Err("retry callback did not save retained text".into());
                 }
-                window.set_note_text(source.into());
-                window.invoke_note_edited(source.into());
-                local.wait_until_saved().await?;
+                let source = failed_text.as_str();
                 window.invoke_new_note();
                 local.flush().await?;
                 if local.current_key() == Some(original_key.clone()) {

@@ -26,3 +26,9 @@ export struct UiThemeSwatches {
 }
 export struct ThemeOption { id: string, name: string, palette: UiTheme, swatches: UiThemeSwatches }
 export struct ThemePair { left: ThemeOption, right: ThemeOption, has-right: bool }
+
+export enum MarkdownCommand { toggle-task, continue-list, indent-list, outdent-list, bold, italic, strikethrough, cycle-heading, move-up, move-down }
+export struct MarkdownEdit {
+    handled: bool, changed: bool, start: int, end: int, replacement: string,
+    anchor: int, caret: int, preserve-scroll: bool
+}
