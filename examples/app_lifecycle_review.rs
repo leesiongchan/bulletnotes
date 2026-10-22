@@ -280,9 +280,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 window.set_note_text(changed.into());
                 window.invoke_note_edited(changed.into());
                 eprintln!("lifecycle stage: native close");
-                native_window(window.window())?.performClose(None);
+                // performClose declines disabled controls; reveal the floating traffic lights first.
+                window.set_chrome_active(true);window.set_header_hovered(true);
+                let native=native_window(window.window())?;
+                let close=native.standardWindowButton(objc2_app_kit::NSWindowButton::CloseButton).ok_or("native close control absent")?;
+                for _ in 0..100 {if close.isEnabled(){break;}pause().await;}
+                if !close.isEnabled(){return Err("revealed native close control remained disabled".into());}
+                native.performClose(None);
                 for _ in 0..200 { if !window.window().is_visible() { break; } pause().await; }
-                if window.window().is_visible() { return Err("native close did not hide".into()); }
+                if window.window().is_visible() { return Err(format!("native close did not hide: pending={}, readonly={}, status={}",window.get_lifecycle_pending(),window.get_note_read_only(),window.get_status_text()).into()); }
                 if store.load_page(&review_key).await?.ok_or("page absent")?.body != changed { return Err("native close hid before saving".into()); }
                 #[cfg(feature="protocol-validation")]
                 if blocked_check.data.lock().unwrap().active_reads!=1{return Err("hide required the held network response".into());}

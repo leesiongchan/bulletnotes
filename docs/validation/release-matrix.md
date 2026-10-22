@@ -4,6 +4,16 @@ Updated 2026-10-19. This is a development build; unobserved acceptance gates are
 open. Supported hardware is Apple Silicon only on macOS 14+; Intel and universal
 builds are excluded by the user’s 2026-10-18 scope correction. The older live BN/BN 2 previews and the user's store were not replaced.
 
+## Live editor position checkpoint
+
+[The current position evidence](editor-position.md) records live directed
+selection/scroll capture, exact generated native process restart, failed metadata
+retry, mapped rebase history, fresh full checks and independent review. The new
+arm64 development package passed isolated Metal installation verification; the
+signed lifecycle fixture passed. Public AX ranges passed; VoiceOver automation
+timed out and its speech/editing gate remains open. Earlier checkpoint statements
+about selection capture below are historical.
+
 ## Antinote interface and scratchpad navigation
 
 [The 2026-10-19 evidence](antinote-ui-ux.md) records the installed-app inspection,
@@ -58,7 +68,7 @@ to the deployed space, inspect existing notes, or synthesize physical key events
 | Reduced transparency/motion | Policy flags observed via public API; opaque/static UI; physical preference change still open |
 | Long page list | Native benchmark reached all 10,000 generated rows; physical keyboard/VoiceOver traversal still open |
 | Diagnostics | Sentinel, seven-day expiry, failed export preservation regressions passed; explicit native save dialog awaits manual interaction |
-| Exact directional caret/selection capture and restoration after relaunch | Open supported API gate; see [selection investigation](selection-api.md) |
+| Exact directional caret/selection capture and restoration after relaunch | Passed generated native process restart on the current host; see [position evidence](editor-position.md) |
 
 The initial signed-bundle run failed because `activateFromApplication:options:`
 was declined for the short-lived launcher. The verified owner now receives an

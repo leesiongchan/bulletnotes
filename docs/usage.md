@@ -65,11 +65,11 @@ save or metadata check retains the current note. Delete moves a note to recovera
 Trash and selects an older neighbor, a newer neighbor, or a fresh blank when the
 stack is empty. There is no automatic expiry. Command+P toggles Pin.
 
-Known selection targets can be restored, and auxiliary views retain the editor.
-The private native editor exposes directed selection for command history. Exact
-live selection capture across page changes/relaunch remains an open acceptance
-requirement; see the [selection investigation](validation/selection-api.md) and
-[interaction validation record](validation/antinote-interactions.md).
+Caret, directed selection and scroll are saved when switching notes or leaving
+the app, and restored when returning or relaunching. Auxiliary views retain the
+editor. Generated native restart and failure/retry checks are recorded in
+[live position validation](validation/editor-position.md); VoiceOver and the
+broader supported-device release checks remain open.
 
 ## Source editing shortcuts
 

@@ -1,5 +1,11 @@
 # Selection state: deeper investigation
 
+Historical investigation. The later approved private editor now captures live
+directed UTF-8 selection and scroll at navigation/lifecycle boundaries. See
+[live position validation](editor-position.md) for current native process-restart,
+failure/retry and review evidence. The upstream/public-API findings below remain
+historical; they do not describe the maintained private editor's current status.
+
 Investigated 2026-10-17 on the current macOS arm64 host, Rust 1.99.1, Slint 1.18.1, winit/FemtoVG, AccessKit macOS 0.26.3. Production code and requirements remain unchanged. The earlier proposal to defer all cross-page/relaunch caret restoration was premature: a public macOS range-reading path exists and is now demonstrated in disposable native examples.
 
 ## What the user would notice
