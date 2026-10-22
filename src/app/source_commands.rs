@@ -250,14 +250,11 @@ impl<'a> Context<'a> {
             .any(|blocked| intersects(blocked, range))
     }
     fn heading(&self, line: &Line) -> Option<Range<usize>> {
-        if !self
+        let heading = self
             .headings
             .iter()
-            .any(|range| range.start >= line.start && range.start <= line.content_end)
-        {
-            return None;
-        }
-        let start = whitespace_end(self.source, quote_end(self.source, line));
+            .find(|range| range.start >= line.start && range.start <= line.content_end)?;
+        let start = whitespace_end(self.source, heading.start);
         let end = start
             + self.source[start..line.content_end]
                 .bytes()
@@ -270,13 +267,20 @@ impl<'a> Context<'a> {
         .then_some(start..end)
     }
     fn body_start(&self, line: &Line) -> usize {
-        if let Some(item) = self.item(line).filter(|item| item.marker >= line.start) {
-            return item.body.min(line.content_end);
-        }
-        if let Some(heading) = self.heading(line) {
-            return whitespace_end(self.source, heading.end).min(line.content_end);
-        }
-        quote_end(self.source, line)
+        let start = self
+            .item(line)
+            .filter(|item| item.marker >= line.start)
+            .map_or(line.start, |item| item.body.min(line.content_end));
+        let start = quote_end(
+            self.source,
+            &Line {
+                start,
+                ..line.clone()
+            },
+        );
+        self.heading(line).map_or(start, |heading| {
+            start.max(whitespace_end(self.source, heading.end).min(line.content_end))
+        })
     }
     fn semantic(&self, mut range: Range<usize>) -> Range<usize> {
         while let Some(span) = self.spans.iter().find(|span| span.full == range) {
@@ -498,6 +502,48 @@ mod tests {
             "> # *café*\n> *two*"
         );
         assert_eq!(run("- one", sel(1, 5), Bold).0, "- one");
+    }
+    #[test]
+    fn formatting_preserves_nested_container_and_heading_prefixes() {
+        for prefix in ["- # ", "- > ", "> - # ", "- > # ", "> - > ## "] {
+            let source = format!("{prefix}heading");
+            for (command, delimiter) in [(Bold, "**"), (Italic, "*"), (Strikethrough, "~~")] {
+                let want = format!("{prefix}{delimiter}heading{delimiter}");
+                let start = prefix.len() + delimiter.len();
+                let end = start + "heading".len();
+                assert_eq!(
+                    run(&source, sel(0, source.len()), command),
+                    (want.clone(), sel(start, end))
+                );
+                assert_eq!(
+                    run(&source, sel(source.len(), 0), command),
+                    (want, sel(end, start))
+                );
+                assert_eq!(
+                    run(&source, sel(prefix.len() - 1, source.len()), command).0,
+                    source
+                );
+            }
+        }
+    }
+    #[test]
+    fn heading_respects_code_context_at_trailing_empty_line() {
+        for source in ["```\n", "```rust\nword\n", "~~~\n"] {
+            assert_eq!(
+                run(source, sel(source.len(), source.len()), CycleHeading).0,
+                source
+            );
+        }
+        let source = "```\n```\n";
+        assert_eq!(
+            run(source, sel(source.len(), source.len()), CycleHeading).0,
+            "```\n```\n# "
+        );
+        assert_eq!(
+            run("word `code`", sel(2, 2), CycleHeading).0,
+            "# word `code`"
+        );
+        assert_eq!(run("word `code`", sel(7, 7), CycleHeading).0, "word `code`");
     }
     #[test]
     fn inline_shortcuts_toggle_unicode_words_and_keep_directed_selection() {

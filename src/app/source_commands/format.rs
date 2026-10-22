@@ -170,7 +170,14 @@ fn delimiter_cut(target: &Range<usize>, span: &Span) -> bool {
 fn heading(ctx: &Context<'_>, selection: Selection) -> CommandResult {
     let source = ctx.source;
     let line = &ctx.lines[ctx.line_at(selection.caret)];
-    if ctx.protected(&(line.start..line.end)) || ctx.item(line).is_some() {
+    let caret = selection.caret..selection.caret + 1;
+    // Probe the empty EOF line so the parser distinguishes open fences from closed blocks.
+    let protected = if line.start == source.len() {
+        Context::new(&format!("{source}x")).protected(&caret)
+    } else {
+        ctx.protected(&caret)
+    };
+    if protected || ctx.item(line).is_some() {
         return CommandResult::NoChange;
     }
     let change = if let Some(prefix) = ctx.heading(line) {
