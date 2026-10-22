@@ -268,3 +268,23 @@ composition after undo, while later diagnostic attempts stalled before the first
 rendered frame. Its passing guard fixture does not waive this gate. Other IMEs,
 VoiceOver, cross-page/relaunch selection, hardware/OS, performance and distribution
 retain their existing acceptance requirements. Main was not merged or pushed.
+
+
+## Antinote native input follow-up — 2026-10-23
+
+The [follow-up evidence](antinote-interactions.md#native-input-and-startup-follow-up--2026-10-23)
+closes the full input-fixture gate left open at `7911aa0`. Two fresh complete
+traced runs passed all four real Pinyin conversion/commit/undo/cancel cases,
+candidate placement, source restoration and one-step undo in Tartan and Mononoke.
+The implementation and fixture were unchanged. A third run's observed application
+deactivation was correctly rejected and is retained as an interrupted attempt.
+Normal startup and controlled cover/uncover with both chrome orderings passed;
+the controlled occlusion recovers naturally, without an alpha or backend override.
+Supplementary light/dark/minimum/contrast captures passed. This does not identify
+the original historical occluder or explain every earlier untraced input failure.
+
+Fresh application checks again passed 393 tests, zero failures, 24 explicit
+ignores, formatting and strict Clippy. The unchanged renderer's 43 passes remain
+applicable. The ten named interaction contracts are accepted on this host;
+other IMEs, VoiceOver, cross-page/relaunch selection, hardware/OS, performance and
+distribution remain separate release requirements.
