@@ -98,3 +98,5 @@ required-features = ["native-validation"]
 i-slint-common = { path = "target/slint-source-highlighting/crates/i-slint-common-1.18.1" }
 i-slint-compiler = { path = "target/slint-source-highlighting/crates/i-slint-compiler-1.18.1" }
 i-slint-core = { path = "target/slint-source-highlighting/crates/i-slint-core-1.18.1" }
+i-slint-backend-winit = { path = "target/slint-source-highlighting/crates/i-slint-backend-winit-1.18.1" }
+winit = { path = "target/slint-source-highlighting/crates/winit-0.30.13" }

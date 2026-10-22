@@ -13,5 +13,15 @@
     "name": "i-slint-core",
     "version": "1.18.1",
     "sha256": "ed2ea15059d70bc31b1a8b1eb4c34f2c5df04cb7e53f36179b43c0261231d646"
+  },
+  {
+    "name": "i-slint-backend-winit",
+    "version": "1.18.1",
+    "sha256": "dae4fcf1b19e9cb109984d2af87d2b9485388c619265bff71dd523133888bee2"
+  },
+  {
+    "name": "winit",
+    "version": "0.30.13",
+    "sha256": "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
   }
 ]

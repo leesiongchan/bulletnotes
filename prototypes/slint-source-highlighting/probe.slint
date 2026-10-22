@@ -8,6 +8,9 @@ export component EditorHarness inherits Window {
     in property <[TextInputDecoration]> decorations;
     in property <[TextInputMarker]> markers;
     in property <bool> italic: false;
+    in property <bool> read-only: false;
+    in property <bool> input-enabled: true;
+    out property <bool> source-edits-allowed: input.source-edits-allowed;
     in property <length> editor-width: root.width - 72px;
     out property <Point> caret-point;
     out property <length> text-height: input.preferred-height;
@@ -25,6 +28,8 @@ export component EditorHarness inherits Window {
         width: root.editor-width;
         height: parent.height - 72px;
         text <=> root.source;
+        read-only: root.read-only;
+        enabled: root.input-enabled;
         text-decorations: root.decorations;
         text-markers: root.markers;
         cursor-position-changed(pos) => { root.caret-point = pos; }

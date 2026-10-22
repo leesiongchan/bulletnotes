@@ -1095,3 +1095,401 @@
 
          // No line breaking needed: parley derives the content widths from the break
          // opportunities. Paragraphs stack vertically, so both widths are the widest.
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -2244,6 +2244,8 @@
+     }
+
+     item! { TextInput {
++        /// True only when the native context explicitly permits source commands.
++        out property <bool> source-edits-allowed;
+         /// Experimental source markers. Invalid or fragmented ranges remain raw source.
+         in property <[TextInputMarker]> text-markers;
+         /// Experimental source decorations. Sorted non-overlapping UTF-8 byte ranges.
+--- a/i-slint-core-1.18.1/api.rs
++++ b/i-slint-core-1.18.1/api.rs
+@@ -763,6 +763,10 @@
+                 WindowEventDispatchResult::Accepted
+             }
+             crate::platform::WindowEvent::Internal(event) => match event.into_inner() {
++                crate::platform::InternalEvent::CompositionStatusChanged { context_id, status } => {
++                    self.0.set_composition_status(context_id, status);
++                    WindowEventDispatchResult::Accepted
++                }
+                 crate::platform::InternalEvent::Mouse(BackendMouseEvent::Exit) => {
+                     // Teardown event, always accepted like `WindowEvent::PointerExited`.
+                     self.0.process_mouse_input(MouseEvent::Exit);
+--- a/i-slint-core-1.18.1/input.rs
++++ b/i-slint-core-1.18.1/input.rs
+@@ -1080,6 +1080,18 @@
+     }
+ }
+
++/// Native composition permission, independent of the preedit string.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum CompositionStatus {
++    /// No authoritative lifecycle has been received for this context.
++    #[default]
++    Unknown,
++    /// Native composition has explicitly ended or the context was initialized.
++    Idle,
++    /// A native composition session is in progress, including empty updates.
++    Active,
++}
++
+ /// This enum defines the different kinds of key events that can happen.
+ #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+ #[repr(u8)]
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -762,6 +762,7 @@
+ #[derive(FieldOffsets, Default, SlintElement)]
+ #[pin]
+ pub struct TextInput {
++    pub source_edits_allowed: Property<bool>,
+     pub text_markers: Property<crate::model::ModelRc<super::TextInputMarker>>,
+     pub text_decorations: Property<crate::model::ModelRc<super::TextInputDecoration>>,
+     pub text: Property<SharedString>,
+@@ -817,6 +818,15 @@
+
+ impl Item for TextInput {
+     fn init(self: Pin<&Self>, self_rc: &ItemRc) {
++        let weak = self_rc.downgrade();
++        self.source_edits_allowed.set_binding(move || {
++            let Some(rc) = weak.upgrade() else { return false };
++            let Some(input) = rc.downcast::<TextInput>() else { return false };
++            let input = input.as_pin_ref();
++            input.enabled() && !input.read_only() && rc.window_adapter().is_some_and(|adapter| {
++                crate::window::WindowInner::from_pub(adapter.window()).source_edits_allowed()
++            })
++        });
+         // Seed the mirror so the change handler doesn't treat the initial text as external.
+         self.internal_text.set(self.text());
+         self.text_change_tracker.init_delayed(
+--- a/i-slint-core-1.18.1/platform.rs
++++ b/i-slint-core-1.18.1/platform.rs
+@@ -576,6 +576,8 @@
+ #[doc(hidden)]
+ #[derive(Debug, Clone, PartialEq)]
+ pub enum InternalEvent {
++    /// Authoritative native context lifecycle; stale context IDs cannot unlock edits.
++    CompositionStatusChanged { context_id: u64, status: crate::input::CompositionStatus },
+     /// A pointer event, including the ones that have no public representation, such as gestures.
+     Mouse(crate::input::BackendMouseEvent),
+     /// A key event, including input method composition updates.
+@@ -657,7 +659,7 @@
+             }
+             // There's no public touch event, and the pointer events the runtime synthesizes from
+             // a touch point carry a finger id that `WindowEvent` can't express.
+-            Self::Touch { .. } => None,
++            Self::Touch { .. } | Self::CompositionStatusChanged { .. } => None,
+         }
+     }
+
+@@ -667,7 +669,7 @@
+             Self::Mouse(event) => crate::input::MouseEvent::from(*event)
+                 .position()
+                 .map(crate::lengths::logical_position_to_api),
+-            Self::Key(_) => None,
++            Self::Key(_) | Self::CompositionStatusChanged { .. } => None,
+             Self::Touch { position, .. } => {
+                 Some(crate::lengths::logical_position_to_api(*position))
+             }
+--- a/i-slint-core-1.18.1/window.rs
++++ b/i-slint-core-1.18.1/window.rs
+@@ -559,6 +559,8 @@
+ #[pin_project::pin_project]
+ struct WindowPinnedFields {
+     #[pin]
++    composition_idle: Property<bool>,
++    #[pin]
+     redraw_tracker: PropertyTracker<false, WindowRedrawTracker>,
+     /// Gets dirty when the layout restrictions, or some other property of the windows change
+     #[pin]
+@@ -642,6 +644,7 @@
+
+ /// Inner datastructure for the [`crate::api::Window`]
+ pub struct WindowInner {
++    composition_context: Cell<u64>,
+     window_adapter_weak: Weak<dyn WindowAdapter>,
+     component: RefCell<ItemTreeWeak>,
+     /// When the window is visible, keep a strong reference
+@@ -689,6 +692,17 @@
+ }
+
+ impl WindowInner {
++    pub(crate) fn set_composition_status(&self, context_id: u64, status: crate::input::CompositionStatus) {
++        if context_id < self.composition_context.get() { return; }
++        self.composition_context.set(context_id);
++        self.pinned_fields.as_ref().project_ref().composition_idle
++            .set(status == crate::input::CompositionStatus::Idle);
++    }
++
++    pub(crate) fn source_edits_allowed(&self) -> bool {
++        self.pinned_fields.as_ref().project_ref().composition_idle.get()
++    }
++
+     /// Create a new instance of the window, given the window_adapter factory fn
+     pub fn new(window_adapter_weak: Weak<dyn WindowAdapter>) -> Self {
+         #![allow(unused_mut)]
+@@ -710,12 +724,14 @@
+         }
+
+         Self {
++            composition_context: Cell::new(0),
+             window_adapter_weak,
+             component: Default::default(),
+             strong_component_ref: Default::default(),
+             mouse_input_state: Default::default(),
+             touch_state: Default::default(),
+             pinned_fields: Box::pin(WindowPinnedFields {
++                composition_idle: Property::new(false),
+                 redraw_tracker,
+                 window_properties_tracker,
+                 scale_factor: Property::new_named(1., "i_slint_core::Window::scale_factor"),
+--- a/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
++++ b/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
+@@ -1425,6 +1425,14 @@
+                 };
+
+                 self.dispatch_internal_event(event);
++            }
++            WinitWindowEvent::Ime(winit::event::Ime::CompositionStatusChanged { context_id, status }) => {
++                use winit::event::CompositionStatus as Native;
++                use i_slint_core::input::CompositionStatus as Core;
++                self.dispatch_internal_event(i_slint_core::platform::InternalEvent::CompositionStatusChanged {
++                    context_id,
++                    status: match status { Native::Unknown => Core::Unknown, Native::Idle => Core::Idle, Native::Active => Core::Active },
++                });
+             }
+             WinitWindowEvent::Ime(winit::event::Ime::Preedit(string, preedit_selection)) => {
+                 let event = InternalKeyEvent {
+--- a/winit-0.30.13/src/event.rs
++++ b/winit-0.30.13/src/event.rs
+@@ -769,9 +769,16 @@
+ /// Ime::Preedit("", None) // Synthetic event generated by winit to clear preedit.
+ /// Ime::Commit("啊不")
+ /// ```
++/// Private composition lifecycle for source-command permission.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
++pub enum CompositionStatus { Unknown, Idle, Active }
++
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+ pub enum Ime {
++    /// Native status belonging to an input-context generation.
++    CompositionStatusChanged { context_id: u64, status: CompositionStatus },
+     /// Notifies when the IME was enabled.
+     ///
+     /// After getting this event you could receive [`Preedit`][Self::Preedit] and
+--- a/winit-0.30.13/src/platform_impl/macos/view.rs
++++ b/winit-0.30.13/src/platform_impl/macos/view.rs
+@@ -120,6 +120,9 @@
+     phys_modifiers: RefCell<HashMap<Key, ModLocationMask>>,
+     tracking_rect: Cell<Option<NSTrackingRectTag>>,
+     ime_state: Cell<ImeState>,
++    composition_context: Cell<u64>,
++    composition_callback_context: Cell<Option<u64>>,
++    composition_status: Cell<crate::event::CompositionStatus>,
+     input_source: RefCell<String>,
+
+     /// True iff the application wants IME events.
+@@ -295,6 +298,12 @@
+                 )
+             };
+
++            self.report_composition(if string.is_empty() {
++                crate::event::CompositionStatus::Unknown
++            } else {
++                crate::event::CompositionStatus::Active
++            });
++
+             // Update marked text.
+             *self.ivars().marked_text.borrow_mut() = marked_text;
+
+@@ -337,12 +346,18 @@
+         #[method(unmarkText)]
+         fn unmark_text(&self) {
+             trace_scope!("unmarkText");
++            let context_id = self.callback_context();
+             *self.ivars().marked_text.borrow_mut() = NSMutableAttributedString::new();
+
+             let input_context = self.inputContext().expect("input context");
+             input_context.discardMarkedText();
+
+             self.queue_event(WindowEvent::Ime(Ime::Preedit(String::new(), None)));
++            self.report_composition_for(context_id, if self.ivars().composition_callback_context.get().is_some() {
++                crate::event::CompositionStatus::Idle
++            } else {
++                crate::event::CompositionStatus::Unknown
++            });
+             if self.is_ime_enabled() {
+                 // Leave the Preedit self.ivars()
+                 self.ivars().ime_state.set(ImeState::Ground);
+@@ -412,6 +427,7 @@
+                 self.queue_event(WindowEvent::Ime(Ime::Preedit(String::new(), None)));
+                 self.queue_event(WindowEvent::Ime(Ime::Commit(string)));
+                 self.ivars().ime_state.set(ImeState::Committed);
++                self.report_composition(crate::event::CompositionStatus::Idle);
+             }
+         }
+
+@@ -447,6 +463,7 @@
+                 if *prev_input_source != current_input_source && self.is_ime_enabled() {
+                     *prev_input_source = current_input_source;
+                     drop(prev_input_source);
++                    self.reset_composition_context(true);
+                     self.ivars().ime_state.set(ImeState::Disabled);
+                     self.queue_event(WindowEvent::Ime(Ime::Disabled));
+                 }
+@@ -465,7 +482,10 @@
+             // is not handled by IME and should be handled by the application)
+             if self.ivars().ime_allowed.get() {
+                 let events_for_nsview = NSArray::from_slice(&[&*event]);
++                let previous_context = self.ivars().composition_callback_context
++                    .replace(Some(self.ivars().composition_context.get()));
+                 unsafe { self.interpretKeyEvents(&events_for_nsview) };
++                self.ivars().composition_callback_context.set(previous_context);
+
+                 // If the text was committed we must treat the next keyboard event as IME related.
+                 if self.ivars().ime_state.get() == ImeState::Committed {
+@@ -800,6 +820,9 @@
+             phys_modifiers: Default::default(),
+             tracking_rect: Default::default(),
+             ime_state: Default::default(),
++            composition_context: Cell::new(0),
++            composition_callback_context: Cell::new(None),
++            composition_status: Cell::new(crate::event::CompositionStatus::Unknown),
+             input_source: Default::default(),
+             ime_allowed: Default::default(),
+             forward_key_to_app: Default::default(),
+@@ -877,10 +900,42 @@
+         }
+     }
+
++    fn callback_context(&self) -> u64 {
++        self.ivars().composition_callback_context.get()
++            .unwrap_or(self.ivars().composition_context.get())
++    }
++
++    fn report_composition(&self, status: crate::event::CompositionStatus) {
++        self.report_composition_for(self.callback_context(), status);
++    }
++
++    fn report_composition_for(&self, context_id: u64, status: crate::event::CompositionStatus) {
++        if context_id == self.ivars().composition_context.get() {
++            self.ivars().composition_status.set(status);
++        }
++        self.queue_event(WindowEvent::Ime(Ime::CompositionStatusChanged { context_id, status }));
++    }
++
++    pub(super) fn reset_composition_context(&self, establish_idle: bool) {
++        let old = self.ivars().composition_context.get();
++        let next = old.checked_add(1).expect("native input context generation exhausted");
++        self.ivars().composition_context.set(next);
++        self.report_composition_for(next, crate::event::CompositionStatus::Unknown);
++        let previous = self.ivars().composition_callback_context.replace(Some(old));
++        if let Some(context) = self.inputContext() { context.discardMarkedText(); }
++        self.ivars().composition_callback_context.set(previous);
++        *self.ivars().marked_text.borrow_mut() = NSMutableAttributedString::new();
++        self.queue_event(WindowEvent::Ime(Ime::Preedit(String::new(), None)));
++        if establish_idle {
++            self.report_composition_for(next, crate::event::CompositionStatus::Idle);
++        }
++    }
++
+     pub(super) fn set_ime_allowed(&self, ime_allowed: bool) {
+         if self.ivars().ime_allowed.get() == ime_allowed {
+             return;
+         }
++        self.reset_composition_context(ime_allowed);
+         self.ivars().ime_allowed.set(ime_allowed);
+         if self.ivars().ime_allowed.get() {
+             return;
+--- a/winit-0.30.13/src/platform_impl/macos/window_delegate.rs
++++ b/winit-0.30.13/src/platform_impl/macos/window_delegate.rs
+@@ -209,6 +209,7 @@
+             trace_scope!("windowDidBecomeKey:");
+             // TODO: center the cursor if the window had mouse grab when it
+             // lost focus
++            self.view().reset_composition_context(true);
+             self.queue_event(WindowEvent::Focused(true));
+         }
+
+@@ -222,6 +223,7 @@
+             // NSWindowDelegate, and as a result a tracked modifiers state can quite
+             // easily fall out of synchrony with reality.  This requires us to emit
+             // a synthetic ModifiersChanged event when we lose focus.
++            self.view().reset_composition_context(false);
+             self.view().reset_modifiers();
+
+             self.queue_event(WindowEvent::Focused(false));
+--- a/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
++++ b/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
+@@ -1427,6 +1427,7 @@
+                 self.dispatch_internal_event(event);
+             }
+             WinitWindowEvent::Ime(winit::event::Ime::CompositionStatusChanged { context_id, status }) => {
++                tracing::debug!(target: "bulletnotes::composition", context_id, ?status, "status received");
+                 use winit::event::CompositionStatus as Native;
+                 use i_slint_core::input::CompositionStatus as Core;
+                 self.dispatch_internal_event(i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+--- a/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
++++ b/i-slint-backend-winit-1.18.1/winitwindowadapter.rs
+@@ -1427,7 +1427,6 @@
+                 self.dispatch_internal_event(event);
+             }
+             WinitWindowEvent::Ime(winit::event::Ime::CompositionStatusChanged { context_id, status }) => {
+-                tracing::debug!(target: "bulletnotes::composition", context_id, ?status, "status received");
+                 use winit::event::CompositionStatus as Native;
+                 use i_slint_core::input::CompositionStatus as Core;
+                 self.dispatch_internal_event(i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+--- a/winit-0.30.13/src/platform_impl/macos/view.rs
++++ b/winit-0.30.13/src/platform_impl/macos/view.rs
+@@ -910,6 +910,7 @@
+     }
+
+     fn report_composition_for(&self, context_id: u64, status: crate::event::CompositionStatus) {
++        tracing::debug!(target: "bulletnotes::composition", context_id, ?status, "native lifecycle");
+         if context_id == self.ivars().composition_context.get() {
+             self.ivars().composition_status.set(status);
+         }
+--- a/winit-0.30.13/src/platform_impl/macos/view.rs
++++ b/winit-0.30.13/src/platform_impl/macos/view.rs
+@@ -485,6 +485,15 @@
+                 let previous_context = self.ivars().composition_callback_context
+                     .replace(Some(self.ivars().composition_context.get()));
+                 unsafe { self.interpretKeyEvents(&events_for_nsview) };
++                // Pinyin cancels with an empty marked update. Explicitly discard that
++                // conversion on plain Escape rather than infer its end from emptiness.
++                if unsafe { event.keyCode() } == 53 && event_mods(&event).state().is_empty()
++                    && self.ivars().composition_status.get() == crate::event::CompositionStatus::Unknown
++                {
++                    if let Some(context) = self.inputContext() { context.discardMarkedText(); }
++                    *self.ivars().marked_text.borrow_mut() = NSMutableAttributedString::new();
++                    self.report_composition(crate::event::CompositionStatus::Idle);
++                }
+                 self.ivars().composition_callback_context.set(previous_context);
+
+                 // If the text was committed we must treat the next keyboard event as IME related.
+--- a/winit-0.30.13/src/platform_impl/macos/view.rs
++++ b/winit-0.30.13/src/platform_impl/macos/view.rs
+@@ -915,11 +915,16 @@
+     }
+
+     fn report_composition(&self, status: crate::event::CompositionStatus) {
++        let status = if status == crate::event::CompositionStatus::Idle
++            && self.ivars().composition_callback_context.get().is_none()
++        {
++            crate::event::CompositionStatus::Unknown
++        } else { status };
+         self.report_composition_for(self.callback_context(), status);
+     }
+
+     fn report_composition_for(&self, context_id: u64, status: crate::event::CompositionStatus) {
+-        tracing::debug!(target: "bulletnotes::composition", context_id, ?status, "native lifecycle");
++        tracing::debug!(target: "bulletnotes::composition", window_id = ?self.window().id(), context_id, ?status, "native lifecycle");
+         if context_id == self.ivars().composition_context.get() {
+             self.ivars().composition_status.set(status);
+         }
