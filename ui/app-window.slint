@@ -1,13 +1,13 @@
 import { RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
 import { Palette, AboutSlint } from "std-widgets.slint";
-import { UiTheme, PageRow, ThemeOption, ThemePair } from "types.slint";
+import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
 import { NoteEditor } from "components/note-editor.slint";
 import { PageBrowser } from "components/page-browser.slint";
 import { AppearancePanel } from "components/appearance-panel.slint";
-export { UiTheme, PageRow, ThemeOption, ThemePair }
+export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit }
 export {
     NativePreviewWindow,
     NativePreviewTray,
@@ -28,6 +28,9 @@ export component AppWindow inherits Window {
     in-out property <string> active-view:"note";
     in property <string> current-path;
     in-out property <string> note-text;
+    pure callback edit-markdown(string, int, int, MarkdownCommand, int, int) -> MarkdownEdit;
+    out property <int> editor-anchor: editor.selection-anchor;
+    out property <int> editor-caret: editor.selection-caret;
     pure callback mark-markdown(string, UiTheme) -> [TextInputMarker];
     private property <[TextInputMarker]> note-markers: root.mark-markdown(root.note-text,root.theme);
     pure callback highlight-markdown(string, UiTheme, bool) -> [TextInputDecoration];
@@ -217,7 +220,7 @@ export component AppWindow inherits Window {
             if (event.text == "q" || event.text == "Q") { root.request-quit(); return accept; }
             if (event.text == "w" || event.text == "W") { root.request-hide(); return accept; }
             if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
-            if (event.text == "k" || event.text == "K") { root.browse-pages(); return accept; }
+            if (!event.modifiers.shift && !event.modifiers.alt && !event.modifiers.meta && (event.text == "k" || event.text == "K")) { root.browse-pages(); return accept; }
             if (event.text == "1") { if (root.can-jump-to-newest) {root.jump-to-newest();} return accept; }
             if (event.text == "p" || event.text == "P") {root.toggle-pin();return accept;}
             if (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
@@ -268,6 +271,7 @@ export component AppWindow inherits Window {
                     font-size-px: root.font-size-px;
                     paper-style: root.paper-style;
                     read-only: root.note-read-only || root.recovery-busy || root.lifecycle-pending;
+                    edit-markdown(source,anchor,caret,command,start,end) => { root.edit-markdown(source,anchor,caret,command,start,end) }
                     edited(text) => { root.note-edited(text); }
                     move-to-trash => { root.trash-current-note(); }
                     key-pressed(event) => { root.shortcut(event) }

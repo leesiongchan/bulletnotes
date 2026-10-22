@@ -1,5 +1,5 @@
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { UiTheme } from "../types.slint";
+import { UiTheme, MarkdownCommand, MarkdownEdit } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
     in-out property <string> text;
@@ -12,6 +12,40 @@ export component NoteEditor inherits Rectangle {
     out property <float> scroll-y:-scroll.content-y / 1px;
     out property <length> line-height:root.font-size-px * 1.6px;
     private property <float> line-factor:root.line-height / max(1px,measure-one.font-metrics.ascent - measure-one.font-metrics.descent);
+    out property <int> selection-anchor: input.anchor-position-byte-offset;
+    out property <int> selection-caret: input.cursor-position-byte-offset;
+    private property <bool> suppress-caret-reveal: false;
+    pure callback edit-markdown(string, int, int, MarkdownCommand, int, int) -> MarkdownEdit;
+    function apply-command(command: MarkdownCommand, marker-start: int, marker-end: int) -> EventResult {
+        if (!input.source-edits-allowed) { return reject; }
+        let edit = root.edit-markdown(root.text,input.anchor-position-byte-offset,input.cursor-position-byte-offset,command,marker-start,marker-end);
+        if (!edit.handled) { return reject; }
+        if (edit.changed) {
+            root.suppress-caret-reveal = edit.preserve-scroll;
+            input.apply-source-edit(edit.start,edit.end,edit.replacement,edit.anchor,edit.caret);
+            root.suppress-caret-reveal = false;
+        }
+        return accept;
+    }
+    function command-key(event: KeyEvent) -> EventResult {
+        if (event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta) {
+            if (!event.modifiers.shift && (event.text == "b" || event.text == "B")) { return root.apply-command(MarkdownCommand.bold,-1,-1); }
+            if (!event.modifiers.shift && (event.text == "i" || event.text == "I")) { return root.apply-command(MarkdownCommand.italic,-1,-1); }
+            if (event.modifiers.shift && (event.text == "x" || event.text == "X")) { return root.apply-command(MarkdownCommand.strikethrough,-1,-1); }
+            if (event.modifiers.shift && (event.text == "h" || event.text == "H")) { return root.apply-command(MarkdownCommand.cycle-heading,-1,-1); }
+            if (event.modifiers.shift && (event.text == "k" || event.text == "K")) { return root.apply-command(MarkdownCommand.toggle-task,-1,-1); }
+        }
+        if (event.modifiers.alt && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift) {
+            if (event.text == Key.UpArrow) { return root.apply-command(MarkdownCommand.move-up,-1,-1); }
+            if (event.text == Key.DownArrow) { return root.apply-command(MarkdownCommand.move-down,-1,-1); }
+        }
+        if (!event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta) {
+            if (event.text == Key.Return && !event.modifiers.shift) { return root.apply-command(MarkdownCommand.continue-list,-1,-1); }
+            if (event.text == Key.Tab) { return root.apply-command(event.modifiers.shift ? MarkdownCommand.outdent-list : MarkdownCommand.indent-list,-1,-1); }
+            if (event.text == Key.Backtab) { return root.apply-command(MarkdownCommand.outdent-list,-1,-1); }
+        }
+        return reject;
+    }
     callback edited(string);
     callback move-to-trash();
     callback key-pressed(KeyEvent) -> EventResult;
@@ -126,10 +160,15 @@ export component NoteEditor inherits Rectangle {
                 page-height: scroll.visible-height;
                 accessible-label: "Markdown note";
                 edited => { root.edited(self.text); }
-                key-pressed(event) => { root.key-pressed(event) }
+                key-pressed(event) => {
+                    if (root.command-key(event) == accept) { return accept; }
+                    return root.key-pressed(event);
+                }
                 cursor-position-changed(pos) => {
+                    if (!root.suppress-caret-reveal) {
                     if (pos.y + self.y + scroll.content-y < 0px) { scroll.content-y = min(0px,-pos.y - self.y); }
                     else if (pos.y + self.y + scroll.content-y > scroll.visible-height - root.line-height) { scroll.content-y = min(0px,scroll.visible-height - pos.y - self.y - root.line-height); }
+                    }
                 }
             }
         }

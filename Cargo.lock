@@ -662,6 +662,7 @@ dependencies = [
  "gix-merge",
  "global-hotkey",
  "i-slint-backend-testing",
+ "i-slint-core",
  "jiff",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
