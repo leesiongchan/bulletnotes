@@ -378,20 +378,20 @@ export component AppWindow inherits Window {
             header := Rectangle {
                 x:0px; y:root.prefers-reduced-motion || root.header-revealed ? 0px : -4px;
                 width:parent.width; height:44px;
-                background:root.theme.surface;
+                background:root.theme.paper;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
                 opacity:root.header-revealed ? 1 : 0;
                 visible:self.opacity > 0;
                 animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? 160ms : 200ms); easing:ease-out; }
                 WindowMoveArea {x:160px; width:max(0px,parent.width - 248px); height:parent.height; enabled:root.header-revealed;}
                 appearance-button := ActionButton {
-                    x:82px; y:6px; circular:true; theme:root.theme;
+                    x:82px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, Command comma";
                     clicked => {root.show-appearance();}
                 }
                 browse := ActionButton {
-                    x:120px; y:6px; circular:true; theme:root.theme;
+                    x:120px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, Command K";
                     clicked => {root.browse-pages();}
@@ -404,13 +404,13 @@ export component AppWindow inherits Window {
                     horizontal-alignment:center; vertical-alignment:center;
                 }
                 new-button := ActionButton {
-                    x:parent.width - 82px; y:6px; circular:true; theme:root.theme;
+                    x:parent.width - 82px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0 && !root.lifecycle-pending;
                     icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, Command N";
                     clicked => {root.new-note();}
                 }
                 pin := ActionButton {
-                    x:parent.width - 42px; y:6px; circular:true; theme:root.theme;
+                    x:parent.width - 42px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/pin.svg");
                     label:root.is-pinned ? "Unpin note, Command P" : "Pin above other windows, Command P";
@@ -420,14 +420,14 @@ export component AppWindow inherits Window {
             footer := Rectangle {
                 y:parent.height - 54px + (root.prefers-reduced-motion || root.footer-revealed ? 0px : 4px);
                 height:44px; x:10px; width:parent.width - 20px; border-radius:22px;
-                border-width:1px; border-color:root.theme.line.with-alpha(root.system-high-contrast ? 1 : 0.45);
+                border-width:1px; border-color:root.theme.line.with-alpha(root.system-high-contrast ? 1 : 0.25);
                 opacity:root.footer-revealed ? 1 : 0; visible:self.opacity > 0 && root.active-view == "note";
                 animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? 160ms : 200ms); easing:ease-out;}
                 background:root.theme.surface;
                 HorizontalLayout {
                     y:6px; width:parent.width; height:32px; padding-left:6px; padding-right:6px; spacing:6px;
                     trash-button := ActionButton {
-                        circular:true; theme:root.theme;
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                         enabled:root.footer-revealed && footer.opacity > 0 && !root.note-read-only && !root.recovery-busy && !root.lifecycle-pending;
                         icon:@image-url("../assets/icons/trash.svg"); label:"Move note to recoverable Trash";
                         clicked => {root.trash-current-note();}
@@ -438,22 +438,22 @@ export component AppWindow inherits Window {
                         Text {text:root.status-text; color:root.theme.muted; font-size:9px; vertical-alignment:center; overflow:elide;}
                     }
                     back := ActionButton {
-                        circular:true; theme:root.theme; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, Command left bracket";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, Command left bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-older && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(-1);}
                     }
                     next := ActionButton {
-                        circular:true; theme:root.theme; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, Command right bracket";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, Command right bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-newer && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(1);}
                     }
                     newest := ActionButton {
-                        circular:true; theme:root.theme; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, Command 1";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, Command 1";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-jump-to-newest && !root.lifecycle-pending;
                         clicked => {root.jump-to-newest();}
                     }
                     recovery-button := ActionButton {
-                        circular:true; theme:root.theme; icon:@image-url("../assets/icons/recovery.svg"); label:"Changes, Trash, and kept versions";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/recovery.svg"); label:"Changes, Trash, and kept versions";
                         enabled:root.footer-revealed && footer.opacity > 0;
                         clicked => {root.show-recovery();}
                     }
