@@ -32,3 +32,5 @@ pub mod diagnostics_ui;
 mod lifecycle;
 
 mod markdown;
+
+mod source_commands;
