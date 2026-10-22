@@ -15,8 +15,10 @@ Unordered lists paint bullets and tasks paint rounded outlined boxes, with a tic
 for completed tasks, in theme ink. Their text aligns in compact two-em slots;
 moving the caret into a prefix or selecting across it reveals its raw syntax
 and original spacing. Unsupported or narrow prefixes remain raw.
-Boxes are edited as Markdown rather than toggled by clicking. Markdown inside code
-stays literal, and YAML frontmatter stays plain. Standard Markdown semantics apply,
+Click a visible task box to toggle its Markdown source, or use Command+Shift+K
+on the current task. Dragging, modifier clicks, and clicks on text or padding do
+not toggle tasks. Markdown inside code stays literal, and YAML frontmatter stays
+plain. Standard Markdown semantics apply,
 including `__bold__` rather than Antinote's underline convention.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains
@@ -42,6 +44,11 @@ All pages searches the local catalogue by literal phrase and optional folder.
 batch. Cached pages open offline. Online-only pages require a successful download;
 index progress indicates when full content search is incomplete. Command+K opens
 all-page search; Command+F searches exact source within the current note.
+Matching cached body text appears in a two-line excerpt around the first match,
+with theme-aware bold/underline emphasis. Preview markup and links remain literal.
+Online-only rows show availability without a fabricated body excerpt. Arrow keys
+select results, Return opens one, and Escape returns to the note when composition
+is idle. Reopening search focuses the query and clears the old row selection.
 
 Command+N creates a scratchpad that saves locally and automatically syncs under
 `Quick Notes/` once it contains text. Older/Newer (Command+[ / Command+]) traverse
@@ -59,8 +66,28 @@ Trash and selects an older neighbor, a newer neighbor, or a fresh blank when the
 stack is empty. There is no automatic expiry. Command+P toggles Pin.
 
 Known selection targets can be restored, and auxiliary views retain the editor.
-Exact live directional selection capture across page changes/relaunch remains an
-open supported-API requirement; see the [selection investigation](validation/selection-api.md).
+The private native editor exposes directed selection for command history. Exact
+live selection capture across page changes/relaunch remains an open acceptance
+requirement; see the [selection investigation](validation/selection-api.md) and
+[interaction validation record](validation/antinote-interactions.md).
+
+## Source editing shortcuts
+
+On macOS, Command+B/I toggles bold/italic, Command+Shift+X toggles strikethrough,
+and Command+Shift+H cycles the current line through plain, H1, H2, H3, and plain.
+Command+Shift+K toggles an existing task. Option+Up/Down moves the current line or
+selected lines. Return continues an eligible list/task, Tab indents it, and
+Shift+Tab outdents it; an empty list item exits its list. New task items start
+unchecked. Each command is one undo/redo step and preserves directed selection.
+
+Formatting acts on the word at a collapsed caret or on selected content. It
+preserves complete quote/list/task/heading prefixes; selections cutting a prefix,
+delimiter, code, or frontmatter boundary decline the command. Heading cycling
+also declines list items. Line movement preserves literal content, mixed line
+endings, and the final newline. Commands wait while native composition is active
+or its state is unknown, and respect read-only, recovery, and local-save barriers.
+The [interaction validation record](validation/antinote-interactions.md) describes
+the real Pinyin coverage and remaining input/accessibility gates.
 
 ## Appearance
 
