@@ -247,3 +247,24 @@ deletion and confirmed absence. Review found no blocking macOS issue. Human
 keyboard, IME, VoiceOver and the remaining release gates retain their own status.
 
 The Antinote follow-up full suite passes with 326 tests. A fresh signed LaunchServices lifecycle rerun in this session stops before the first rendered frame; the unchanged `1c90b58` base fails the same startup check. This unresolved current-session gate is recorded in [the validation report](antinote-ui-ux.md#independent-review); earlier lifecycle successes above are historical evidence.
+
+
+## Antinote interaction checkpoint — 2026-10-23
+
+The [interaction validation record](antinote-interactions.md) covers native
+Markdown commands with one-step undo, rendered checkbox activation, quieter
+paper chrome and literal highlighted search previews. Search reentry now clears
+a retained result selection so model replacement cannot steal query focus.
+Two Important independent-review findings around nested prefixes and heading/code
+context were reproduced and fixed. One unrelated lockfile resolution Minor is
+recorded as deferred.
+
+Fresh automated verification passed 393 application tests and 43 renderer tests,
+with zero failures, formatting and strict Clippy; the application suite retains
+24 explicit ignores. Nine named native contracts passed, including real Pinyin
+composition guarding and a command followed by controlled sync/restart.
+The full native input fixture remains **unaccepted**: one idle run failed to start
+composition after undo, while later diagnostic attempts stalled before the first
+rendered frame. Its passing guard fixture does not waive this gate. Other IMEs,
+VoiceOver, cross-page/relaunch selection, hardware/OS, performance and distribution
+retain their existing acceptance requirements. Main was not merged or pushed.
