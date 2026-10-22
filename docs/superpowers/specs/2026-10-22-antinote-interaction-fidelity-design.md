@@ -2,9 +2,9 @@
 
 Date: 22 October 2026.
 
-Status: interaction-first approach and conversational design approved with
-"ok". Written specification awaiting user review. Implementation planning has
-not started.
+Status: interaction-first approach, conversational design, and written
+specification approved with "ok". Implementation plans are prepared for user
+review; implementation has not started.
 
 ## Intent and success criteria
 
