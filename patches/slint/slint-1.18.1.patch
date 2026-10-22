@@ -2041,3 +2041,154 @@
                  let _ = (self.text(),self.preedit_text(),self.has_focus(),self.enabled(),self.read_only(),
                      self.source_edits_allowed(),self.cursor_position_byte_offset(),self.anchor_position_byte_offset());
                  window_adapter.renderer().text_input_marker_at_position(self,self_rc,position)
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -1049,6 +1049,8 @@
+     } }
+
+     item! { ComplexText: SimpleText {
++        /// Literal UTF-8 source decoration ranges; empty leaves native Text unchanged.
++        in property <[TextInputDecoration]> text-decorations;
+         /// The name of the font family selected for rendering the text.
+         ///
+         /// ```slint 'font-family: "Comic Sans MS";' imageAlt="text font-family" width="200" height="200" needsBackground
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -44,6 +44,7 @@
+ #[derive(FieldOffsets, Default, SlintElement)]
+ #[pin]
+ pub struct ComplexText {
++    pub text_decorations: Property<crate::model::ModelRc<super::TextInputDecoration>>,
+     pub width: Property<LogicalLength>,
+     pub height: Property<LogicalLength>,
+     pub text: Property<SharedString>,
+@@ -180,7 +181,62 @@
+     }
+ }
+
++fn decoration_range(decoration: &super::TextInputDecoration, source: &str, previous_end: usize) -> Option<core::ops::Range<usize>> {
++            let (Ok(start), Ok(end)) =
++                (usize::try_from(decoration.start), usize::try_from(decoration.end))
++            else {
++                return None;
++            };
++            if start < previous_end
++                || start >= end
++                || end > source.len()
++                || !source.is_char_boundary(start)
++                || !source.is_char_boundary(end)
++            {
++                return None;
++            }
++            if (decoration.bold || decoration.italic || decoration.code)
++                && [start, end].into_iter().any(|offset| {
++                    unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
++                        .is_boundary(&source, 0)
++                        != Ok(true)
++                })
++            {
++                return None;
++            }
++    Some(start..end)
++}
++
++fn append_decoration(spans: &mut alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan>, decoration: &super::TextInputDecoration, range: core::ops::Range<usize>) {
++    use i_slint_common::styled_text::{FormattedSpan,Style};
++    if range.is_empty() {return;}
++    for (enabled,style) in [
++        (true,Style::Color(decoration.foreground.as_argb_encoded())),
++        (decoration.bold,Style::Strong),(decoration.italic,Style::Emphasis),
++        (decoration.strikethrough,Style::Strikethrough),(decoration.underline,Style::Underline),
++        (decoration.code,Style::SourceCode),
++    ] {
++        if enabled {spans.push(FormattedSpan {range:range.clone(),style});}
++    }
++}
++
+ impl RenderString for ComplexText {
++    fn text_decorations(self: Pin<&Self>) -> alloc::vec::Vec<i_slint_common::styled_text::FormattedSpan> {
++        use crate::model::Model;
++        let model=self.text_decorations();
++        model.model_tracker().track_any_change(model.row_count(),crate::InternalToken);
++        let source=self.text();
++        let mut spans=alloc::vec::Vec::new();
++        let mut previous_end=0;
++        for decoration in model.iter() {
++            if let Some(range)=decoration_range(&decoration,&source,previous_end) {
++                previous_end=range.end;
++                append_decoration(&mut spans,&decoration,range);
++            }
++        }
++        spans
++    }
++
+     fn text(self: Pin<&Self>) -> PlainOrStyledText {
+         PlainOrStyledText::Plain(self.text())
+     }
+@@ -1499,46 +1555,10 @@
+         let mut spans = alloc::vec::Vec::with_capacity(count);
+         let mut previous_end = 0;
+         for decoration in model.iter() {
+-            let (Ok(start), Ok(end)) =
+-                (usize::try_from(decoration.start), usize::try_from(decoration.end))
+-            else {
+-                continue;
+-            };
+-            if start < previous_end
+-                || start >= end
+-                || end > source.len()
+-                || !source.is_char_boundary(start)
+-                || !source.is_char_boundary(end)
+-            {
+-                continue;
+-            }
+-            if (decoration.bold || decoration.italic || decoration.code)
+-                && [start, end].into_iter().any(|offset| {
+-                    unicode_segmentation::GraphemeCursor::new(offset, source.len(), true)
+-                        .is_boundary(&source, 0)
+-                        != Ok(true)
+-                })
+-            {
+-                continue;
+-            }
+-            previous_end = end;
+-            let mut append = |range: core::ops::Range<usize>| {
+-                if range.is_empty() {
+-                    return;
+-                }
+-                for (enabled, style) in [
+-                    (true, Style::Color(decoration.foreground.as_argb_encoded())),
+-                    (decoration.bold, Style::Strong),
+-                    (decoration.italic, Style::Emphasis),
+-                    (decoration.strikethrough, Style::Strikethrough),
+-                    (decoration.underline, Style::Underline),
+-                    (decoration.code, Style::SourceCode),
+-                ] {
+-                    if enabled {
+-                        spans.push(FormattedSpan { range: range.clone(), style });
+-                    }
+-                }
+-            };
++            let Some(range) = decoration_range(&decoration,&source,previous_end) else {continue;};
++            let (start,end) = (range.start,range.end);
++            previous_end=end;
++            let mut append = |range| append_decoration(&mut spans,&decoration,range);
+             if let Some(at) = insertion {
+                 // Preedit is transient and must not inherit committed-source ranges.
+                 if start < end.min(at) {
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/layout.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/layout.rs
+@@ -393,10 +393,10 @@
+         match self.max_physical_height {
+             Some(max_physical_height) if self.elision_info.is_some() => {
+                 let para_y = self.y_offset + paragraph.y;
+-                // `line_fits_height` rounds the bottom up by a pixel; allow the same slack at the
+-                // top so a line sitting right on the box edge isn't dropped to a rounding error.
++                // Fallback glyphs may overhang the nominal top of the first line. Keep that
++                // line when its paragraph starts at the box edge; shifted lines still clip.
+                 line_fits_height(para_y.get() + block_max, max_physical_height)
+-                    && para_y.get() + block_min >= -0.5
++                    && (para_y.get() == 0.0 || para_y.get() + block_min >= -0.5)
+             }
+             _ => true,
+         }

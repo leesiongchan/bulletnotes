@@ -94,14 +94,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             excerpt: "Start with one thought. Let the rest follow.".into(),
             availability: "Cached".into(),
             modified_label: "Edited 19 Oct 2026".into(),
+            ..Default::default()
         },
         bulletnotes::PageRow {
             key: "sample-2".into(),
             title: "Weekend ideas".into(),
             path: "Personal/Weekend.md".into(),
-            excerpt: "A walk, a book, and a few unhurried hours.".into(),
+            excerpt: Default::default(),
             availability: "Online only".into(),
             modified_label: "Edited 18 Oct 2026".into(),
+            ..Default::default()
         },
     ])));
     window.set_index_status("Preview · 2 generated pages".into());

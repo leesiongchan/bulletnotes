@@ -51,3 +51,15 @@ export component EditorHarness inherits Window {
         edited => { root.edits += 1; root.source-edited(); }
     }
 }
+
+export component LiteralTextHarness inherits Window {
+    width: 400px; height: 120px; background: white;
+    in-out property <string> source;
+    in property <[TextInputDecoration]> decorations;
+    label := Text {
+        x:10px; y:10px; width:parent.width - 20px; height:100px;
+        text:root.source; text-decorations:root.decorations;
+        color:black; font-size:16px; wrap:word-wrap; max-lines:2; overflow:elide;
+        accessible-label:root.source;
+    }
+}

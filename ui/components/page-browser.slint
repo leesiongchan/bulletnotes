@@ -8,7 +8,8 @@ component ResultRow inherits FocusScope {
     in property <bool> selected;
     callback opened();
     callback step(int);
-    height: 94px;
+    in property <length> row-height;
+    height: root.row-height;
     accessible-role: button;
     accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
     accessible-action-default => { root.opened(); }
@@ -35,6 +36,7 @@ component ResultRow inherits FocusScope {
             width: parent.width - 100px;
             height: 16px;
             text: root.data.title;
+            text-decorations: root.data.title-highlights;
             color: root.theme.ink;
             font-size: 13px;
             font-weight: 550;
@@ -59,6 +61,7 @@ component ResultRow inherits FocusScope {
             width: parent.width - 24px;
             height: 13px;
             text: root.data.path;
+            text-decorations: root.data.path-highlights;
             color: root.theme.muted;
             font-size: 10px;
             overflow: elide;
@@ -68,15 +71,18 @@ component ResultRow inherits FocusScope {
             x: 12px;
             y: 50px;
             width: parent.width - 24px;
-            height: 15px;
+            height: 30px;
             text: root.data.excerpt;
+            text-decorations: root.data.excerpt-highlights;
+            wrap: word-wrap;
+            max-lines: 2;
             color: root.theme.muted;
             font-family:"Menlo";
             font-size: 11px;
             overflow: elide;
         }
 
-        Text {x:12px;y:69px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:9px;overflow:elide;}
+        Text {x:12px;y:85px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:9px;overflow:elide;}
 
         touch := TouchArea {
             clicked => { root.focus(); root.opened(); }
@@ -85,6 +91,11 @@ component ResultRow inherits FocusScope {
 }
 
 export component PageBrowser inherits Rectangle {
+    out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
+    private property <length> result-row-height:112px;
+    changed results => { if (root.selected-index >= root.results.length) { root.selected-index = -1; query-input.focus(); } }
+    changed height => { root.reveal-selection(); }
+    changed width => { root.reveal-selection(); }
     in property <UiTheme> theme;
     in property <[PageRow]> results;
     in-out property <string> query;
@@ -97,13 +108,17 @@ export component PageBrowser inherits Rectangle {
     callback folder-changed(string);
     callback open-page(string);
     callback return-to-note();
-    public function focus-query() { query-input.focus(); }
+    public function focus-query() { root.selected-index = -1; query-input.focus(); }
     background: root.theme.paper;
+    function reveal-selection() {
+        if (root.selected-index < 0) { return; }
+        if (root.selected-index * root.result-row-height < -list.content-y) { list.content-y = -root.selected-index * root.result-row-height; }
+        else if ((root.selected-index + 1) * root.result-row-height > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * root.result-row-height); }
+    }
     function move-selection(step: int) {
         if (root.results.length > 0) {
             root.selected-index = max(0,min(root.results.length - 1,root.selected-index + step));
-            if (root.selected-index * 94px < -list.content-y) { list.content-y = -root.selected-index * 94px; }
-            else if ((root.selected-index + 1) * 94px > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * 94px); }
+            root.reveal-selection();
         }
     }
     Text {
@@ -231,6 +246,7 @@ export component PageBrowser inherits Rectangle {
         width: parent.width - 16px;
         height: parent.height - 170px;
         for item[index] in root.results: ResultRow {
+            row-height:root.result-row-height;
             width: parent.width;
             theme: root.theme;
             data: item;
