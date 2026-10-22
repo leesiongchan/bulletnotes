@@ -1709,3 +1709,335 @@
                  })
              } else { panic!("internal error: invalid source edit arguments {arguments:?}") }
          }
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -2244,6 +2244,8 @@
+     }
+
+     item! { TextInput {
++        /// A primary click on a visible source checkbox, in committed UTF-8 offsets.
++        callback marker-activated(start: int, end: int);
+         /// True only when the native context explicitly permits source commands.
+         out property <bool> source-edits-allowed;
+         /// Experimental source markers. Invalid or fragmented ranges remain raw source.
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
+@@ -16,6 +16,7 @@
+ pub(super) struct MarkerRendering {
+     pub(super) spans: SelectionSpans,
+     shape: PhysicalRect,
++    range: Range<usize>,
+     kind: TextInputMarkerKind,
+     foreground: Color,
+ }
+@@ -37,12 +38,12 @@
+ pub(super) fn resolve(
+     layout: &Layout,
+     markers: &[Marker],
+-    renderer: &mut impl GlyphRenderer,
+     font_size: LogicalLength,
++    scale: f32,
++    band: Range<PhysicalLength>,
++    can_paint: impl Fn(&Color) -> bool,
+ ) -> Vec<MarkerRendering> {
+     let mut result = Vec::new();
+-    let band = draw::visible_band(renderer);
+-    let scale = renderer.scale_factor().get();
+     for marker in markers {
+         let paragraphs = layout.visible_paragraphs();
+         let index =
+@@ -86,7 +87,7 @@
+             || rect.height() <= 0.0
+             || rect.max_y() < band.start.get()
+             || rect.min_y() > band.end.get()
+-            || renderer.platform_brush_for_color(&marker.foreground).is_none()
++            || !can_paint(&marker.foreground)
+         {
+             continue;
+         }
+@@ -118,6 +119,7 @@
+         result.push(MarkerRendering {
+             spans,
+             shape,
++            range: marker.range.clone(),
+             kind: marker.kind,
+             foreground: marker.foreground,
+         });
+@@ -185,3 +187,43 @@
+         renderer.restore_state();
+     }
+ }
++
++
++/// Hit the same shape that `resolve` hands to the painter.
++pub(super) fn hit(
++    rendered: Vec<MarkerRendering>, position: LogicalPoint, scale: f32,
++) -> Option<crate::items::TextInputMarkerHit> {
++    rendered.into_iter().find_map(|marker| {
++        if marker.kind == TextInputMarkerKind::Bullet { return None; }
++        let rect = LogicalRect::new(
++            LogicalPoint::new(marker.shape.min_x() / scale, marker.shape.min_y() / scale),
++            LogicalSize::new(marker.shape.width() / scale, marker.shape.height() / scale),
++        );
++        rounded_contains(rect, LogicalBorderRadius::new_uniform(2.0_f32.min(rect.width()/4.0)), position)
++            .then_some(crate::items::TextInputMarkerHit {
++                source_range: marker.range, kind: marker.kind, box_rect: rect,
++            })
++    })
++}
++
++pub(super) fn rounded_contains(rect: LogicalRect, radii: LogicalBorderRadius, point: LogicalPoint) -> bool {
++    if !point.x.is_finite() || !point.y.is_finite() || !rect.contains(point) { return false; }
++    let mut radii = [radii.top_left, radii.top_right, radii.bottom_right, radii.bottom_left];
++    if radii.iter().any(|r| !r.is_finite()) { return false; }
++    for r in &mut radii { *r = r.max(0.0); }
++    let [tl,tr,br,bl] = radii;
++    let fit = [rect.width()/(tl+tr),rect.width()/(bl+br),rect.height()/(tl+bl),rect.height()/(tr+br)]
++        .into_iter().fold(1.0_f32,f32::min);
++    let [tl,tr,br,bl] = radii.map(|r| r*fit);
++    for (cx,cy,r,left,top) in [
++        (rect.min_x()+tl,rect.min_y()+tl,tl,true,true),
++        (rect.max_x()-tr,rect.min_y()+tr,tr,false,true),
++        (rect.max_x()-br,rect.max_y()-br,br,false,false),
++        (rect.min_x()+bl,rect.max_y()-bl,bl,true,false),
++    ] {
++        if (if left { point.x < cx } else { point.x > cx }) && (if top { point.y < cy } else { point.y > cy }) {
++            return (point.x-cx).powi(2)+(point.y-cy).powi(2) <= r*r;
++        }
++    }
++    true
++}
+--- a/i-slint-core-1.18.1/textlayout/sharedparley.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley.rs
+@@ -391,7 +391,7 @@
+                     })
+                     .flatten();
+
+-                let painted_markers = markers::resolve(layout, &marker_data, item_renderer, layout_builder.pixel_size);
++                let painted_markers = markers::resolve(layout, &marker_data, layout_builder.pixel_size, item_renderer.scale_factor().get(), draw::visible_band(item_renderer), |color| item_renderer.platform_brush_for_color(color).is_some());
+                 layout.draw(
+                     item_renderer,
+                     platform_fill_brush,
+@@ -763,6 +763,7 @@
+ #[allow(dead_code)]
+ pub struct TextInputLayout<'a> {
+     layout: &'a Layout,
++    font_size: LogicalLength,
+     /// The string the paragraphs were shaped from, which [`TextInputParagraph::range`] indexes.
+     text: &'a str,
+ }
+@@ -857,7 +858,7 @@
+         &layout_builder,
+         LayoutOptions::new_from_textinput(text_input, Some(width), Some(height)),
+         window_adapter.window(),
+-        |layout| f(TextInputLayout { layout, text: &text }),
++        |layout| f(TextInputLayout { layout, text: &text, font_size: layout_builder.pixel_size }),
+     )
+ }
+
+@@ -865,3 +866,54 @@
+ mod accessibility;
+ #[cfg(feature = "accessibility-text")]
+ pub use accessibility::CachedTextInputAccessibilityState;
++
++
++/// Resolve a visible checkbox through exactly the same source/layout validation as painting.
++pub(crate) fn text_input_marker_at_position(
++    renderer: &(impl RendererSealed + ?Sized), input: Pin<&crate::items::TextInput>,
++    item: &crate::item_tree::ItemRc, mut position: LogicalPoint,
++) -> Option<crate::items::TextInputMarkerHit> {
++    let local_position = position;
++    let size = item.geometry().size;
++    if !LogicalRect::new(LogicalPoint::default(),size).contains(position) { return None; }
++    let scale = renderer.scale_factor()?.get();
++    if !scale.is_finite() || scale <= 0.0 { return None; }
++    if !matches!(input.color(), crate::Brush::SolidColor(c) if c.alpha() != 0) { return None; }
++    let mut current = item.clone();
++    while let Some(parent) = current.parent_item(crate::item_tree::ParentItemTraversalMode::StopAtPopups) {
++        position += current.geometry().origin.to_vector();
++        if renderer.supports_transformations() {
++            if let Some(transform) = parent.children_transform() {
++                position = transform.transform_point(position.cast()).cast();
++            }
++        }
++        let geometry = parent.geometry();
++        if let Some(clip) = parent.downcast::<crate::items::Clip>() {
++            let clip = clip.as_pin_ref();
++            if clip.clip() {
++                let (rect,radii) = crate::item_rendering::clip_content_box(geometry.size,clip.logical_border_radius(),clip.border_width());
++                if !markers::rounded_contains(rect,radii,position) { return None; }
++            }
++        }
++        if parent.downcast::<crate::items::Flickable>().is_some()
++            && !LogicalRect::new(LogicalPoint::default(),geometry.size).contains(position) { return None; }
++        if let Some(opacity) = parent.downcast::<crate::items::Opacity>() {
++            let value=opacity.as_pin_ref().opacity();
++            if !value.is_finite() || value <= 0.0 { return None; }
++        }
++        current = parent;
++    }
++    let markers = markers::prepare(input);
++    let mut hit = with_text_input_layout(renderer,input,item,size,|layout| {
++        let resolved = markers::resolve(layout.layout,&markers,layout.font_size,scale,
++            PhysicalLength::new(0.0)..PhysicalLength::new(size.height*scale),|c| c.alpha()!=0);
++        markers::hit(resolved,local_position,scale)
++    })??;
++    let preedit = input.preedit_text();
++    let cursor = input.cursor_position_byte_offset().max(0) as usize;
++    if !preedit.is_empty() && cursor < hit.source_range.start {
++        hit.source_range.start = hit.source_range.start.checked_sub(preedit.len())?;
++        hit.source_range.end = hit.source_range.end.checked_sub(preedit.len())?;
++    }
++    Some(hit)
++}
+--- a/i-slint-core-1.18.1/renderer.rs
++++ b/i-slint-core-1.18.1/renderer.rs
+@@ -259,6 +259,16 @@
+         )
+     }
+
++    /// The visible source-checkbox shape at this item-local position, if supported.
++    fn text_input_marker_at_position(
++        &self, input: Pin<&crate::items::TextInput>, item: &ItemRc, position: LogicalPoint,
++    ) -> Option<crate::items::TextInputMarkerHit> {
++        #[cfg(feature = "shared-parley")]
++        { crate::textlayout::sharedparley::text_input_marker_at_position(self,input,item,position) }
++        #[cfg(not(feature = "shared-parley"))]
++        { let _ = (input,item,position); None }
++    }
++
+     /// Whether this renderer lays `text_input`'s text out through parley.
+     #[cfg(feature = "shared-parley")]
+     fn text_input_has_parley_layout(
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -758,11 +758,28 @@
+     kind: UndoItemKind,
+ }
+
++/// A source marker and its exact painted shape in item-local coordinates.
++#[derive(Clone, Debug, PartialEq)]
++pub struct TextInputMarkerHit {
++    pub source_range: core::ops::Range<usize>,
++    pub kind: super::TextInputMarkerKind,
++    pub box_rect: LogicalRect,
++}
++
++struct MarkerPress {
++    hit: TextInputMarkerHit,
++    position: LogicalPoint,
++    tracker: Pin<alloc::boxed::Box<crate::properties::PropertyTracker>>,
++    eligible: bool,
++}
++
+ /// The implementation of the `TextInput` element
+ #[repr(C)]
+ #[derive(FieldOffsets, Default, SlintElement)]
+ #[pin]
+ pub struct TextInput {
++    pub marker_activated: Callback<(i32,i32)>,
++    marker_press: core::cell::RefCell<Option<MarkerPress>>,
+     pub source_edits_allowed: Property<bool>,
+     pub text_markers: Property<crate::model::ModelRc<super::TextInputMarker>>,
+     pub text_decorations: Property<crate::model::ModelRc<super::TextInputDecoration>>,
+@@ -917,6 +934,52 @@
+         self_rc: &ItemRc,
+         cursor: &mut super::MouseCursorInner,
+     ) -> InputEventResult {
++        let no_modifiers = || {
++            let modifiers = window_adapter.window().0.context().0.modifiers.get();
++            !modifiers.shift() && !modifiers.control() && !modifiers.alt() && !modifiers.meta()
++        };
++        // Capture and eligibility are separate: a canceled gesture still owns its release.
++        if self.marker_press.borrow().is_some() {
++            let mut pending = self.marker_press.borrow_mut();
++            let press = pending.as_mut().unwrap();
++            if press.tracker.is_dirty() || !no_modifiers() { press.eligible = false; }
++            match event {
++                MouseEvent::Released { position, button: PointerEventButton::Left, .. } => {
++                    let activate = press.eligible && self.source_edits_allowed()
++                        && window_adapter.renderer().text_input_marker_at_position(self,self_rc,*position).as_ref() == Some(&press.hit);
++                    let press = pending.take().unwrap();
++                    drop(pending);
++                    if activate {
++                        self.marker_activated.call(&(press.hit.source_range.start as i32,press.hit.source_range.end as i32));
++                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
++                        self.ensure_focus_and_ime(window_adapter,self_rc);
++                    }
++                    return InputEventResult::EventAccepted;
++                }
++                MouseEvent::Moved { position, .. } if *position == press.position => (),
++                _ => press.eligible = false,
++            }
++            return InputEventResult::GrabMouse;
++        }
++        if matches!(event,MouseEvent::Pressed {button:PointerEventButton::Left,click_count:0,..})
++            && no_modifiers() && self.source_edits_allowed() {
++            let tracker = alloc::boxed::Box::pin(crate::properties::PropertyTracker::default());
++            let position = event.position().unwrap();
++            let hit = tracker.as_ref().evaluate_as_dependency_root(|| {
++                // Track whole models, including changes whose final geometry is identical.
++                use crate::model::Model;
++                for model in [self.text_markers().model_tracker(),self.text_decorations().model_tracker()] {
++                    model.track_any_change(0,crate::InternalToken);
++                }
++                let _ = (self.text(),self.preedit_text(),self.has_focus(),self.enabled(),self.read_only(),
++                    self.source_edits_allowed(),self.cursor_position_byte_offset(),self.anchor_position_byte_offset());
++                window_adapter.renderer().text_input_marker_at_position(self,self_rc,position)
++            });
++            if let Some(hit) = hit {
++                *self.marker_press.borrow_mut() = Some(MarkerPress {hit,position,tracker,eligible:true});
++                return InputEventResult::GrabMouse;
++            }
++        }
+         if !self.enabled() {
+             return InputEventResult::EventIgnored;
+         }
+@@ -1028,6 +1091,7 @@
+         window_adapter: &Rc<dyn WindowAdapter>,
+         self_rc: &ItemRc,
+     ) -> KeyEventResult {
++        if let Some(press) = self.marker_press.borrow_mut().as_mut() { press.eligible = false; }
+         if !self.enabled() {
+             return KeyEventResult::EventIgnored;
+         }
+--- a/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
++++ b/i-slint-core-1.18.1/textlayout/sharedparley/markers.rs
+@@ -41,7 +41,7 @@
+     font_size: LogicalLength,
+     scale: f32,
+     band: Range<PhysicalLength>,
+-    can_paint: impl Fn(&Color) -> bool,
++    mut can_paint: impl FnMut(&Color) -> bool,
+ ) -> Vec<MarkerRendering> {
+     let mut result = Vec::new();
+     for marker in markers {
+--- a/winit-0.30.13/src/platform_impl/macos/view.rs
++++ b/winit-0.30.13/src/platform_impl/macos/view.rs
+@@ -950,7 +950,9 @@
+         if self.ivars().ime_allowed.get() == ime_allowed {
+             return;
+         }
+-        self.reset_composition_context(ime_allowed);
++        // Explicitly discarding conversion in a key window establishes a fresh idle context,
++        // even when keyboard focus moves from the editor to application chrome.
++        self.reset_composition_context(ime_allowed || self.window().isKeyWindow());
+         self.ivars().ime_allowed.set(ime_allowed);
+         if self.ivars().ime_allowed.get() {
+             return;
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -968,9 +968,10 @@
+             let hit = tracker.as_ref().evaluate_as_dependency_root(|| {
+                 // Track whole models, including changes whose final geometry is identical.
+                 use crate::model::Model;
+-                for model in [self.text_markers().model_tracker(),self.text_decorations().model_tracker()] {
+-                    model.track_any_change(0,crate::InternalToken);
+-                }
++                let markers = self.text_markers();
++                markers.model_tracker().track_any_change(markers.row_count(),crate::InternalToken);
++                let decorations = self.text_decorations();
++                decorations.model_tracker().track_any_change(decorations.row_count(),crate::InternalToken);
+                 let _ = (self.text(),self.preedit_text(),self.has_focus(),self.enabled(),self.read_only(),
+                     self.source_edits_allowed(),self.cursor_position_byte_offset(),self.anchor_position_byte_offset());
+                 window_adapter.renderer().text_input_marker_at_position(self,self_rc,position)

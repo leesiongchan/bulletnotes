@@ -153,3 +153,68 @@ fn native_return_and_tab_survive_outside_list() {
     shortcut(&window, &[Key::Shift], Key::Return.into());
     assert_eq!(window.get_note_text(), "- a\n");
 }
+
+fn checkbox_point(window: &AppWindow) -> slint::LogicalPosition {
+    let inner = i_slint_core::window::WindowInner::from_pub(window.window());
+    let item = inner.focus_item.borrow().upgrade().unwrap();
+    let input = item.downcast::<i_slint_core::items::TextInput>().unwrap();
+    let adapter = inner.window_adapter();
+    for y in 0..80 {
+        for x in 0..45 {
+            let local = i_slint_core::lengths::LogicalPoint::new(x as f32, y as f32);
+            if let Some(hit) =
+                adapter
+                    .renderer()
+                    .text_input_marker_at_position(input.as_pin_ref(), &item, local)
+            {
+                let point =
+                    item.map_to_window(hit.box_rect.center() + item.geometry().origin.to_vector());
+                return slint::LogicalPosition::new(point.x, point.y);
+            }
+        }
+    }
+    panic!("generated checkbox has no visible hit region");
+}
+#[test]
+fn offscreen_caret_toggle_preserves_viewport() {
+    let source = format!("- [ ] first\n{}", "body 日本語\n".repeat(90));
+    let window = setup(&source);
+    let end = source.len() as i32;
+    window.invoke_restore_editor_position(end, end - 1, 0.0);
+    let _ = window.window().take_snapshot().unwrap();
+    let point = checkbox_point(&window);
+    let before = (
+        window.get_editor_anchor(),
+        window.get_editor_caret(),
+        window.get_editor_scroll_y(),
+    );
+    let edits = Rc::new(Cell::new(0));
+    let observed = edits.clone();
+    window.on_note_edited(move |_| observed.set(observed.get() + 1));
+    window.window().dispatch_event(WindowEvent::PointerPressed {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerReleased {
+            position: point,
+            button: slint::platform::PointerEventButton::Left,
+        });
+    assert_eq!(window.get_note_text(), source.replacen("[ ]", "[x]", 1));
+    assert_eq!(
+        (
+            window.get_editor_anchor(),
+            window.get_editor_caret(),
+            window.get_editor_scroll_y()
+        ),
+        before
+    );
+    assert_eq!(edits.get(), 1);
+    shortcut(&window, &[Key::Control], "z".into());
+    assert_eq!(window.get_note_text(), source);
+    assert_eq!(
+        (window.get_editor_anchor(), window.get_editor_caret()),
+        (end, end - 1)
+    );
+}

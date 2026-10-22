@@ -159,6 +159,7 @@ export component NoteEditor inherits Rectangle {
                 input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
                 page-height: scroll.visible-height;
                 accessible-label: "Markdown note";
+                marker-activated(start,end) => { root.apply-command(MarkdownCommand.toggle-task,start,end); }
                 edited => { root.edited(self.text); }
                 key-pressed(event) => {
                     if (root.command-key(event) == accept) { return accept; }

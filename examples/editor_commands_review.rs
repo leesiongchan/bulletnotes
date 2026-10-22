@@ -67,6 +67,52 @@ mod native {
         }
         pause().await
     }
+    fn checkbox_point(ui: &AppWindow) -> Result<slint::LogicalPosition> {
+        let inner = i_slint_core::window::WindowInner::from_pub(ui.window());
+        let item = inner
+            .focus_item
+            .borrow()
+            .upgrade()
+            .ok_or("owned editor focus missing")?;
+        let input = item
+            .downcast::<i_slint_core::items::TextInput>()
+            .ok_or("owned focus is not editor")?;
+        let adapter = inner.window_adapter();
+        for y in 0..80 {
+            for x in 0..45 {
+                let p = i_slint_core::lengths::LogicalPoint::new(x as f32, y as f32);
+                if let Some(hit) =
+                    adapter
+                        .renderer()
+                        .text_input_marker_at_position(input.as_pin_ref(), &item, p)
+                {
+                    let p = item
+                        .map_to_window(hit.box_rect.center() + item.geometry().origin.to_vector());
+                    return Ok(slint::LogicalPosition::new(p.x, p.y));
+                }
+            }
+        }
+        Err("owned checkbox has no visible hit region".into())
+    }
+    async fn click(ui: &AppWindow, point: slint::LogicalPosition) -> Result<()> {
+        let window = window_chrome::native_window(ui.window())?;
+        let view = window.contentView().ok_or("owned view absent")?;
+        let y = if view.isFlipped() {
+            point.y as f64
+        } else {
+            view.bounds().size.height - point.y as f64
+        };
+        let location = view.convertPoint_toView(NSPoint::new(point.x as f64, y), None);
+        let app = NSApplication::sharedApplication(MainThreadMarker::from(&*window));
+        for kind in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
+            let event=NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                kind,location,Flags::empty(),NSProcessInfo::processInfo().systemUptime(),window.windowNumber(),None,0,1,0.0
+            ).ok_or("owned mouse event construction failed")?;
+            app.postEvent_atStart(&event, false);
+            pause().await?;
+        }
+        Ok(())
+    }
     fn check(condition: bool, message: &'static str) -> Result<()> {
         if condition {
             Ok(())
@@ -197,6 +243,53 @@ mod native {
                         "native command did not reach local persistence",
                     )?;
                 }
+                let task_source =
+                    format!("- [ ] first\n- [ ] second\n{}", "body 日本語\n".repeat(90));
+                ui.set_note_text(task_source.clone().into());
+                ui.invoke_note_edited(task_source.clone().into());
+                local.wait_until_saved().await?;
+                ui.invoke_focus_editor();
+                let end = task_source.len() as i32;
+                ui.invoke_restore_editor_position(end, end - 1, 0.0);
+                pause().await?;
+                let point = checkbox_point(&ui)?;
+                capture(&ui, "editor-checkbox-before")?;
+                let selection = (
+                    ui.get_editor_anchor(),
+                    ui.get_editor_caret(),
+                    ui.get_editor_scroll_y(),
+                );
+                click(&ui, point).await?;
+                check(
+                    ui.get_note_text() == task_source.replacen("[ ]", "[x]", 1),
+                    "native checkbox changed wrong source",
+                )?;
+                check(
+                    (
+                        ui.get_editor_anchor(),
+                        ui.get_editor_caret(),
+                        ui.get_editor_scroll_y(),
+                    ) == selection,
+                    "native checkbox moved selection or viewport",
+                )?;
+                capture(&ui, "editor-checkbox-after")?;
+                local.wait_until_saved().await?;
+                key(&ui, "z", 6, Flags::Command).await?;
+                check(
+                    ui.get_note_text() == task_source,
+                    "native checkbox undo was not atomic",
+                )?;
+                ui.invoke_restore_editor_position(end, end, 0.0);
+                key(&ui, "\u{f709}", 97, Flags::empty()).await?;
+                click(&ui, point).await?;
+                check(
+                    ui.get_note_text() == task_source.replacen("[ ]", "[x]", 1),
+                    "native checkbox after chrome focus did not toggle",
+                )?;
+                local.wait_until_saved().await?;
+                ui.set_note_text("b\na".into());
+                ui.invoke_note_edited("b\na".into());
+                local.wait_until_saved().await?;
                 ui.set_note_read_only(true);
                 key(&ui, "b", 11, Flags::Command).await?;
                 check(

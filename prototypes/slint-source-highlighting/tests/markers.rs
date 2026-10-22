@@ -404,3 +404,189 @@ fn marker_clipping_preserves_italic_ink_beyond_the_final_advance() {
         }
     }
 }
+
+fn pointer_setup() -> (EditorHarness, slint::LogicalPosition) {
+    let ui = setup("- [ ] café 日本語");
+    ui.window().dispatch_event(WindowEvent::internal(
+        i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+            context_id: 1,
+            status: i_slint_core::input::CompositionStatus::Idle,
+        },
+    ));
+    let mut task = marker(0, 6, Kind::Checkbox);
+    task.compact = true;
+    ui.set_markers(ModelRc::from([task]));
+    let mask = red_mask(&ui);
+    let pixels: Vec<_> = mask
+        .iter()
+        .enumerate()
+        .filter(|(_, red)| **red)
+        .map(|(i, _)| (i % 600, i / 600))
+        .collect();
+    let min_x = pixels.iter().map(|p| p.0).min().unwrap();
+    let max_x = pixels.iter().map(|p| p.0).max().unwrap();
+    let min_y = pixels.iter().map(|p| p.1).min().unwrap();
+    let max_y = pixels.iter().map(|p| p.1).max().unwrap();
+    let point =
+        slint::LogicalPosition::new((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0);
+    let weak = ui.as_weak();
+    ui.on_activate_marker(move |start, end| {
+        assert_eq!((start, end), (0, 6));
+        let ui = weak.upgrade().unwrap();
+        assert!(ui.invoke_apply_edit(3, 4, "x".into(), ui.get_anchor(), ui.get_caret()));
+    });
+    (ui, point)
+}
+fn pointer(ui: &EditorHarness, point: slint::LogicalPosition, pressed: bool) {
+    use slint::platform::PointerEventButton;
+    ui.window().dispatch_event(if pressed {
+        WindowEvent::PointerPressed {
+            position: point,
+            button: PointerEventButton::Left,
+        }
+    } else {
+        WindowEvent::PointerReleased {
+            position: point,
+            button: PointerEventButton::Left,
+        }
+    });
+}
+#[test]
+fn only_visible_checkbox_shape_activates() {
+    let (ui, point) = pointer_setup();
+    let selection = (ui.get_anchor(), ui.get_caret());
+    pointer(&ui, point, true);
+    pointer(&ui, point, false);
+    assert_eq!(ui.get_source(), "- [x] café 日本語");
+    assert_eq!((ui.get_anchor(), ui.get_caret()), selection);
+    assert_eq!(ui.get_edits(), 1);
+    ui.invoke_undo_input();
+    assert_eq!(ui.get_source(), "- [ ] café 日本語");
+    assert_eq!((ui.get_anchor(), ui.get_caret()), selection);
+}
+#[test]
+fn layout_change_cancels_pressed_checkbox() {
+    let (ui, point) = pointer_setup();
+    pointer(&ui, point, true);
+    let width = ui.get_editor_width();
+    ui.set_editor_width(width - 1.0);
+    ui.set_editor_width(width);
+    pointer(&ui, point, false);
+    assert_eq!(ui.get_edits(), 0);
+    assert_eq!(ui.get_source(), "- [ ] café 日本語");
+}
+#[test]
+fn cancelled_drag_does_not_escape_capture() {
+    let (ui, point) = pointer_setup();
+    let selection = (ui.get_anchor(), ui.get_caret());
+    pointer(&ui, point, true);
+    ui.set_input_enabled(false);
+    ui.window().dispatch_event(WindowEvent::PointerMoved {
+        position: slint::LogicalPosition::new(590.0, 410.0),
+    });
+    ui.set_input_enabled(true);
+    pointer(&ui, point, false);
+    assert_eq!(ui.get_edits(), 0);
+    assert_eq!((ui.get_anchor(), ui.get_caret()), selection);
+}
+
+#[test]
+fn checkbox_gates_and_sticky_invalidations() {
+    let (ui, point) = pointer_setup();
+    let end = ui.get_source().len() as i32;
+    let idle = |value| {
+        ui.window().dispatch_event(WindowEvent::internal(
+            i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+                context_id: 1,
+                status: value,
+            },
+        ))
+    };
+    for gate in 0..7 {
+        ui.invoke_select(end, end);
+        match gate {
+            0 => ui.set_read_only(true),
+            1 => idle(i_slint_core::input::CompositionStatus::Active),
+            2 => {
+                ui.window().dispatch_event(WindowEvent::KeyPressed {
+                    text: slint::platform::Key::Shift.into(),
+                });
+            }
+            3 => ui.invoke_select(0, 0),
+            4 => ui.set_markers(ModelRc::from([marker(0, 6, Kind::Bullet)])),
+            5 => {
+                let mut m = marker(0, 6, Kind::Checkbox);
+                m.foreground = slint::Color::from_argb_u8(0, 255, 0, 0);
+                ui.set_markers(ModelRc::from([m]));
+            }
+            _ => (),
+        }
+        let click = if gate == 6 {
+            slint::LogicalPosition::new(point.x + 30.0, point.y)
+        } else {
+            point
+        };
+        pointer(&ui, click, true);
+        pointer(&ui, click, false);
+        assert_eq!(ui.get_edits(), 0, "gate {gate}");
+        ui.set_read_only(false);
+        idle(i_slint_core::input::CompositionStatus::Idle);
+        ui.window().dispatch_event(WindowEvent::KeyReleased {
+            text: slint::platform::Key::Shift.into(),
+        });
+        let mut m = marker(0, 6, Kind::Checkbox);
+        m.compact = true;
+        ui.set_markers(ModelRc::from([m]));
+    }
+    for invalidation in 0..6 {
+        ui.invoke_select(end, end);
+        pointer(&ui, point, true);
+        match invalidation {
+            0 => {
+                let source = ui.get_source();
+                ui.set_source(format!("{source}!").into());
+                ui.set_source(source);
+            }
+            1 => {
+                let model = ui.get_markers();
+                ui.set_markers(ModelRc::default());
+                ui.set_markers(model);
+            }
+            2 => {
+                ui.window()
+                    .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 2.0 });
+                ui.window()
+                    .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.0 });
+            }
+            3 => {
+                ui.window()
+                    .dispatch_event(WindowEvent::WindowActiveChanged(false));
+                ui.window()
+                    .dispatch_event(WindowEvent::WindowActiveChanged(true));
+            }
+            4 => {
+                ui.window().dispatch_event(WindowEvent::PointerExited);
+            }
+            _ => {
+                ui.window().dispatch_event(WindowEvent::PointerMoved {
+                    position: slint::LogicalPosition::new(point.x + 1.0, point.y),
+                });
+            }
+        }
+        let result = ui
+            .window()
+            .dispatch_event_with_result(WindowEvent::PointerReleased {
+                position: point,
+                button: slint::platform::PointerEventButton::Left,
+            })
+            .unwrap();
+        assert!(
+            matches!(
+                result,
+                i_slint_core::platform::WindowEventDispatchResult::Accepted
+            ),
+            "release capture {invalidation}"
+        );
+        assert_eq!(ui.get_edits(), 0, "invalidation {invalidation}");
+    }
+}

@@ -19,6 +19,7 @@ export component EditorHarness inherits Window {
     out property <string> preedit: input.preedit-text;
     out property <int> edits: 0;
     callback source-edited();
+    callback activate-marker(int,int);
     out property <length> text-width: input.preferred-width;
     public function select(a: int, c: int) { input.set-selection-offsets(a, c); }
     public function apply-edit(start: int, end: int, replacement: string, anchor: int, caret: int) -> bool {
@@ -46,6 +47,7 @@ export component EditorHarness inherits Window {
         selection-background-color: #2859b5;
         selection-foreground-color: white;
         input-method-hints: { capitalization: none, auto-correct: false, auto-complete: false };
+        marker-activated(start,end) => { root.activate-marker(start,end); }
         edited => { root.edits += 1; root.source-edited(); }
     }
 }
