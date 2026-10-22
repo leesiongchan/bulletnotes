@@ -68,8 +68,9 @@ fn capture(window: &AppWindow, name: &str) -> Result<()> {
         renderer::uses_metal(window.window())
     );
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".superpowers/sdd/2026-10-19-antinote-ui-ux")
+        .join("target/antinote-interactions/chrome")
         .join(format!("floating-{name}.png"));
+    std::fs::create_dir_all(path.parent().ok_or("capture parent absent")?)?;
     if !std::process::Command::new("/usr/sbin/screencapture")
         .args(["-x", "-o", &format!("-l{}", native.windowNumber())])
         .arg(path)
@@ -335,14 +336,8 @@ pub fn run() -> Result<()> {
             );
             undo(&window);
             pause(30).await?;
-            assert_eq!(
-                window.get_note_text(),
-                format!("{}{}", &source[..2], &source[5..])
-            );
-            // Slint records deletion and insertion as two undo entries for a replacement.
-            undo(&window);
-            pause(30).await?;
             assert_eq!(window.get_note_text(), source);
+            assert_eq!((window.get_editor_anchor(),window.get_editor_caret()),(2,5));
             // Reverse a native fade-out before its completion; stale completion must not hide it.
             window.set_header_hovered(false);
             pause(130).await?;

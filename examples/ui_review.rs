@@ -369,7 +369,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
-    window.set_current_path("Quick Notes/2026-10-19/Scratchpad.md".into());
+    window.set_current_path(
+        if args.iter().any(|arg| arg == "--long-path") {
+            "generated/long/path/for/minimum/window/chrome-review.md"
+        } else {
+            "Quick Notes/2026-10-19/Scratchpad.md"
+        }
+        .into(),
+    );
     window.set_note_date("19 Oct 2026".into());
     window.set_note_counter("1 of 3".into());
     window.set_can_go_older(true);

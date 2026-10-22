@@ -5,6 +5,7 @@ export component ActionButton inherits FocusScope {
     in property <string> label;
     in property <bool> selected:false;
     in property <bool> circular:false;
+    in property <bool> high-contrast:false;
     out property <bool> pressed:touch.pressed;
     callback clicked();
     width: root.circular ? 32px : 28px;
@@ -20,8 +21,8 @@ export component ActionButton inherits FocusScope {
     Rectangle {
         border-radius: root.circular ? self.height / 2 : 5px;
         background: root.selected || touch.has-hover ? root.theme.selection : (root.circular ? root.theme.paper : transparent);
-        border-width: root.has-focus || root.circular ? 1px : 0px;
-        border-color: root.has-focus ? root.theme.accent : root.theme.line.with-alpha(0.35);
+        border-width: root.has-focus || (root.circular && root.high-contrast) ? 1px : 0px;
+        border-color: root.has-focus ? root.theme.accent : root.theme.ink;
         Image {
             source: root.icon;
             colorize: root.enabled ? root.theme.ink : root.theme.muted;

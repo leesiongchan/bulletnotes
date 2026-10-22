@@ -251,12 +251,12 @@ fn floating_chrome_header_meets_top_edge_at_maximum_text_size() {
             png::ColorType::Rgba => 4,
             other => panic!("unsupported capture format: {other:?}"),
         };
-        let expected = if shown {
-            [243, 240, 231]
-        } else {
-            [252, 250, 244]
-        };
         for y in [4, 20, frame.height as usize - 30] {
+            let expected = if shown && y > 44 {
+                [243, 240, 231]
+            } else {
+                [252, 250, 244]
+            };
             let mut surface_pixels = 0;
             for x in 40..frame.width as usize - 40 {
                 let offset = (y * frame.width as usize + x) * channels;
@@ -325,4 +325,100 @@ fn native_floating_chrome_preserves_editor_and_handles_input_lifecycle() {
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("floating_chrome_contract_passed: true")
     );
+}
+
+fn chrome_window() -> bulletnotes::AppWindow {
+    use slint::ComponentHandle;
+    slint::platform::set_platform(Box::new(i_slint_backend_testing::TestingBackend::new(
+        i_slint_backend_testing::TestingBackendOptions {
+            mock_time: true,
+            threading: false,
+            renderer_name: Some("skia".into()),
+        },
+    )))
+    .unwrap();
+    let ui = bulletnotes::AppWindow::new().unwrap();
+    bulletnotes::app::ui::present_settings(&ui, &AppSettings::default(), SystemAppearance::Light)
+        .unwrap();
+    ui.set_prefers_reduced_motion(true);
+    ui.set_note_text("Generated chrome proof".into());
+    ui.show().unwrap();
+    ui.window()
+        .dispatch_event(slint::platform::WindowEvent::WindowActiveChanged(true));
+    ui.invoke_focus_editor();
+    ui.set_header_hovered(true);
+    ui.set_footer_hovered(true);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(50));
+    ui
+}
+fn chrome_pixel(ui: &bulletnotes::AppWindow, x: usize, y: usize) -> [u8; 3] {
+    use slint::ComponentHandle;
+    let image = ui.window().take_snapshot().unwrap();
+    let p = image.as_bytes();
+    let i = (y * image.width() as usize + x) * 4;
+    [p[i], p[i + 1], p[i + 2]]
+}
+#[test]
+fn header_uses_paper_and_footer_keeps_surface() {
+    let ui = chrome_window();
+    assert_eq!(chrome_pixel(&ui, 250, 10), [252, 250, 244]);
+    assert_eq!(chrome_pixel(&ui, 250, 504), [243, 240, 231]);
+}
+#[test]
+fn circular_idle_focus_and_contrast_are_distinct() {
+    use slint::ComponentHandle;
+    let ui = chrome_window();
+    let idle = ui.window().take_snapshot().unwrap();
+    // Left edge of the pin circle is paper until accessibility contrast adds its outline.
+    assert_eq!(chrome_pixel(&ui, 463, 22), [252, 250, 244]);
+    ui.set_system_high_contrast(true);
+    let contrast = ui.window().take_snapshot().unwrap();
+    assert!(idle.as_bytes() != contrast.as_bytes());
+    assert_ne!(chrome_pixel(&ui, 463, 22), [252, 250, 244]);
+    ui.window()
+        .dispatch_event(slint::platform::WindowEvent::KeyPressed {
+            text: slint::platform::Key::F6.into(),
+        });
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(50));
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(50));
+    let focus = ui.window().take_snapshot().unwrap();
+    assert!(focus.as_bytes() != contrast.as_bytes());
+}
+#[test]
+fn minimum_chrome_retains_path_and_actions() {
+    use slint::ComponentHandle;
+    let ui = chrome_window();
+    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
+    ui.set_current_path("generated/long/path/that/must/elide/without/overlapping.md".into());
+    let before = (
+        ui.get_note_text(),
+        ui.get_editor_width(),
+        ui.get_editor_height(),
+    );
+    assert_eq!(ui.window().take_snapshot().unwrap().width(), 400);
+    ui.set_header_hovered(false);
+    ui.set_footer_hovered(false);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::ZERO);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(150));
+    assert_eq!(
+        (
+            ui.get_note_text(),
+            ui.get_editor_width(),
+            ui.get_editor_height()
+        ),
+        before
+    );
+}
+#[test]
+fn hidden_chrome_keeps_attention_visible() {
+    let ui = chrome_window();
+    ui.set_header_hovered(false);
+    ui.set_footer_hovered(false);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::ZERO);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(150));
+    ui.set_status_attention(true);
+    ui.set_status_text("Local save failed. Retry.".into());
+    assert!(!ui.get_header_revealed() && !ui.get_footer_revealed());
+    assert_eq!(chrome_pixel(&ui, 25, 460), [243, 240, 231]);
+    assert!(ui.get_status_text().contains("Retry"));
 }
