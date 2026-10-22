@@ -209,16 +209,25 @@ mod native {
                     }
                     pause().await?;
                 }
-                // Allow the reveal transaction to reach WindowServer before capturing.
+                let previous = frames.get();
+                ui.window().request_redraw();
+                while frames.get() <= previous {
+                    if start.elapsed() > Duration::from_secs(5) {
+                        return Err("owned position capture did not render current content".into());
+                    }
+                    pause().await?;
+                }
+                // Allow the fresh content transaction to reach WindowServer before capturing.
                 pause().await?;
                 let path = capture_path(writer);
                 let status = std::process::Command::new("/usr/sbin/screencapture")
                     .args(["-x", "-o", &format!("-l{}", window.windowNumber())])
-                    .arg(path)
+                    .arg(&path)
                     .status()?;
                 if !status.success() {
                     return Err("owned position screenshot failed".into());
                 }
+                require_note_pixels(&path)?;
                 Ok(())
             }
             .await;
@@ -271,6 +280,41 @@ mod native {
         }
         runtime.block_on(reopened.shutdown())?;
         println!("native_editor_position_{mode}: true");
+        Ok(())
+    }
+    fn require_note_pixels(path: &Path) -> Result {
+        let mut reader =
+            png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path)?)).read_info()?;
+        let mut pixels = vec![
+            0;
+            reader
+                .output_buffer_size()
+                .ok_or("capture image too large")?
+        ];
+        let info = reader.next_frame(&mut pixels)?;
+        let channels = match (info.color_type, info.bit_depth) {
+            (png::ColorType::Rgb, png::BitDepth::Eight) => 3,
+            (png::ColorType::Rgba, png::BitDepth::Eight) => 4,
+            _ => return Err("unexpected native capture format".into()),
+        };
+        let width = info.width as usize;
+        let ink = pixels[..info.buffer_size()]
+            .chunks_exact(channels)
+            .enumerate()
+            .filter(|(index, pixel)| {
+                let x = index % width;
+                let y = index / width;
+                x > 40
+                    && x < width.saturating_sub(40)
+                    && y > 40
+                    && y < info.height as usize - 40
+                    && pixel[..3].iter().all(|channel| *channel < 160)
+                    && (channels == 3 || pixel[3] > 200)
+            })
+            .count();
+        if ink < 1000 {
+            return Err("native capture does not contain the generated note".into());
+        }
         Ok(())
     }
     fn capture_path(writer: bool) -> std::path::PathBuf {

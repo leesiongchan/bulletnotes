@@ -1,0 +1,94 @@
+{
+  "platform": "Apple Silicon/macOS 27.0.1",
+  "implementation_commit": "8cf85a33ef53185dfe6fc4e79dbbd8ecffa14de0",
+  "app_checks": {
+    "passed": 396,
+    "failed": 0,
+    "ignored": 24
+  },
+  "renderer_checks": {
+    "passed": 45,
+    "failed": 0,
+    "ignored": 0
+  },
+  "native_checks": [
+    {
+      "name": "position",
+      "log": "target/editor-position/position-visible.log",
+      "marker": "native_editor_position_roundtrip_passed: true",
+      "passed": true
+    },
+    {
+      "name": "input",
+      "log": "target/editor-position/accepted-input.log",
+      "marker": "native_editor_input_roundtrips_passed: true",
+      "passed": true
+    },
+    {
+      "name": "commands",
+      "log": "target/editor-position/commands-rerun.log",
+      "marker": "native_editor_commands_passed: true",
+      "passed": true
+    },
+    {
+      "name": "floating",
+      "log": "target/editor-position/accepted-floating.log",
+      "marker": "floating_chrome_contract_passed: true",
+      "passed": true
+    },
+    {
+      "name": "composition",
+      "log": "target/editor-position/accepted-composition.log",
+      "marker": "native_composition_guard_passed: true",
+      "passed": true
+    },
+    {
+      "name": "search",
+      "log": "target/editor-position/accepted-search.log",
+      "marker": "native_search_preview_passed: true",
+      "passed": true
+    },
+    {
+      "name": "scratchpad",
+      "log": "target/editor-position/accepted-scratchpad.log",
+      "marker": "native_scratchpad_contract_passed: true",
+      "passed": true
+    },
+    {
+      "name": "accessibility_range",
+      "log": "target/editor-position/accepted-ax.log",
+      "marker": "public_ax_range_roundtrip: true",
+      "passed": true
+    },
+    {
+      "name": "packaged_lifecycle",
+      "log": "target/editor-position/packaged-lifecycle-final.log",
+      "marker": "native_startup_close_and_quit: true",
+      "passed": true
+    }
+  ],
+  "screenshots": {
+    "native-before-restart.png": "57baab127135d2d27e3607272b9332870850f3180df2c812ab580fb1ca1253c8",
+    "native-after-restart.png": "57baab127135d2d27e3607272b9332870850f3180df2c812ab580fb1ca1253c8"
+  },
+  "voiceover": {
+    "passed": false,
+    "settings_changed": false,
+    "blocked_reason": "Command '['/usr/bin/osascript', '-e', 'tell application \"VoiceOver\" to get content of last phrase']' timed out after 8 seconds",
+    "owned_processes_reaped": true
+  },
+  "development_package": {
+    "artifact": "/Users/leesiongchan/.codex/worktrees/ffcd/bulletnotes/target/editor-position/package-20261023/Bulletnotes-0.1.0-arm64-development.app",
+    "kind": "development",
+    "architecture": "arm64",
+    "minimum_macos": "14.0",
+    "signature": "verified",
+    "launch": "passed (generated UI; no store, credentials, or network)",
+    "graphics_api": "Metal",
+    "source_revision": "8cf85a33ef53185dfe6fc4e79dbbd8ecffa14de0",
+    "source_dirty": true,
+    "cargo_lock_sha256": "04a6e7c87cac5da15455612ccfe06aa5f57cda5e8552799a35124135f68af946",
+    "binary_sha256": "56ed636f5a828bd50687f34ce8354b3744ee26df30744bed0988e834586f2d84",
+    "archive_sha256": "d0af8b634ded6a0421f99a857d458d4a941e484911253307332632358ab4757d"
+  }
+}

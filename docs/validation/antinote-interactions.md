@@ -148,10 +148,10 @@ an authoritative Idle status. Linux/Windows runtime command activation is not
 accepted by this macOS pass.
 
 Physical human input methods beyond the exercised Pinyin path, VoiceOver,
-supported macOS/hardware coverage, selection capture across page changes/relaunch,
-performance and signed/notarized distribution remain separate release gates.
-Earlier selection and lifecycle records remain historical and are not promoted
-to fresh acceptance. The controlled command/save/restart/sync checks do not waive
+supported macOS/hardware coverage, performance and signed/notarized distribution remain separate release gates.
+[Live position validation](editor-position.md) now records the later directed
+selection/scroll capture and native restart acceptance. Earlier selection and
+lifecycle records remain historical and are not promoted to fresh acceptance. The controlled command/save/restart/sync checks do not waive
 live-server or packaged-app gates.
 
 ## Execution decisions
