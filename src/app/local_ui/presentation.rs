@@ -164,6 +164,30 @@ impl State {
                                 title: page.title.as_str().into(),
                                 path: page.key.path.as_str().into(),
                                 excerpt: page.excerpt.as_deref().unwrap_or("").into(),
+                                title_highlights: slint::ModelRc::from(
+                                    search_decorations(
+                                        &page.title,
+                                        &page.highlights.title,
+                                        window.get_theme().ink,
+                                    )
+                                    .as_slice(),
+                                ),
+                                path_highlights: slint::ModelRc::from(
+                                    search_decorations(
+                                        page.key.path.as_str(),
+                                        &page.highlights.path,
+                                        window.get_theme().ink,
+                                    )
+                                    .as_slice(),
+                                ),
+                                excerpt_highlights: slint::ModelRc::from(
+                                    search_decorations(
+                                        page.excerpt.as_deref().unwrap_or(""),
+                                        &page.highlights.excerpt,
+                                        window.get_theme().ink,
+                                    )
+                                    .as_slice(),
+                                ),
                                 modified_label: page
                                     .modified_ms
                                     .and_then(|ms| i64::try_from(ms).ok())
@@ -236,5 +260,62 @@ impl State {
         }
         self.updates.send_replace(());
         presentation.success();
+    }
+}
+
+fn search_decorations(
+    text: &str,
+    ranges: &[std::ops::Range<usize>],
+    ink: slint::Color,
+) -> Vec<slint::language::TextInputDecoration> {
+    let mut end = 0;
+    for range in ranges {
+        if range.start < end
+            || range.start >= range.end
+            || range.end > text.len()
+            || !text.is_char_boundary(range.start)
+            || !text.is_char_boundary(range.end)
+            || i32::try_from(range.end).is_err()
+        {
+            return Vec::new();
+        }
+        end = range.end;
+    }
+    ranges
+        .iter()
+        .map(|range| {
+            let mut decoration = slint::language::TextInputDecoration::default();
+            decoration.start = range.start as i32;
+            decoration.end = range.end as i32;
+            decoration.foreground = ink;
+            decoration.bold = true;
+            decoration.underline = true;
+            decoration
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    #[test]
+    fn invalid_ranges_render_plain_text() {
+        let ink = slint::Color::from_rgb_u8(10, 20, 30);
+        for ranges in [
+            std::iter::once(std::ops::Range { start: 7, end: 6 }).collect(),
+            std::iter::once(0..100).collect(),
+            std::iter::once(4..5).collect(),
+            vec![6..12, 0..3],
+            vec![0..3, 2..5],
+            vec![0..3, 4..5],
+        ] {
+            assert!(search_decorations("café needle", &ranges, ink).is_empty());
+        }
+        let ranges = std::iter::once(6..12).collect::<Vec<_>>();
+        let values = search_decorations("café needle", &ranges, ink);
+        assert_eq!(values.len(), 1);
+        let value = &values[0];
+        assert_eq!((value.start, value.end, value.foreground), (6, 12, ink));
+        assert!(value.bold && value.underline && !value.code && !value.italic);
     }
 }

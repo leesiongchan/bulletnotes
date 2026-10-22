@@ -11,6 +11,13 @@ use std::rc::Rc;
 pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
+        window.on_search_palette_changed(move || {
+            state.presentation.search.set(None);
+            state.render();
+        });
+    }
+    {
+        let state = state.clone();
         window.on_find_opened(move || state.find(None));
     }
     {

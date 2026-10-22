@@ -25,6 +25,8 @@ export component AppWindow inherits Window {
     resize-border-width: 0px;
     always-on-top: root.is-pinned;
     in property <UiTheme> theme;
+    callback search-palette-changed();
+    changed system-high-contrast => { root.search-palette-changed(); }
     in-out property <string> active-view:"note";
     in property <string> current-path;
     in-out property <string> note-text;
@@ -229,6 +231,7 @@ export component AppWindow inherits Window {
             if (event.text == "]") { root.scratchpad-step(1); return accept; }
         }
         if (event.text == Key.Escape && root.active-view == "note" && root.find-visible) { root.close-find(); return accept; }
+        if (event.text == Key.Escape && root.active-view == "pages" && !pages.escape-allowed) { return reject; }
         if (event.text == Key.Escape && root.active-view != "note") {
             if (root.low-contrast-warning) { root.cancel-theme-import(); } else { root.return-to-note(); }
             return accept;
@@ -236,7 +239,7 @@ export component AppWindow inherits Window {
         return reject;
     }
     init => { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
-    changed theme => { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    changed theme => { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; root.search-palette-changed(); }
     changed active-view => {
         if (root.active-view == "pages") { pages.focus-query(); }
         else if (root.active-view == "appearance") { appearance.focus-panel(); }
@@ -252,7 +255,7 @@ export component AppWindow inherits Window {
         keys := FocusScope {
             key-pressed(event) => { root.shortcut(event) }
             capture-key-pressed(event) => {
-                if (event.text == Key.F6 || (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0))) { return root.shortcut(event); }
+                if (event.text == Key.F6 || (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0 || (root.active-view == "pages" && pages.escape-allowed)))) { return root.shortcut(event); }
                 return reject;
             }
             // Retain the editor instance while other views are shown, preserving its native editing state.
