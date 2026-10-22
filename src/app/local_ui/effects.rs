@@ -103,6 +103,7 @@ impl State {
     pub(super) fn execute(self: &Rc<Self>, effects: Vec<AppEffect>) {
         for effect in effects {
             match effect {
+                AppEffect::CloseCancelled => self.finish_lifecycle(),
                 AppEffect::RecoveryCancelled { connection } => {
                     let current = connection == *self.coordinator.borrow().connection();
                     if current && let Some(window) = self.window.upgrade() {

@@ -148,6 +148,7 @@ export component NoteEditor inherits Rectangle {
                 text-decorations: root.decorations;
                 text-markers: root.markers;
                 single-line: false;
+                preserve-selection-on-focus-loss: true;
                 wrap: word-wrap;
                 read-only: root.read-only;
                 font-family: "Menlo";

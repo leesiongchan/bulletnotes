@@ -793,3 +793,67 @@ fn editor_process_boundary_child() {
         drop(blocker);
     });
 }
+
+#[test]
+fn successful_rebase_persists_the_mapped_observation() {
+    use bulletnotes::domain::editor::EditorPosition;
+    let mut app = app();
+    app.dispatch(AppAction::SavePosition(EditorPosition {
+        anchor: 4,
+        caret: 1,
+        scroll_y: 42.0,
+    }));
+    let expected = app.editor().unwrap().rebase_token();
+    let merge = merge_text("base", "base", "xx base");
+    let effects = app.receive(AppEvent::RebaseReady {
+        expected: expected.clone(),
+        stored: stored(&merge.body, 0, 2),
+        edits: merge.edits.clone(),
+    });
+    let mapped = EditorPosition {
+        anchor: 7,
+        caret: 4,
+        scroll_y: 42.0,
+    };
+    assert_eq!(app.editor().unwrap().observed_position(), Some(mapped));
+    assert!(effects.iter().any(|effect| matches!(effect, AppEffect::SavePosition {key:page, position} if page == &key() && *position == mapped)), "mapped observation must reach durable metadata");
+    let stale = app.receive(AppEvent::RebaseReady {
+        expected,
+        stored: stored(&merge.body, 0, 2),
+        edits: merge.edits,
+    });
+    assert!(
+        !stale
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::SavePosition { .. })),
+        "stale rebase must not rewrite position"
+    );
+    let mut other = stored("other", 0, 1);
+    other.page.key.path = PagePath::parse("other.md").unwrap();
+    for (action, page) in [
+        (AppAction::OpenPage(other.page.key.clone()), other),
+        (AppAction::StepHistory(-1), stored("xx base", 0, 2)),
+    ] {
+        let request_id = app
+            .dispatch_ready(action)
+            .into_iter()
+            .find_map(|effect| {
+                if let AppEffect::LoadPage { request_id, .. } = effect {
+                    Some(request_id)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        app.receive_ready(AppEvent::PageLoaded {
+            request_id,
+            key: page.page.key.clone(),
+            result: Ok(Some(page.into())),
+        });
+    }
+    assert_eq!(
+        app.editor().unwrap().restore_target(),
+        mapped,
+        "history must restore the mapped observation"
+    );
+}

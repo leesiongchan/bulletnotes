@@ -460,3 +460,38 @@ fn successful_history_navigation_cancels_an_uncached_download() {
     assert!(app.notice().is_none());
     assert_eq!(app.editor().unwrap().body(), "base");
 }
+
+#[test]
+fn hide_waits_for_position_metadata_and_retains_note_on_failure() {
+    let mut app = app();
+    app.dispatch(AppAction::SavePosition(EditorPosition {
+        anchor: 3,
+        caret: 1,
+        scroll_y: 12.0,
+    }));
+    let effects = app.dispatch(AppAction::RequestHide);
+    let request_id = effects
+        .iter()
+        .find_map(|effect| match effect {
+            AppEffect::CheckTransition { request_id, .. } => Some(*request_id),
+            _ => None,
+        })
+        .expect("hide must await position metadata");
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::HideReady))
+    );
+    let effects = app.receive(AppEvent::TransitionChecked {
+        request_id,
+        connection: key("https://one.example/").connection,
+        result: Err(bulletnotes::domain::error::StoreError::Closed),
+    });
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, AppEffect::HideReady))
+    );
+    assert_eq!(app.editor().unwrap().body(), "base");
+    assert!(app.notice().is_some());
+}

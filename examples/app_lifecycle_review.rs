@@ -326,6 +326,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if running.local().wait_until_saved().await.is_ok() { return Err("failed quit was acknowledged".into()); }
                 if window.get_note_text() != failed || !window.window().is_visible() || window.get_note_read_only() { return Err("failed quit did not retain an editable window".into()); }
                 injector.execute_batch("DROP TRIGGER fail_note")?;
+                window.invoke_restore_editor_position(5,0,0.0);
                 passed.set(true);
                 running.request_native_termination();
                 Ok::<(), Box<dyn std::error::Error>>(())
@@ -355,7 +356,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let saved = runtime
         .block_on(reopened.load_page(&key))?
         .ok_or("reopened page absent")?;
-    if saved.body != "retain failed quit café\r\n👩🏽‍💻 日本語" || saved.position.scroll_y != 39.0
+    if saved.body != "retain failed quit café\r\n👩🏽‍💻 日本語"
+        || saved.position
+            != (bulletnotes::domain::editor::EditorPosition {
+                anchor: 5,
+                caret: 0,
+                scroll_y: 0.0,
+            })
     {
         return Err("native quit did not save the latest buffer".into());
     }
@@ -535,7 +542,7 @@ async fn metadata_durability_contract(
     store: &StoreHandle,
     path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use bulletnotes::{app::coordinator::AppAction, domain::editor::EditorPosition};
+    use bulletnotes::domain::editor::EditorPosition;
     let key = running
         .local()
         .current_key()
@@ -545,10 +552,11 @@ async fn metadata_durability_contract(
     injector.execute_batch("CREATE TRIGGER reject_position BEFORE UPDATE OF anchor ON pages BEGIN SELECT RAISE(ABORT,'generated metadata failure'); END;")?;
     let position = EditorPosition {
         anchor: 0,
-        caret: 0,
-        scroll_y: 37.0,
+        caret: 1,
+        scroll_y: 0.0,
     };
-    running.local().dispatch(AppAction::SavePosition(position));
+    running.window().invoke_restore_editor_position(0, 1, 0.0);
+    running.window().invoke_save_now();
     let rejected = running.local().flush().await.is_err();
     injector.execute_batch("DROP TRIGGER reject_position")?;
     if !rejected {
@@ -565,13 +573,11 @@ async fn metadata_durability_contract(
         return Err("metadata barrier lost the failed write instead of retrying it".into());
     }
     // One synchronous callback exceeds the bounded queue before its worker can run.
-    for scroll in 0..40 {
+    for caret in 0..40 {
         running
-            .local()
-            .dispatch(AppAction::SavePosition(EditorPosition {
-                scroll_y: scroll as f32,
-                ..position
-            }));
+            .window()
+            .invoke_restore_editor_position(0, caret % 2, 0.0);
+        running.window().invoke_save_now();
     }
     running.local().flush().await?;
     if store
@@ -579,8 +585,8 @@ async fn metadata_durability_contract(
         .await?
         .ok_or("metadata page absent")?
         .position
-        .scroll_y
-        != 39.0
+        .caret
+        != 1
     {
         return Err("queue saturation lost the newest accepted position".into());
     }

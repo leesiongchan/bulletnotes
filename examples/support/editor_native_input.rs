@@ -609,7 +609,8 @@ pub fn run() -> Result<()> {
                 // Scrolled, wrapped text must keep the platform candidate anchor in the editor.
                 let long = format!("{source}{}{}\r\n- [ ] Task", "Generated scroll line café 日本語\r\n".repeat(60), "generated wrap text ".repeat(18));
                 window.set_note_text(long.clone().into());
-                window.invoke_restore_editor_position(long.len() as i32, long.len() as i32, 0.0);
+                // Reveal the caret explicitly; restoration now retains its requested viewport.
+                window.invoke_select_find_match(long.len() as i32, long.len() as i32);
                 pause(100).await?;
                 let end_anchor = anchor(&view);
                 let local = view.convertRect_fromView(native.convertRectFromScreen(end_anchor), None);
