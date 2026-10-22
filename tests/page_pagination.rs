@@ -28,6 +28,7 @@ fn result(first: usize, last: usize) -> SearchResults {
     SearchResults {
         items: (first..last)
             .map(|n| PageSummary {
+                highlights: Default::default(),
                 key: key(n),
                 title: format!("Generated {n}"),
                 excerpt: Some("generated".into()),
