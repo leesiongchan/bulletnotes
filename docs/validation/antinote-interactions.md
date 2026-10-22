@@ -52,17 +52,16 @@ removed. Idle Escape capture leaves active composition to the input method.
   scrollbars, scratchpad navigation, and controlled sync/restart after an actual
   command. First desktop-interrupted attempts remain recorded as failures;
   acceptance uses the later successful runs.
-- Full `editor_native_input_review --pinyin --require-single-undo`: **not accepted**.
-  The idle run passed Tartan scrolled conversion/commit/cancel, then failed to
-  start a second composition after undo in the unscrolled Tartan case. Subsequent
-  isolated attempts could not obtain a first rendered frame (`alpha=0`, occlusion
-  8192), so the cancellation failure could not be diagnosed to a product or fixture
-  cause. Do not substitute the passing composition-guard fixture for this gate.
+- Full `editor_native_input_review --pinyin --require-single-undo --trace-input`:
+  **passed twice in fresh complete runs**. Each passed all four Pinyin cases,
+  candidate placement, source restoration and one-step undo in Tartan/Mononoke at
+  top and scrolled positions. This closes the F1 input-fixture gate; the historical
+  failed attempts remain recorded below.
 - Independent whole-branch review: no Critical issues, two Important defects fixed
   with observed RED→GREEN regressions, and one deferred Minor. Final full checks
   and native command/sync fixtures passed after the fixes.
 
-Complete logs remain in `target/antinote-interactions/f1-*` and
+Complete logs remain in `target/antinote-interactions/f1-*` and `f2-*` and
 `target/markdown-validation/`. Ignored tests include explicit native/release/manual
 wrappers; only individually executed fixtures count as native evidence.
 
@@ -79,6 +78,7 @@ wrappers; only individually executed fixtures count as native evidence.
 | Scrollbars | `f1-native-scrollbar.log` | `native_scrollbar_contract_passed` |
 | Scratchpad navigation | `f1-native-scratchpad.log` | `native_scratchpad_contract_passed` |
 | Actual command, controlled sync/restart | `f1-idle-sync.log` | `native_sync_contract_passed` |
+| Full native input, four Pinyin cases and single-step undo | `f2-input-baseline.log`, `f2-input-repeat-1.log` | `native_editor_input_roundtrips_passed` |
 
 Each accepted log records its marker as true and exited zero. The failing full
 input logs are `f1-idle-pinyin.log`, `f1-pinyin-confirm.log`, `f1-pinyin-trace.log`
@@ -179,6 +179,53 @@ The ledger records these choices and their limits:
 8. Do not compile a C++ consumer of the shared generator changes: the application
    builds through Rust. Risk: the C++ generation path lacks runtime verification.
 
-Full F1 native acceptance remains open for the input fixture above. Search S2 and
-both material code-review fixes are verified; the branch is preserved for the
-remaining native diagnosis and is not declared release-ready.
+F1 interaction acceptance is complete on this host. Broader release gates above
+remain open; this development branch does not claim general IME/VoiceOver,
+performance, hardware/OS or distribution acceptance.
+
+## Native input and startup follow-up — 2026-10-23
+
+The source and maintained patch are unchanged from `7911aa0`; no fixture retry,
+forced alpha, activation workaround or native-input correction was introduced.
+[Structured evidence](antinote-interactions-evidence.json) records the source
+hashes, accepted runs and interruption separately. The fresh full application
+check passed 393 tests with 24 explicit ignores, formatting and strict Clippy.
+The unchanged renderer suite's 43 passes above remain applicable.
+
+`f2-input-baseline.log` and `f2-input-repeat-1.log` both exited zero, each with
+four `native_pinyin_conversion_commit_cancel_passed` markers and the final input
+success marker. Their traces show the Pinyin input source, active key window,
+first responder and input context intact after undo, followed by a new marked
+composition and source-preserving Escape cancellation. Both themes also passed
+exact one-step selection undo/redo, cursor/preedit geometry, candidate placement
+and input-source restoration. The acceptance is bounded to these observed cases.
+
+A third attempt, `f2-input-repeat-2.log`, was interrupted during the first key of
+Mononoke's scrolled case. Its notification trace explicitly records the owned
+window resigning key and the application resigning active; the next input was
+rejected. This run did not reach its optional deliberate-focus-loss probe and is
+not counted as a full pass. That observed interruption does not establish the
+cause of the earlier untraced Pinyin-after-undo failure.
+
+The startup controls also passed without implementation changes:
+
+| Control | Observed first-frame behavior |
+| --- | --- |
+| Ordinary startup | First frame at 149 ms; verified visible/alpha 1 at 251 ms |
+| Owned opaque covers, delayed show | Zero frames/alpha 0/occlusion 8192 while covered; first frame 45 ms after uncovering |
+| Same cover with chrome configured before the first frame | First frame 38 ms after uncovering; source and Metal layer verified |
+
+The covered controls reproduce and recover from the stalled state through normal
+visibility events. Neither early chrome nor a permanent rendering deadlock was
+established. The original historical occluder remains unidentified; these results
+do not attribute every earlier no-frame observation to the same external cause.
+
+Fresh supplementary captures now pass and were inspected: [Tartan with hidden
+chrome](antinote-interactions/final-chrome-tartan.png), [minimum Mononoke with
+controls](antinote-interactions/final-chrome-mononoke.png), and [persistent save
+failure in increased contrast](antinote-interactions/final-chrome-attention.png).
+They supplement, rather than relabel, the C1 checkpoint captures above.
+[Scrolled Tartan preedit](antinote-interactions/native-antinote-tartan-scrolled-pinyin-preedit.png),
+[Mononoke preedit](antinote-interactions/native-antinote-mononoke-pinyin-preedit.png)
+and [Mononoke committed text](antinote-interactions/native-antinote-mononoke-pinyin-committed.png)
+show the generated input phases. No personal note content was used.
