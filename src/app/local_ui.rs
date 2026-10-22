@@ -10,7 +10,7 @@ mod synchronization;
 
 use super::{
     appearance_ui::AppearanceUi,
-    coordinator::{AppAction, AppEvent, Coordinator},
+    coordinator::{AppAction, AppEffect, AppEvent, Coordinator},
     lifecycle::{CloseIntent, Lifecycle},
 };
 use crate::{
@@ -99,6 +99,39 @@ impl LocalUi {
     }
 }
 impl State {
+    fn capture_position(&self, app: &mut Coordinator) -> Vec<AppEffect> {
+        use crate::{app::model::View, domain::editor::EditorPosition};
+        let Some(window) = self.window.upgrade() else {
+            return Vec::new();
+        };
+        let Some(editor) = app.editor() else {
+            return Vec::new();
+        };
+        // Layout/source replacement must not attribute an old widget's offsets to a new page.
+        if app.view() != View::Note
+            || self.presentation.key.borrow().as_ref() != Some(editor.key())
+            || window.get_note_text().as_str() != editor.body()
+        {
+            return Vec::new();
+        }
+        let (Ok(anchor), Ok(caret)) = (
+            usize::try_from(window.get_editor_anchor()),
+            usize::try_from(window.get_editor_caret()),
+        ) else {
+            return Vec::new();
+        };
+        let position = EditorPosition {
+            anchor,
+            caret,
+            scroll_y: window.get_editor_scroll_y(),
+        };
+        if position.validate(editor.body()).is_err() || editor.observed_position() == Some(position)
+        {
+            return Vec::new();
+        }
+        tracing::debug!(target: "bulletnotes::editor", "captured editor position");
+        app.dispatch(AppAction::SavePosition(position))
+    }
     fn dispatch(self: &Rc<Self>, action: AppAction) {
         let intent = match &action {
             AppAction::RequestHide => Some(CloseIntent::Hide),
@@ -127,13 +160,21 @@ impl State {
             window.set_lifecycle_pending(self.lifecycle.blocks_authoring());
         }
         let tick = matches!(&action, AppAction::Tick(_));
+        let explicit_position = matches!(&action, AppAction::SavePosition(_));
+        let edit = matches!(&action, AppAction::EditText(_));
         let mut app = self.coordinator.borrow_mut();
-        let mut effects = if tick {
+        let mut effects = if explicit_position {
             Vec::new()
         } else {
-            app.dispatch(AppAction::Tick(self.started.elapsed()))
+            self.capture_position(&mut app)
         };
+        if !tick {
+            effects.extend(app.dispatch(AppAction::Tick(self.started.elapsed())));
+        }
         effects.extend(app.dispatch(action));
+        if edit {
+            effects.extend(self.capture_position(&mut app));
+        }
         drop(app);
         self.update_sync_selection();
         self.execute(effects);
@@ -175,7 +216,8 @@ impl State {
             return;
         }
         let mut app = self.coordinator.borrow_mut();
-        let mut effects = app.dispatch(AppAction::Tick(self.started.elapsed()));
+        let mut effects = self.capture_position(&mut app);
+        effects.extend(app.dispatch(AppAction::Tick(self.started.elapsed())));
         effects.extend(app.receive(event));
         drop(app);
         self.update_sync_selection();

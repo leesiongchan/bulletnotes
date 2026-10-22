@@ -38,15 +38,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let newest=local.current_key().ok_or("missing newest")?;
             let entries=store.scratchpad_stack(&connection).await?;let older=entries[1].key.clone();
             window.invoke_note_edited("generated café\r\n🙂".into());local.wait_until_saved().await?;
-            let position=bulletnotes::domain::editor::EditorPosition {anchor:0,caret:9,scroll_y:12.0};
-            local.dispatch(AppAction::SavePosition(position));
+            let position=bulletnotes::domain::editor::EditorPosition {anchor:0,caret:9,scroll_y:0.0};
+            window.invoke_restore_editor_position(0,9,0.0);
             window.invoke_scratchpad_step(-1);local.wait_until_loaded(&older).await?;
             if window.get_note_counter()!="2 of 3" {return Err("older note counter incorrect".into());}
             window.invoke_jump_to_newest();local.wait_until_loaded(&newest).await.map_err(|error|format!("{error}; status={}",window.get_status_text()))?;
             if window.get_note_text()!="generated café\r\n🙂" || store.load_page(&newest).await?.ok_or("page absent")?.position!=position {return Err("source or known position lost".into());}
             let injector=rusqlite::Connection::open(&path)?;
             injector.execute_batch("CREATE TRIGGER reject_visit BEFORE UPDATE OF last_visited_ms ON pages BEGIN SELECT RAISE(ABORT,'generated metadata failure'); END;")?;
-            local.dispatch(AppAction::SavePosition(position));window.invoke_scratchpad_step(-1);
+            window.invoke_restore_editor_position(0,10,0.0);window.invoke_scratchpad_step(-1);
             if local.flush().await.is_ok() || local.current_key()!=Some(newest.clone()) {return Err("metadata failure did not retain note".into());}
             injector.execute_batch("DROP TRIGGER reject_visit")?;
             window.invoke_scratchpad_step(-1);local.wait_until_loaded(&older).await?;

@@ -101,6 +101,7 @@ pub enum AppEvent {
     },
 }
 pub enum AppEffect {
+    CloseCancelled,
     RecoveryCancelled {
         connection: ConnectionId,
     },
@@ -801,8 +802,15 @@ impl Coordinator {
                 stored,
                 edits,
             } => {
-                if let Some(editor) = &mut self.editor {
-                    editor.apply_rebase(&expected, stored, &edits);
+                if let Some(editor) = &mut self.editor
+                    && editor.apply_rebase(&expected, stored, &edits)
+                    && let Some(position) = editor.observed_position()
+                {
+                    self.navigation.save_position(position);
+                    effects.push(AppEffect::SavePosition {
+                        key: editor.key().clone(),
+                        position,
+                    });
                 }
             }
             AppEvent::LocalSaved { expected, outcome } => {
@@ -1010,13 +1018,12 @@ impl Coordinator {
         }
     }
     fn cancel_transition(&mut self, effects: &mut Vec<AppEffect>) {
-        if matches!(
-            self.pending_transition.take(),
-            Some(Transition::Recovery(_))
-        ) {
-            effects.push(AppEffect::RecoveryCancelled {
+        match self.pending_transition.take() {
+            Some(Transition::Recovery(_)) => effects.push(AppEffect::RecoveryCancelled {
                 connection: self.connection.clone(),
-            });
+            }),
+            Some(Transition::Hide | Transition::Quit) => effects.push(AppEffect::CloseCancelled),
+            _ => {}
         }
         self.barrier_waiting = false;
         self.barrier_ready = false;
@@ -1045,7 +1052,11 @@ impl Coordinator {
         if self.pending_transition.as_ref().is_some_and(|t| {
             matches!(
                 t,
-                Transition::Open(..) | Transition::New | Transition::Recovery(..)
+                Transition::Open(..)
+                    | Transition::New
+                    | Transition::Recovery(..)
+                    | Transition::Hide
+                    | Transition::Quit
             )
         }) && !self.barrier_ready
         {

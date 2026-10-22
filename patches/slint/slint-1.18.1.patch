@@ -2192,3 +2192,43 @@
              }
              _ => true,
          }
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -2248,4 +2248,6 @@
+     item! { TextInput {
++        /// Retain directed source selection when keyboard focus moves to other controls.
++        in property <bool> preserve-selection-on-focus-loss: false;
+         /// A primary click on a visible source checkbox, in committed UTF-8 offsets.
+         callback marker-activated(start: int, end: int);
+         /// True only when the native context explicitly permits source commands.
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -863,6 +863,7 @@
+     pub page_height: Property<LogicalLength>,
+     pub cursor_visible: Property<bool>,
+     pub has_focus: Property<bool>,
++    pub preserve_selection_on_focus_loss: Property<bool>,
+     pub enabled: Property<bool>,
+     pub accepted: Callback<VoidArg>,
+     pub cursor_position_changed: Callback<PointArg>,
+@@ -1385,7 +1386,9 @@
+             FocusEvent::FocusOut(reason) => {
+                 self.has_focus.set(false);
+                 self.hide_cursor();
+-                if !matches!(reason, FocusReason::WindowActivation | FocusReason::PopupActivation) {
++                if !self.preserve_selection_on_focus_loss()
++                    && !matches!(reason, FocusReason::WindowActivation | FocusReason::PopupActivation)
++                {
+                     self.as_ref()
+                         .anchor_position_byte_offset
+                         .set(self.as_ref().cursor_position_byte_offset());
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -2304,5 +2304,7 @@
+         focus: i32,
+     ) {
+         let text = self.text();
++        // Consume external source changes before restoring selection and its viewport.
++        self.align_to_text(&text, self_rc);
+         let safe_anchor = safe_byte_offset(anchor, &text);
+         let safe_focus = safe_byte_offset(focus, &text);

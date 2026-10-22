@@ -10,6 +10,7 @@ export component EditorHarness inherits Window {
     in property <bool> italic: false;
     in property <bool> read-only: false;
     in property <bool> input-enabled: true;
+    in property <bool> preserve-selection-on-focus-loss: false;
     out property <bool> source-edits-allowed: input.source-edits-allowed;
     in property <length> editor-width: root.width - 72px;
     out property <Point> caret-point;
@@ -34,6 +35,7 @@ export component EditorHarness inherits Window {
         text <=> root.source;
         read-only: root.read-only;
         enabled: root.input-enabled;
+        preserve-selection-on-focus-loss: root.preserve-selection-on-focus-loss;
         text-decorations: root.decorations;
         text-markers: root.markers;
         cursor-position-changed(pos) => { root.caret-point = pos; }
