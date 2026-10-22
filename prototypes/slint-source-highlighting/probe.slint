@@ -21,6 +21,9 @@ export component EditorHarness inherits Window {
     callback source-edited();
     out property <length> text-width: input.preferred-width;
     public function select(a: int, c: int) { input.set-selection-offsets(a, c); }
+    public function apply-edit(start: int, end: int, replacement: string, anchor: int, caret: int) -> bool {
+        return input.apply-source-edit(start, end, replacement, anchor, caret);
+    }
     public function undo-input() { input.undo(); }
     public function redo-input() { input.redo(); }
     input := TextInput {

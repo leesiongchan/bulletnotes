@@ -1493,3 +1493,219 @@
          if context_id == self.ivars().composition_context.get() {
              self.ivars().composition_status.set(status);
          }
+--- a/i-slint-core-1.18.1/items/text.rs
++++ b/i-slint-core-1.18.1/items/text.rs
+@@ -745,6 +745,7 @@
+     TextInsert,
+     TextRemove,
+     TextReplace(SharedString),
++    SourceEdit { removed: SharedString, anchor_after: usize, caret_after: usize },
+ }
+
+ #[repr(C)]
+@@ -2113,6 +2114,44 @@
+         anchor_pos != cursor_pos
+     }
+
++    /// Apply one validated, nonmerging source command without external text assignment.
++    pub fn apply_source_edit(
++        self: Pin<&Self>, window_adapter: &Rc<dyn WindowAdapter>, self_rc: &ItemRc,
++        start: i32, end: i32, replacement: SharedString, anchor_after: i32, caret_after: i32,
++    ) -> bool {
++        if !self.source_edits_allowed() { return false; }
++        let (Ok(start), Ok(end), Ok(anchor_after), Ok(caret_after)) =
++            (usize::try_from(start), usize::try_from(end), usize::try_from(anchor_after), usize::try_from(caret_after))
++        else { return false };
++        let source = self.text();
++        let boundary = |text: &str, offset: usize| {
++            offset == text.len() || text.grapheme_indices(true).any(|(index, _)| index == offset)
++        };
++        if start > end || end > source.len() || !boundary(&source, start) || !boundary(&source, end) {
++            return false;
++        }
++        if source[start..end] == *replacement || (self.single_line() && replacement.contains(['\r', '\n'])) {
++            return false;
++        }
++        let mut next = String::from(source.as_str());
++        next.replace_range(start..end, &replacement);
++        if next.len() > i32::MAX as usize || !boundary(&next, anchor_after) || !boundary(&next, caret_after)
++            || !self.accept_text_input(&replacement)
++        {
++            return false;
++        }
++        self.add_undo_item(UndoItem {
++            pos: start, text: replacement,
++            cursor: self.cursor_position(&source), anchor: self.anchor_position(&source),
++            kind: UndoItemKind::SourceEdit { removed: source[start..end].into(), anchor_after, caret_after },
++        });
++        self.set_text_internal(next.into());
++        self.anchor_position_byte_offset.set(anchor_after as i32);
++        self.set_cursor_position(caret_after as i32, true, TextChangeNotify::TriggerCallbacks, window_adapter, self_rc);
++        Self::FIELD_OFFSETS.edited().apply_pin(self).call(&());
++        true
++    }
++
+     fn insert(
+         self: Pin<&Self>,
+         text_to_insert: &str,
+@@ -2508,7 +2547,8 @@
+                     self_rc,
+                 );
+             }
+-            UndoItemKind::TextReplace(ref removed) => {
++            UndoItemKind::TextReplace(ref removed)
++            | UndoItemKind::SourceEdit { ref removed, .. } => {
+                 let mut text: String = self.text().into();
+                 text.replace_range(last.pos..last.pos + last.text.len(), removed);
+                 self.set_text_internal(text.into());
+@@ -2565,6 +2605,13 @@
+                     window_adapter,
+                     self_rc,
+                 );
++            }
++            UndoItemKind::SourceEdit { ref removed, anchor_after, caret_after } => {
++                let mut text: String = self.text().into();
++                text.replace_range(last.pos..last.pos + removed.len(), &last.text);
++                self.set_text_internal(text.into());
++                self.anchor_position_byte_offset.set(anchor_after as i32);
++                self.set_cursor_position(caret_after as i32, true, TextChangeNotify::TriggerCallbacks, window_adapter, self_rc);
+             }
+             UndoItemKind::TextReplace(ref removed) => {
+                 let mut text: String = self.text().into();
+@@ -2677,6 +2724,21 @@
+
+ #[cfg(feature = "ffi")]
+ #[unsafe(no_mangle)]
++pub unsafe extern "C" fn slint_textinput_apply_source_edit(
++    text_input: Pin<&TextInput>,
++    window_adapter: *const crate::window::ffi::WindowAdapterRcOpaque,
++    self_component: &vtable::VRc<crate::item_tree::ItemTreeVTable>, self_index: u32,
++    start: i32, end: i32, replacement: &SharedString, anchor: i32, caret: i32,
++) -> bool {
++    unsafe {
++        let window_adapter = &*(window_adapter as *const Rc<dyn WindowAdapter>);
++        let self_rc = ItemRc::new(self_component.clone(), self_index);
++        text_input.apply_source_edit(window_adapter, &self_rc, start, end, replacement.clone(), anchor, caret)
++    }
++}
++
++#[cfg(feature = "ffi")]
++#[unsafe(no_mangle)]
+ pub unsafe extern "C" fn slint_textinput_set_selection_offsets(
+     text_input: Pin<&TextInput>,
+     window_adapter: *const crate::window::ffi::WindowAdapterRcOpaque,
+--- a/i-slint-compiler-1.18.1/builtin_elements.rs
++++ b/i-slint-compiler-1.18.1/builtin_elements.rs
+@@ -2337,6 +2337,8 @@
+         /// so `focus` may precede `anchor` to select backwards.
+         /// Pass the same value for both to place the text cursor at that offset without selecting anything.
+         function set-selection-offsets(anchor: int, focus: int) { BuiltinFunction.SetSelectionOffsets }
++        /// One validated source replacement with directed undo/redo selection.
++        function apply-source-edit(start: int, end: int, replacement: string, anchor: int, caret: int) -> bool { BuiltinFunction.ApplySourceEdit }
+         /// Selects all text.
+         function select-all() { }
+         /// Clears the selection.
+--- a/i-slint-compiler-1.18.1/expression_tree.rs
++++ b/i-slint-compiler-1.18.1/expression_tree.rs
+@@ -67,6 +67,7 @@
+     /// The entries argument is an array of MenuEntry
+     ShowPopupMenuInternal,
+     SetSelectionOffsets,
++    ApplySourceEdit,
+     ItemFontMetrics,
+     /// the "42".to_float()
+     StringToFloat,
+@@ -249,6 +250,7 @@
+     ShowPopupMenu: (Type::ElementReference, Type::ElementReference, typeregister::logical_point_type().into()) -> Type::Void,
+     ShowPopupMenuInternal: (Type::ElementReference, Type::Model, typeregister::logical_point_type().into()) -> Type::Void,
+     SetSelectionOffsets: (Type::ElementReference, Type::Int32, Type::Int32) -> Type::Void,
++    ApplySourceEdit: (Type::ElementReference, Type::Int32, Type::Int32, Type::String, Type::Int32, Type::Int32) -> Type::Bool,
+     ItemFontMetrics: (Type::ElementReference) -> typeregister::font_metrics_type(),
+     StringToFloat: (Type::String) -> Type::Float32,
+     StringIsFloat: (Type::String) -> Type::Bool,
+@@ -411,7 +413,7 @@
+             | BuiltinFunction::ClosePopupWindow
+             | BuiltinFunction::ShowPopupMenu
+             | BuiltinFunction::ShowPopupMenuInternal => false,
+-            BuiltinFunction::SetSelectionOffsets => false,
++            BuiltinFunction::SetSelectionOffsets | BuiltinFunction::ApplySourceEdit => false,
+             BuiltinFunction::ItemFontMetrics => false, // depends also on Window's font properties
+             BuiltinFunction::StringIsEmpty
+             | BuiltinFunction::StringCharacterCount
+@@ -513,7 +515,7 @@
+             | BuiltinFunction::ClosePopupWindow
+             | BuiltinFunction::ShowPopupMenu
+             | BuiltinFunction::ShowPopupMenuInternal => false,
+-            BuiltinFunction::SetSelectionOffsets => false,
++            BuiltinFunction::SetSelectionOffsets | BuiltinFunction::ApplySourceEdit => false,
+             BuiltinFunction::ItemFontMetrics => true,
+             BuiltinFunction::StringToFloat
+             | BuiltinFunction::StringIsFloat
+--- a/i-slint-compiler-1.18.1/generator/rust.rs
++++ b/i-slint-compiler-1.18.1/generator/rust.rs
+@@ -4878,6 +4878,20 @@
+                     }}
+                 }
+             })
++        }
++        BuiltinFunction::ApplySourceEdit => {
++            if let [llr::Expression::PropertyReference(pr), start, end, replacement, anchor, caret] = arguments {
++                let window = access_window_adapter_field(ctx);
++                let start = compile_expression(start, ctx);
++                let end = compile_expression(end, ctx);
++                let replacement = compile_expression(replacement, ctx);
++                let anchor = compile_expression(anchor, ctx);
++                let caret = compile_expression(caret, ctx);
++                item_owner(pr).then(|owner| {
++                    let (item, item_rc) = native_item_from_owner(pr, ctx, &owner);
++                    quote!(#item.apply_source_edit(#window, &#item_rc, #start as i32, #end as i32, #replacement, #anchor as i32, #caret as i32))
++                })
++            } else { panic!("internal error: invalid source edit arguments {arguments:?}") }
+         }
+         BuiltinFunction::SetSelectionOffsets => {
+             if let [llr::Expression::PropertyReference(pr), anchor_expr, focus_expr] = arguments {
+--- a/i-slint-compiler-1.18.1/generator/cpp.rs
++++ b/i-slint-compiler-1.18.1/generator/cpp.rs
+@@ -5534,6 +5534,20 @@
+             }
+             })
+         }
++        BuiltinFunction::ApplySourceEdit => {
++            if let [llr::Expression::PropertyReference(pr), start, end, replacement, anchor, caret] = arguments {
++                let window = access_window_field(ctx);
++                let start = compile_expression(start, ctx);
++                let end = compile_expression(end, ctx);
++                let replacement = compile_expression(replacement, ctx);
++                let anchor = compile_expression(anchor, ctx);
++                let caret = compile_expression(caret, ctx);
++                item_owner(pr).then(|owner| {
++                    let (item, item_rc) = native_item_from_owner(pr, ctx, owner);
++                    format!("slint_textinput_apply_source_edit(&{item}, &{window}.handle(), &{item_rc}, static_cast<int>({start}), static_cast<int>({end}), &({replacement}), static_cast<int>({anchor}), static_cast<int>({caret}))")
++                })
++            } else { panic!("internal error: invalid source edit arguments {arguments:?}") }
++        }
+         BuiltinFunction::SetSelectionOffsets => {
+             if let [llr::Expression::PropertyReference(pr), anchor_expr, focus_expr] = arguments {
+                 let window = access_window_field(ctx);
+--- a/i-slint-compiler-1.18.1/llr/optim_passes/inline_expressions.rs
++++ b/i-slint-compiler-1.18.1/llr/optim_passes/inline_expressions.rs
+@@ -131,7 +131,7 @@
+         | BuiltinFunction::ClosePopupWindow
+         | BuiltinFunction::ShowPopupMenu
+         | BuiltinFunction::ShowPopupMenuInternal => isize::MAX,
+-        BuiltinFunction::SetSelectionOffsets => isize::MAX,
++        BuiltinFunction::SetSelectionOffsets | BuiltinFunction::ApplySourceEdit => isize::MAX,
+         BuiltinFunction::ItemFontMetrics => PROPERTY_ACCESS_COST,
+         BuiltinFunction::StringToFloat => 50,
+         BuiltinFunction::StringIsFloat => 50,
+--- a/i-slint-compiler-1.18.1/generator/cpp.rs
++++ b/i-slint-compiler-1.18.1/generator/cpp.rs
+@@ -5544,7 +5544,7 @@
+                 let caret = compile_expression(caret, ctx);
+                 item_owner(pr).then(|owner| {
+                     let (item, item_rc) = native_item_from_owner(pr, ctx, owner);
+-                    format!("slint_textinput_apply_source_edit(&{item}, &{window}.handle(), &{item_rc}, static_cast<int>({start}), static_cast<int>({end}), &({replacement}), static_cast<int>({anchor}), static_cast<int>({caret}))")
++                    format!("[&]() {{ auto source_replacement = {replacement}; return slint_textinput_apply_source_edit(&{item}, &{window}.handle(), &{item_rc}, static_cast<int>({start}), static_cast<int>({end}), &source_replacement, static_cast<int>({anchor}), static_cast<int>({caret})); }}()")
+                 })
+             } else { panic!("internal error: invalid source edit arguments {arguments:?}") }
+         }
