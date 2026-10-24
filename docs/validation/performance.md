@@ -70,6 +70,12 @@ confirm they do not reach exported records, including foreign tracing messages.
 
 ## Dependency audit
 
+The record below is the 17 October snapshot. The
+[24 October follow-up](dependency-audit-2026-10-24.md) supersedes its current-status
+claim: two subsequently published certificate-trust advisories were found and
+fixed with precise lockfile updates; the new audit reports zero vulnerabilities
+and retains six warnings with supported-target reachability evidence.
+
 Verified the current tool version from RustSec's
 [official manifest](https://github.com/rustsec/rustsec/blob/main/cargo-audit/Cargo.toml)
 and ran cargo-audit 0.22.2 via Nix comma against Cargo.lock. Advisory database commit

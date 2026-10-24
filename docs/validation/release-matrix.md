@@ -1,26 +1,41 @@
 # Native and release evidence
 
-Updated 2026-10-19. This is a development build; unobserved acceptance gates are
+Updated 2026-10-24 from recorded evidence; no new native checks are claimed here.
+This is a development build; unobserved acceptance gates are
 open. Supported hardware is Apple Silicon only on macOS 14+; Intel and universal
 builds are excluded by the user’s 2026-10-18 scope correction. The older live BN/BN 2 previews and the user's store were not replaced.
 
-## Live editor position checkpoint
+## Current host acceptance
 
 [The current position evidence](editor-position.md) records live directed
 selection/scroll capture, exact generated native process restart, failed metadata
 retry, mapped rebase history, fresh full checks and independent review. The new
 arm64 development package passed isolated Metal installation verification; the
-signed lifecycle fixture passed. Public AX ranges passed; VoiceOver automation
-timed out and its speech/editing gate remains open. Earlier checkpoint statements
-about selection capture below are historical.
+signed lifecycle fixture passed. Full Pinyin conversion/commit/undo/cancel passed
+in Tartan/Mononoke at top and scrolled positions; focus-loss guarding also passed.
+Public AX ranges passed; VoiceOver automation timed out and its speech/editing
+gate remains open. Other IMEs, physical accessibility preference changes,
+full-screen/Spaces, supported OS/hardware coverage, performance and production
+signing/notarization remain open.
+
+This is the authoritative status for the current host. Other checkpoint sections
+below retain their historical results; their open selection-capture, full Pinyin
+input-fixture and lifecycle gates are superseded by the linked position evidence.
+
+The [24 October follow-up](release-acceptance-2026-10-24.md) records fresh passing
+automated checks and a corrected benchmark startup guard. The user subsequently
+deferred performance measurements, screenshots and package-launch verification.
+The [independent security checks](dependency-audit-2026-10-24.md) fixed two newly
+reported certificate-trust advisories, then passed the audit, application suite,
+Rust 1.92 checking and attribution verification. Native acceptance is unchanged.
 
 ## Antinote interface and scratchpad navigation
 
 [The 2026-10-19 evidence](antinote-ui-ux.md) records the installed-app inspection,
 ordered synced scratchpads, guarded navigation/metadata checks, native layout
-contracts, and generated before/after screenshots. These changes preserve the
-existing open selection-capture, physical IME/VoiceOver, OS/hardware, performance,
-and distribution gates below.
+contracts, and generated before/after screenshots. At that checkpoint,
+selection-capture, physical IME/VoiceOver, OS/hardware, performance and distribution
+gates remained open; current host acceptance above supersedes the earlier status.
 
 ## Current automatic-sync checkpoint
 
@@ -34,10 +49,11 @@ confirmed all three owned server paths absent after guarded cleanup.
 
 Floating UI commit `803bd84` passed 30 controlled native cases and a fresh scoped
 review. Its palette/static Slint instantiation-chain diagnostic remains a minor
-with unknown attribution. Physical selection/IME/VoiceOver, native typing latency
-under deliberate executor stall, macOS/hardware matrix, existing large-open
-performance and distribution gates remain open. Controller owns final branch
-review and a fresh development package; no notarization/upload is authorized.
+with unknown attribution. At that checkpoint, physical selection/IME/VoiceOver,
+native typing latency under deliberate executor stall, macOS/hardware matrix,
+existing large-open performance and distribution gates remained open. Final branch
+review and a fresh development package were pending; no notarization/upload was
+authorized.
 
 ## Lifecycle
 
@@ -63,7 +79,8 @@ to the deployed space, inspect existing notes, or synthesize physical key events
 | Physical Option+A hide/show, previous-app focus, pinning | User confirmed in the packaged build `build-20261018T040718Z` |
 | Physical full-screen/Spaces behavior | Manual observation open |
 | Four built-in themes, font sizes and paper styles | User confirmed in the packaged build `build-20261018T040718Z`; physical system appearance switching and restart persistence remain unobserved |
-| Real IME, clipboard/undo behavior, VoiceOver selection and editing | Manual observation open |
+| Real Pinyin composition and one-step undo | Passed full native input fixture on the current host; see [position evidence](editor-position.md) |
+| Other IMEs, physical clipboard use, VoiceOver selection and editing | Manual observation open |
 | High contrast palette and minimum-size layout | Palette regressions passed; native Paper/Graphite captures inspected; physical OS toggle still open |
 | Reduced transparency/motion | Policy flags observed via public API; opaque/static UI; physical preference change still open |
 | Long page list | Native benchmark reached all 10,000 generated rows; physical keyboard/VoiceOver traversal still open |
@@ -107,9 +124,11 @@ open target remains unmet. Licensing and distribution have separate gates.
 ## Distribution gates
 
 Developer ID signing, notarization, clean Apple Silicon macOS 14+ installs,
-physical accessibility checks, exact selection restoration, and measured native
-performance remain release gates. Ad-hoc fixture signing does not satisfy the
-Developer ID/notarization gate.
+VoiceOver, other IMEs, physical accessibility preferences, full-screen/Spaces,
+supported OS/hardware coverage and measured native performance remain release
+gates. Current-host selection restoration, Pinyin and lifecycle acceptance are
+recorded above. Ad-hoc fixture signing does not satisfy the Developer ID signing
+and notarization gates.
 
 ## Packaging checkpoint (2026-10-18)
 

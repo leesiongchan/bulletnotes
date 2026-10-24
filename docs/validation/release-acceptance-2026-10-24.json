@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-24",
+  "source_revision": "b3c7d7abc2f07354ed7a85fc920397c6b081fbf9",
+  "source_dirty": true,
+  "source_sha256": {
+    "benches/interaction.rs": "5bbc82031092afcb74e5afdd5f85a01df9a23de03041ba3d2a2344ca67bc5902",
+    "Cargo.lock": "1a22a15a85983983573bb55920a2899e590a5df9e4dc9fda81cccd8411fa40d7",
+    "patches/slint/slint-1.18.1.patch": "9b6204f4fc05559ecd76e39a00011bb82482919af1dffda27597f6dfbb22ae8b"
+  },
+  "application_checks": {
+    "command": "scripts/check.sh",
+    "exit_code": 0,
+    "passed": 396,
+    "failed": 0,
+    "ignored": 24,
+    "format_and_strict_clippy": true,
+    "after_tls_dependency_update": true
+  },
+  "renderer_checks": {
+    "command": "python3 scripts/check-markdown.py",
+    "exit_code": 0,
+    "passed": 45,
+    "failed": 0,
+    "ignored": 0,
+    "format_and_strict_clippy": true
+  },
+  "native_fixture_build": {
+    "profile": "release",
+    "exit_code": 0,
+    "examples": [
+      "ui_review",
+      "selection_probe",
+      "editor_position_review",
+      "editor_native_input_review",
+      "editor_composition_review",
+      "editor_commands_review",
+      "search_preview_review",
+      "local_review",
+      "app_lifecycle_review"
+    ],
+    "before_tls_dependency_update": true
+  },
+  "benchmark": {
+    "accepted": false,
+    "reason": "native startup could not complete while the macOS desktop was locked",
+    "diagnostic": {
+      "frames": 0,
+      "visible": true,
+      "alpha": 0,
+      "occlusion": 8192
+    },
+    "new_timing_report": false,
+    "thresholds_changed": false
+  },
+  "console": {
+    "IOConsoleLocked": true,
+    "CGSSessionScreenIsLocked": true,
+    "settings_changed": false
+  },
+  "logs": {
+    "baseline": "target/release-acceptance-20261024/baseline.log",
+    "baseline-retry": "target/release-acceptance-20261024/baseline-retry.log",
+    "baseline-ready": "target/release-acceptance-20261024/baseline-ready.log",
+    "baseline-diagnostic": "target/release-acceptance-20261024/baseline-diagnostic.log",
+    "fixtures-build": "target/release-acceptance-20261024/fixtures-build.log",
+    "check": "target/release-acceptance-20261024/security-check.log",
+    "markdown": "target/release-acceptance-20261024/markdown.log",
+    "bench-clippy": "target/release-acceptance-20261024/bench-clippy.log",
+    "initial_check": "target/release-acceptance-20261024/check.log"
+  },
+  "new_native_acceptance": false,
+  "new_visual_acceptance": false,
+  "development_package_verified": false,
+  "user_store_opened": false,
+  "published_or_notarized": false,
+  "initial_cargo_lock_sha256": "04a6e7c87cac5da15455612ccfe06aa5f57cda5e8552799a35124135f68af946",
+  "user_deferred": [
+    "performance measurements",
+    "screenshots",
+    "package-launch verification"
+  ],
+  "non_ui_followup": {
+    "audit_before_vulnerabilities": 2,
+    "audit_after_vulnerabilities": 0,
+    "audit_ignored_advisories": [],
+    "audit_warning_counts": {
+      "unmaintained": 5,
+      "yanked": 1
+    },
+    "prototype_audit_vulnerabilities": 0,
+    "prototype_lockfile_changed": false,
+    "minimum_rust_check": {
+      "command": "rustup run 1.92.0 cargo check --all-targets --locked",
+      "exit_code": 0
+    },
+    "python_runner_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "static_architecture_tests": {
+      "passed": 2,
+      "failed": 0,
+      "package_launch": false
+    },
+    "dependency_updates": {
+      "rustls-webpki": {
+        "from": "0.103.15",
+        "to": "0.103.16"
+      },
+      "webpki-root-certs": {
+        "from": "1.0.9",
+        "to": "1.0.11"
+      }
+    },
+    "attribution_regenerated": true,
+    "audit_report": "docs/validation/dependency-audit-2026-10-24.json",
+    "reachability": "target/release-acceptance-20261024/security-reachability.json"
+  }
+}

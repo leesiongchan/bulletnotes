@@ -12,7 +12,7 @@ mod native {
     };
     use slint::{ComponentHandle, Model};
     use std::{
-        cell::RefCell,
+        cell::{Cell, RefCell},
         process::Command,
         rc::Rc,
         time::{Duration, Instant},
@@ -113,12 +113,23 @@ mod native {
         let diagnostics = bulletnotes::diagnostics::init(&dir.path().join("diagnostics"))?;
         let state = runtime.block_on(startup::open(&path, config.id().clone()))?;
         let app = Rc::new(LocalApplication::new(state, native)?);
+        let startup_ready = Rc::new(Cell::new(false));
+        let ready = startup_ready.clone();
+        app.window().on_local_startup_ready(move || ready.set(true));
         let report = Rc::new(RefCell::new(None));
         let completed = report.clone();
         let running = app.clone();
-        slint::Timer::single_shot(Duration::from_millis(300), move || {
+        slint::Timer::single_shot(Duration::ZERO, move || {
             let _ = slint::spawn_local(async move {
                 let result=async {
+                let deadline=Instant::now()+Duration::from_secs(30);
+                while !startup_ready.get() {
+                    if Instant::now()>deadline {
+                        let native=bulletnotes::platform::window_chrome::native_window(running.window().window())?;
+                        return Err(format!("native startup did not finish: frames={}, visible={}, alpha={}, occlusion={:?}, status={}",running.rendered_frame_count(),native.isVisible(),native.alphaValue(),native.occlusionState(),running.window().get_status_text()).into());
+                    }
+                    pause().await;
+                }
                 running.local().wait_until_loaded(&key(&config,0)).await?;frame(&running).await?;
                 let mut activation=Vec::new();let mut open=Vec::new();let mut large=Vec::new();let mut search=Vec::new();let mut large_load=Vec::new();let mut large_render=Vec::new();
                 for _ in 0..20 {

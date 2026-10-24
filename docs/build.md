@@ -81,10 +81,14 @@ path in development fixtures; production defaults do not enable it.
 ## Distribution prerequisites
 
 Distribution is not available merely because a development check passed. The
-current [release matrix](validation/release-matrix.md) retains unobserved manual
-and hardware checks, an exact selection-capture API gate, and the 1 MiB performance
-target. Developer ID and notarization credentials are not configured in this
-session. No notarized artifact or production readiness is claimed.
+latest [position evidence](validation/editor-position.md) records passing live
+directed selection/scroll restoration across process restart, full Pinyin input,
+signed lifecycle and isolated development-package launch checks on the current
+host. The [release matrix](validation/release-matrix.md) retains VoiceOver, other
+IMEs, physical accessibility preferences, full-screen/Spaces, supported OS/hardware
+coverage and the 1 MiB performance target. Developer ID signing and notarization
+remain separate requirements. No notarized artifact or production readiness is
+claimed.
 
 For an explicitly requested release, supply `BULLETNOTES_SIGNING_IDENTITY` and a
 preconfigured `BULLETNOTES_NOTARY_PROFILE` from the release environment/Keychain.
