@@ -67,10 +67,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig1-dev libfreetype-dev libxkbcommon-dev libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libvulkan1 libwayland-dev libgtk-3-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev libssl-dev pkg-config dpkg-dev patchelf librsvg2-bin xvfb xauth
-      - name: Install pinned Rust and packaging tools
+      - name: Install pinned Rust
         run: |
           rustup set default-host "$TARGET"
           rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target "$TARGET"
+      - name: Cache Rust dependencies and packaging tools
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Invalidate cached tools when their workflow pins change.
+          key: ${{ matrix.target }}-${{ hashFiles('.github/workflows/release.yml') }}
+          cache-on-failure: true
+      - name: Install pinned packaging tools
+        run: |
           rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --locked
           rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked
       - name: Check packaging contracts

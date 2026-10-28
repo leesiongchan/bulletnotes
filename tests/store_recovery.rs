@@ -296,6 +296,10 @@ fn child(path: &std::path::Path, mode: &str) -> std::process::Output {
         .args(["--ignored", "--exact", "storage_child_process"])
         .env("BULLETNOTES_STORE_FIXTURE_PATH", path)
         .env("BULLETNOTES_STORE_FIXTURE_MODE", mode)
+        .env(
+            "BULLETNOTES_STORE_FIXTURE_PARENT_PID",
+            std::process::id().to_string(),
+        )
         .output()
         .unwrap()
 }
@@ -311,6 +315,13 @@ fn storage_child_process() {
                 StoreHandle::open(&path).await,
                 Err(StoreError::AlreadyRunning)
             ));
+            assert_eq!(
+                bulletnotes::store::owner_process_id(&path).unwrap(),
+                std::env::var("BULLETNOTES_STORE_FIXTURE_PARENT_PID")
+                    .unwrap()
+                    .parse::<u32>()
+                    .unwrap()
+            );
             return;
         }
         let store = StoreHandle::open(&path).await.unwrap();

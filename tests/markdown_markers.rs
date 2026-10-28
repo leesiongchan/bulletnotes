@@ -247,16 +247,11 @@ fn grid_pitch_and_text_inset_match_editor_geometry() {
     let image = window.window().take_snapshot().unwrap();
     let scale = window.window().scale_factor();
     let pixels = image.as_bytes().as_chunks::<4>().0;
-    let first_ink = pixels
-        .iter()
-        .enumerate()
-        .filter_map(|(i, p)| {
-            (p[0] > 180 && p[1] < 80 && p[2] < 80)
-                .then_some((i % image.width() as usize) as f32 / scale)
-        })
-        .min_by(f32::total_cmp)
-        .unwrap();
-    assert!((45.0..47.0).contains(&first_ink), "text inset: {first_ink}");
+    // Glyph bearings vary with the platform font; the inset is a layout contract.
+    let inner = i_slint_core::window::WindowInner::from_pub(window.window());
+    let input = inner.focus_item.borrow().upgrade().unwrap();
+    assert!(input.downcast::<i_slint_core::items::TextInput>().is_some());
+    assert_eq!(input.map_to_window(input.geometry().origin).x, 45.0);
     let ink_rows: Vec<_> = (0..image.height() as usize)
         .filter(|&y| {
             pixels[y * image.width() as usize..(y + 1) * image.width() as usize]

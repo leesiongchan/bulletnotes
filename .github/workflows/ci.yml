@@ -2,11 +2,15 @@ name: Desktop checks
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -51,6 +55,11 @@ jobs:
         run: |
           rustup set default-host "$TARGET"
           rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target "$TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.target }}
+          cache-on-failure: true
       - name: Check packaging contracts
         run: python -m unittest discover -s tests -p 'test_package_desktop.py'
       - name: Check formatting, lints, and tests

@@ -160,12 +160,18 @@ fn acquire_instance_lock(path: &Path) -> Result<InstanceGuard, StoreError> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(PathBuf::from(name))?;
+    let mut file = options.open(PathBuf::from(&name))?;
     match file.try_lock() {
         Ok(()) => {
             file.set_len(0)?;
             write!(file, "{}", std::process::id())?;
             file.sync_data()?;
+            // Windows denies reads through another handle to the locked file.
+            name.push(".pid");
+            let mut metadata = options.truncate(true).open(PathBuf::from(name))?;
+            write!(metadata, "{}", std::process::id())?;
+            metadata.sync_data()?;
+            tracing::debug!(pid = std::process::id(), "Local store ownership acquired");
             Ok(InstanceGuard { _file: file })
         }
         Err(TryLockError::WouldBlock) => Err(StoreError::AlreadyRunning),
@@ -180,9 +186,17 @@ pub fn owner_process_id(path: &Path) -> Result<u32, StoreError> {
     let mut lock = path.as_os_str().to_owned();
     lock.push(".lock");
     let mut text = String::new();
-    File::open(PathBuf::from(lock))?
-        .take(11)
-        .read_to_string(&mut text)?;
+    // Prefer the legacy PID for owners started by an older build.
+    if File::open(PathBuf::from(&lock))
+        .and_then(|file| file.take(11).read_to_string(&mut text))
+        .is_err()
+    {
+        lock.push(".pid");
+        text.clear();
+        File::open(PathBuf::from(lock))?
+            .take(11)
+            .read_to_string(&mut text)?;
+    }
     if text.len() > 10 {
         return Err(StoreError::InvalidData);
     }

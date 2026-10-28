@@ -204,3 +204,43 @@ async fn a_contested_store_identifies_its_owner_without_opening_a_second_writer(
     assert_eq!(owner_process_id(&path).unwrap(), std::process::id());
     owner.shutdown().await.unwrap();
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn owner_metadata_is_readable_when_the_writer_guard_is_not() {
+    use bulletnotes::store::{StoreHandle, owner_process_id};
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.sqlite");
+    let owner = StoreHandle::open(&path).await.unwrap();
+    let guard = dir.path().join("notes.sqlite.lock");
+    let permissions = std::fs::metadata(&guard).unwrap().permissions();
+    // Model Windows denying another handle access to the exclusively locked guard.
+    std::fs::set_permissions(&guard, std::fs::Permissions::from_mode(0o0)).unwrap();
+    let pid = owner_process_id(&path);
+    std::fs::set_permissions(&guard, permissions).unwrap();
+    assert_eq!(pid.unwrap(), std::process::id());
+    assert!(matches!(
+        StoreHandle::open(&path).await,
+        Err(StoreError::AlreadyRunning)
+    ));
+    owner.shutdown().await.unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_legacy_owner_takes_precedence_over_stale_metadata() {
+    use bulletnotes::store::{StoreHandle, owner_process_id};
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.sqlite");
+    let mut guard = std::fs::File::create(dir.path().join("notes.sqlite.lock")).unwrap();
+    guard.try_lock().unwrap();
+    write!(guard, "{}", std::process::id()).unwrap();
+    std::fs::write(dir.path().join("notes.sqlite.lock.pid"), "0").unwrap();
+    assert!(matches!(
+        StoreHandle::open(&path).await,
+        Err(StoreError::AlreadyRunning)
+    ));
+    assert_eq!(owner_process_id(&path).unwrap(), std::process::id());
+}
