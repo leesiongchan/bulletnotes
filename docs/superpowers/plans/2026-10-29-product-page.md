@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Correct the product page with accurate non-editable editor captures, straightforward scratchpad copy, and broader theme coverage.
+**Goal:** Redesign the product page with new copy, a modern layout, and consistently readable typography while preserving accurate editor imagery.
 
 **Architecture:** A buildless site in `website/`, with relative asset URLs. A dedicated GitHub Actions workflow uploads this directory and deploys it to Pages.
 
@@ -16,7 +16,15 @@ Use the app's real palettes and imagery; state development status. No framework,
 
 ## Review Focus
 
-Mobile overflow, no-JavaScript readability, keyboard operation, reduced motion, and GitHub project-subpath asset resolution.
+Minimum 14px meaningful text; readable 16px controls; mobile/200% text enlargement without overlap or overflow; accurate copy; no-JavaScript behavior; all 48 screenshot selections; keyboard operation; reduced motion; GitHub project-subpath asset resolution.
+
+### Current redesign
+
+- [x] Research modern product pages and current interface/resize guidance.
+- [x] Rewrite the page hierarchy and copy; replace the stationery treatment with a simpler product presentation.
+- [x] Replace tiny text rules with rem-based 18px body, 16px controls, and a 14px supporting-text floor.
+- [x] Measure text sizes and check desktop/mobile layouts, 200% text enlargement, keyboard controls, all 48 previews, no-JavaScript fallback, and accessibility.
+- [ ] Publish and verify the live page; independent review is complete.
 
 ### Task 1: Product page
 
@@ -33,6 +41,8 @@ Mobile overflow, no-JavaScript readability, keyboard operation, reduced motion, 
 
 ## Verification evidence
 
+The entries below document the earlier correction. Record the current redesign checks separately after verification.
+
 - Before the correction, the live page reproduced the reported issue: one editable textarea with vertical resizing and a fabricated frame/footer.
 - Built and ran the isolated capture example; all 48 outputs are distinct 505 × 552 images from the actual app renderer.
 - Browser verification passed every theme/paper selection, image/caption agreement, selected state, and zero editable fields.
@@ -41,3 +51,12 @@ Mobile overflow, no-JavaScript readability, keyboard operation, reduced motion, 
 - All 18 relevant Markdown, marker, and theme-selection tests passed.
 - Independent review found one inaccurate Tartan alt description; corrected it to match the capture. No material findings remain.
 - Remote deployment is verified separately after publication.
+
+## Modern redesign verification
+
+- Measured 104–108 visible text elements at 320, 390, 768, 1024, and 1440px: no text below 14px, horizontal overflow, header overlap, or clipped controls.
+- 200% text enlargement passes at both 320 and 1440px.
+- All 48 screenshot selections retain image/caption agreement and a single selected theme/paper state; no editable fields.
+- Actual JavaScript-disabled browser shows fallback content and static previews with inactive controls hidden. Browser launch flags must be repeated across commands to retain that session configuration.
+- Keyboard selection passed. Accessibility audit: zero WCAG A/AA violations. Local assets, anchor links, JavaScript syntax, Prettier, and actionlint passed.
+- Independent review found no material copy or interface issues. Removed duplicate/empty CSS created while exploring hero layouts.

@@ -12,6 +12,8 @@ python3 -m http.server 4173 --directory website --bind 127.0.0.1
 
 Open http://127.0.0.1:4173. Check desktop and mobile sizes, all 48 theme/paper combinations, image/caption agreement, keyboard focus, and reduced motion. The page must contain no editable fields. JavaScript is optional for reading the page; static theme screenshots remain visible without it.
 
+Typography uses rem units: body copy 18–19px, feature descriptions 17px, controls/navigation 16px, and supporting text at least 14px. Verify computed text sizes at 320px, 390px, 768px, 1024px, and 1440px, and test text enlargement to 200% without clipping or horizontal overflow. Product screenshots retain the app's original typography.
+
 ## Capture theme screenshots
 
 `examples/capture_product_themes.rs` uses the real `AppWindow`, appearance mapping, Markdown renderer, and bundled palettes through the existing Slint Skia testing backend. It renders a fixed sample note at the app's default 505 × 552 size, without opening the store, credentials, native application, or network. Images have no added editor controls, labels, or decorations.
@@ -39,10 +41,15 @@ The download section currently says no builds are published. When releases becom
 
 ## Design sources
 
-The layout takes its colors and paper metaphor from Bulletnotes' bundled Paper theme and existing app icon. The hero and gallery show renderer captures. The twelve themes are Paper, Graphite, Matcha, Rose, Tartan, Sanrio, Dracula, Nord, Catppuccin Mocha, Dot Matrix, Tokyo Drift, and Mononoke. Each has captures for plain, dotted, ruled, and grid paper. The swatch colors come directly from the bundled palette JSON files.
+The layout uses warm cream and forest hues inspired by the app, a dark green theme showcase, clear sans-serif headings, selective serif accents, and a readable type scale. The hero and gallery show renderer captures. The twelve showcased themes are Paper, Graphite, Matcha, Rose, Tartan, Sanrio, Dracula, Nord, Catppuccin Mocha, Dot Matrix, Tokyo Drift, and Mononoke. Each has captures for plain, dotted, ruled, and grid paper. The swatch colors come directly from the bundled palette JSON files.
 
 Research references:
 
+- [Linear](https://linear.app/): focused product hierarchy and clear sections.
+- [Raycast](https://www.raycast.com/): concise positioning and prominent product visuals.
+- [Things](https://culturedcode.com/things/): restrained native-app presentation.
+- [W3C text resizing guidance](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html): support enlargement up to 200% without losing content or functionality.
+- [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md): semantic controls, visible focus, balanced headings, and reduced-motion support.
 - [Flexoki](https://stephango.com/flexoki): digital ink and paper, legible warm palettes.
 - [iA Writer](https://ia.net/writer): writing-first product presentation and typography.
 - [Bear](https://bear.app/): real app imagery and appearance demonstrations.
