@@ -21,8 +21,10 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
             result.set(super::renderer::uses_metal(window.window()).unwrap_or(false));
             #[cfg(not(target_os = "macos"))]
             result.set(window.window().take_snapshot().is_ok_and(|image| {
-                let bytes = image.as_bytes();
-                bytes.len() >= 8 && bytes.chunks_exact(4).any(|pixel| pixel != &bytes[..4])
+                let pixels = image.as_slice();
+                pixels
+                    .first()
+                    .is_some_and(|first| pixels.iter().any(|pixel| pixel != first))
             }));
             let _ = window.hide();
         }
