@@ -52,8 +52,10 @@ requests. **Development desktop release** repeats those gates before packaging.
 Use **Actions → Development desktop release → Run workflow** to download the six
 artifact sets without publishing a release.
 
-Pushing a matching version tag creates a GitHub **prerelease** only after all six
-targets pass. For the current version, from a committed checkout:
+Pushing a matching version tag automatically creates a GitHub **prerelease** with
+all platform downloads and GitHub-generated release notes after all six targets
+pass. The installation and verification notes appear before the generated
+changelog. For the current version, from a committed checkout:
 
 ```sh
 git tag v0.1.0

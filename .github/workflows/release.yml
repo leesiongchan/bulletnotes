@@ -142,6 +142,6 @@ jobs:
           Each verification report records exact source provenance, target, hashes, and observed launch evidence. Hosted macOS UI/Metal launch remains unobserved. Windows/Linux CI smoke tests use the Slint software renderer; production GPU rendering requires native hardware verification.
           NOTES
           gh release create "$RELEASE_TAG" packages/* \
-            --verify-tag --prerelease --latest=false \
+            --verify-tag --prerelease --latest=false --generate-notes \
             --title "Bulletnotes ${RELEASE_TAG#v} (development)" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
