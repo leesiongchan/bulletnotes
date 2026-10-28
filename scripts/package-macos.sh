@@ -2,7 +2,6 @@
 set -euo pipefail
 app_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$app_root"
-python3 scripts/prepare-slint.py
 exec python3 - "$@" <<'PYTHON'
 import argparse, hashlib, json, os, pathlib, platform, plistlib, re, shutil, subprocess, sys, tempfile
 parser=argparse.ArgumentParser(description="Build locked Apple Silicon macOS 14 bundles; nothing is published")

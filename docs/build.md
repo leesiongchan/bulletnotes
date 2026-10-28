@@ -36,29 +36,20 @@ a new client that uses the same store; the writer lock prevents simultaneous use
 
 ## Pinned Slint source decorations
 
-Application highlighting uses the foreground-decoration API in the maintained Slint
-1.18.1 patch in `patches/slint/`. The editor also uses its experimental marker API for
-source-width-preserving bullets and task boxes. Run this before direct Cargo commands on a fresh checkout, after
-`cargo clean`, or after changing the patch:
+Application highlighting uses the foreground-decoration API from a maintained Slint
+1.18.1 fork. The editor also uses its experimental marker API for
+source-width-preserving bullets and task boxes. `[patch.crates-io]` in `Cargo.toml`
+pins the Slint crates to the `bulletnotes-1.18.1` branch of
+<https://github.com/leesiongchan/slint> and `winit` to the `bulletnotes-0.30.13`
+branch of <https://github.com/leesiongchan/winit>. Both branches sit on the upstream
+release tags, so `git diff v1.18.1` (or `v0.30.13`) in each fork shows the whole
+change. Unmodified Slint workspace crates (`vtable`, `const-field-offset`,
+`i-slint-core-macros`, `i-slint-renderer-skia`) are patched to the same commit so
+each resolves once; the winit fork takes `dpi` from crates.io like the published
+crate. Cargo fetches the forks normally and `Cargo.lock` records the exact commits.
 
-```sh
-python3 scripts/prepare-slint.py
-```
-
-The check, notice-generation, and packaging scripts run it
-automatically. Preparation uses cached crate archives when their SHA256 matches
-`patches/slint/sources.json`; otherwise it downloads the exact archives from
-`static.crates.io`, verifies them, and patches private copies under
-`target/slint-source-highlighting/crates`. It does not modify Cargo's cache.
-Preparation has a per-project OS lock to protect simultaneous first builds.
-Cargo cannot bootstrap absent path patches itself, so `cargo fetch` is not a
-replacement for this step. Once prepared and dependencies cached, offline Cargo
-commands work normally. The generated path stays fixed even with `CARGO_TARGET_DIR`.
-
-The original archive checksums remain committed independently of Cargo.lock, whose
-three patched entries refer to local paths. Review those checksums, the compact
-patch, and Cargo.lock together for a Slint upgrade; retain all upstream license
-files.
+For a Slint upgrade, rebase both branches onto the new upstream tags, update the
+`rev` values in `Cargo.toml`, and review the fork diffs together with `Cargo.lock`.
 
 ## Production renderer
 

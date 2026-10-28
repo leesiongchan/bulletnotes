@@ -11,7 +11,6 @@ import tempfile
 import tomllib
 
 root = pathlib.Path(__file__).resolve().parent.parent
-subprocess.run([sys.executable, str(root / "scripts/prepare-slint.py")], check=True)
 config = tomllib.loads((root / "packaging/about.toml").read_text())
 metadata = json.loads(subprocess.check_output(
     ["rustup", "run", "1.99.1", "cargo", "metadata", "--locked", "--filter-platform", "aarch64-apple-darwin", "--format-version", "1"], cwd=root))
@@ -46,7 +45,9 @@ with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
         if hashlib.sha256(source_bytes).hexdigest() != reference["checksum"] or source_bytes != full_text:
             sys.exit("Slint license text changed; review attribution")
         components.append(name + " " + version)
-    rendered = target.read_text()
+    # Git-sourced crates contain nested crates, so cargo-about counts their identical license twice.
+    rendered = re.sub(r"(?<=<p>)[^<]*(?=</p>)",
+        lambda m: "; ".join(dict.fromkeys(m.group().split("; "))), target.read_text())
     if components:
         supplement = "<section><h2>Slint Royalty-free License 2.0</h2><p>" + html.escape("; ".join(components)) + "</p><pre>" + html.escape(full_text.decode()) + "</pre></section>"
         rendered = rendered.replace("</html>", supplement + "</html>")

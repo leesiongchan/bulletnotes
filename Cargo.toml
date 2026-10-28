@@ -77,8 +77,15 @@ codegen-units = 1
 strip = "debuginfo"
 
 [patch.crates-io]
-i-slint-common = { path = "target/slint-source-highlighting/crates/i-slint-common-1.18.1" }
-i-slint-compiler = { path = "target/slint-source-highlighting/crates/i-slint-compiler-1.18.1" }
-i-slint-core = { path = "target/slint-source-highlighting/crates/i-slint-core-1.18.1" }
-i-slint-backend-winit = { path = "target/slint-source-highlighting/crates/i-slint-backend-winit-1.18.1" }
-winit = { path = "target/slint-source-highlighting/crates/winit-0.30.13" }
+i-slint-common = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-compiler = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-core = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-backend-winit = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-core-macros = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-renderer-skia = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+vtable = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+vtable-macro = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+const-field-offset = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+const-field-offset-macro = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+# dpi stays on crates.io: the winit fork depends on the registry release, like the published crate.
+winit = { git = "https://github.com/leesiongchan/winit", rev = "0d819196d0a8ac461d5e57d056a777cd60aff0ec" }
