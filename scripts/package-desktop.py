@@ -257,7 +257,7 @@ def main():
         staged.mkdir(parents=True)
         shutil.copy2(binary, staged / executable)
         environment['CARGO_TARGET_DIR'] = str(build)
-        run(tauri + ['icon', ROOT / 'assets/native-preview-tray.svg', '--output', fixture / 'icons'], cwd=fixture, env=environment)
+        run(tauri + ['icon', ROOT / 'assets/bulletnotes-logo.png', '--output', fixture / 'icons'], cwd=fixture, env=environment)
         command = tauri + ['bundle', '--target', args.target, '--ci', '--no-binary-patching']
         if system == 'Windows':
             command.append('--no-sign')

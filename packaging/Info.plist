@@ -3,6 +3,7 @@
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>lol.harflix.bulletnotes</string>
 <key>CFBundleExecutable</key><string>bulletnotes</string>
+<key>CFBundleIconFile</key><string>icon.icns</string>
 <key>CFBundleName</key><string>Bulletnotes</string>
 <key>CFBundleDisplayName</key><string>Bulletnotes</string>
 <key>CFBundlePackageType</key><string>APPL</string>

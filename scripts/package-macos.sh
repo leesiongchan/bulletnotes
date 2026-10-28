@@ -59,6 +59,7 @@ for target,architecture in [('aarch64-apple-darwin','arm64')]:
   info['BulletnotesVersion']=args.version;info['BulletnotesDistributionKind']=kind;info['BulletnotesSourceRevision']=source+('+dirty' if source_dirty else '')
   with (app/'Contents/Info.plist').open('wb') as stream:plistlib.dump(info,stream)
   for filename in ['ThirdPartyNotices.html','Slint-License.md']:shutil.copy2(root/'packaging'/filename,resources/filename)
+  shutil.copy2(root/'assets/bulletnotes-logo.icns',resources/'icon.icns')
   signing=['codesign','--force','--sign','-' if args.development else identity,'--options','runtime','--entitlements','packaging/entitlements.plist']
   signing.append('--timestamp=none' if args.development else '--timestamp');run(signing+[str(app)])
   archive=pathlib.Path(temporary)/(name+'.zip')

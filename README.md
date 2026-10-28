@@ -1,3 +1,5 @@
+<img src="assets/bulletnotes-logo.png" alt="Bulletnotes logo" width="120">
+
 # Bulletnotes
 
 A small desktop notebook for [SilverBullet](https://silverbullet.md/). Capture thoughts in Markdown, keep working offline, and sync when you’re connected.
