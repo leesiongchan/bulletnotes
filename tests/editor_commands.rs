@@ -76,7 +76,11 @@ fn command_shortcuts_edit_once_and_undo_once() {
         (window.get_editor_anchor(), window.get_editor_caret()),
         (4, 0)
     );
-    shortcut(&window, &[Key::Control, Key::Shift], "z".into());
+    if cfg!(target_os = "windows") {
+        shortcut(&window, &[Key::Control], "y".into());
+    } else {
+        shortcut(&window, &[Key::Control, Key::Shift], "z".into());
+    }
     assert_eq!(window.get_note_text(), "**word**");
     assert_eq!(
         (window.get_editor_anchor(), window.get_editor_caret()),

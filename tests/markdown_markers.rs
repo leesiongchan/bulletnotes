@@ -237,7 +237,13 @@ fn grid_pitch_and_text_inset_match_editor_geometry() {
     theme.paper = slint::Color::from_rgb_u8(255, 255, 255);
     theme.pattern = slint::Color::from_rgb_u8(0, 0, 255);
     theme.ink = slint::Color::from_rgb_u8(255, 0, 0);
+    // Make a visible caret match the ink on every platform, including macOS.
+    theme.cursor = theme.ink;
     window.set_theme(theme);
+    // Exclude the trailing blank line's caret from the text-row measurement.
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
     let image = window.window().take_snapshot().unwrap();
     let scale = window.window().scale_factor();
     let pixels = image.as_bytes().as_chunks::<4>().0;
