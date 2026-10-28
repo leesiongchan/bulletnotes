@@ -9,8 +9,11 @@ parser.add_argument('--version',required=True)
 parser.add_argument('--output',type=pathlib.Path,required=True)
 parser.add_argument('--development',action='store_true',help='Explicit ad-hoc signing, no notary upload')
 parser.add_argument('--notarize',action='store_true',help='Explicitly upload distribution archives to Apple notary service')
+parser.add_argument('--dmg',action='store_true',help='Also create an unsigned development DMG with an Applications shortcut')
+parser.add_argument('--static-only',action='store_true',help='Skip native UI/Metal launch; record it as unobserved')
 args=parser.parse_args()
 if args.development and args.notarize:parser.error('development artifacts cannot be notarized')
+if args.dmg and not args.development:parser.error('--dmg requires --development; distribution DMG signing/notarization is not supported')
 def run(command,**kwargs):return subprocess.run(command,check=True,**kwargs)
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 if platform.system()!='Darwin':parser.error('macOS with Xcode CLI tools is required')
@@ -30,7 +33,7 @@ if not re.fullmatch(r'[1-9][0-9]{0,3}',build_number):parser.error('BULLETNOTES_B
 args.output.mkdir(parents=True,exist_ok=True);output=args.output.resolve()
 kind='development' if args.development else 'distribution'
 for architecture in ['arm64']:
- for suffix in ['.app','.zip','.verification.json']:
+ for suffix in ['.app','.zip','.verification.json']+(['.dmg'] if args.dmg else []):
   if (output/('Bulletnotes-'+args.version+'-'+architecture+'-'+kind+suffix)).exists():parser.error('refusing to overwrite an existing artifact; choose a fresh output directory')
 # Attribution generation fails rather than quietly dropping an unaccepted license.
 run(['python3','scripts/generate-notices.py'])
@@ -68,10 +71,19 @@ for target,architecture in [('aarch64-apple-darwin','arm64')]:
    run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(app),str(archive)])
   command=[str(root/'scripts/verify-release.sh')]
   if args.development:command.append('--development')
-  if platform.machine()!='arm64':command.append('--static-only')
+  if args.static_only or platform.machine()!='arm64':command.append('--static-only')
   command.append(str(app))
   verified=run(command,capture_output=True,text=True);evidence=json.loads(verified.stdout)
   evidence.update({'source_revision':source,'source_dirty':source_dirty,'cargo_lock_sha256':lock_hash,'binary_sha256':sha(mac/'bulletnotes'),'archive_sha256':sha(archive)})
+  if args.dmg:
+   staging=pathlib.Path(temporary)/'dmg';staging.mkdir()
+   run(['ditto',str(app),str(staging/'Bulletnotes.app')])
+   (staging/'Applications').symlink_to('/Applications',target_is_directory=True)
+   image=pathlib.Path(temporary)/(name+'.dmg')
+   run(['hdiutil','create','-volname','Bulletnotes','-srcfolder',str(staging),'-format','UDZO',str(image)])
+   run(['hdiutil','verify',str(image)])
+   evidence['dmg_sha256']=sha(image)
+   shutil.move(str(image),output/image.name)
   final=output/app.name;shutil.move(str(app),final);shutil.move(str(archive),output/archive.name)
   evidence['artifact']=str(final)
   (output/(name+'.verification.json')).write_text(json.dumps(evidence,indent=2)+'\n')

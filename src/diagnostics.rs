@@ -92,10 +92,20 @@ impl Outcome {
         }
     }
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesktopCapability {
+    GlobalShortcut,
+    Tray,
+}
+
 /// Allowlist by construction: no string, path, error, URL, or clipboard fields.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DiagnosticEvent {
+    DesktopCapabilityUnavailable {
+        capability: DesktopCapability,
+    },
     MergeFallback {
         id: uuid::Uuid,
         reason: MergeFallbackReason,

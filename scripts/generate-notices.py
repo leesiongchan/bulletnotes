@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Render runtime notices and cover Slint's custom license with verified full text."""
+import argparse
 import hashlib
 import html
 import json
@@ -10,15 +11,21 @@ import sys
 import tempfile
 import tomllib
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--target', default='aarch64-apple-darwin', help='Cargo target triple for runtime dependency filtering')
+parser.add_argument('--output', type=pathlib.Path, help='Destination outside the source tree for packaging')
+args = parser.parse_args()
+if not re.fullmatch(r'[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)+', args.target):
+    parser.error('invalid target triple')
 root = pathlib.Path(__file__).resolve().parent.parent
-config = tomllib.loads((root / "packaging/about.toml").read_text())
+config = tomllib.loads((root / "packaging/about.toml").read_text(encoding="utf-8"))
 metadata = json.loads(subprocess.check_output(
-    ["rustup", "run", "1.99.1", "cargo", "metadata", "--locked", "--filter-platform", "aarch64-apple-darwin", "--format-version", "1"], cwd=root))
+    ["rustup", "run", "1.99.1", "cargo", "metadata", "--locked", "--filter-platform", args.target, "--format-version", "1"], cwd=root))
 packages = {(p["name"], p["version"]): p for p in metadata["packages"]}
 with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
     target = pathlib.Path(temporary) / "notices.html"
     result = subprocess.run(["rustup", "run", "1.99.1", "cargo", "about", "generate", "--locked",
-        "--config", "packaging/about.toml", "--output-file", str(target), "packaging/notices.hbs"],
+        "--target", args.target, "--config", "packaging/about.toml", "--output-file", str(target), "packaging/notices.hbs"],
         cwd=root, capture_output=True, text=True)
     if result.returncode:
         sys.stderr.write(result.stderr)
@@ -47,10 +54,10 @@ with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
         components.append(name + " " + version)
     # Git-sourced crates contain nested crates, so cargo-about counts their identical license twice.
     rendered = re.sub(r"(?<=<p>)[^<]*(?=</p>)",
-        lambda m: "; ".join(dict.fromkeys(m.group().split("; "))), target.read_text())
+        lambda m: "; ".join(dict.fromkeys(m.group().split("; "))), target.read_text(encoding="utf-8"))
     if components:
         supplement = "<section><h2>Slint Royalty-free License 2.0</h2><p>" + html.escape("; ".join(components)) + "</p><pre>" + html.escape(full_text.decode()) + "</pre></section>"
         rendered = rendered.replace("</html>", supplement + "</html>")
-    destination = root / "packaging/ThirdPartyNotices.html"
-    destination.write_text(rendered)
+    destination = args.output or root / "packaging/ThirdPartyNotices.html"
+    destination.write_text(rendered, encoding="utf-8")
     print("Runtime notices generated; covered " + str(len(components)) + " custom Slint license warnings with hash-verified full text.")

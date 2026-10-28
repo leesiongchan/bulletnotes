@@ -1,4 +1,5 @@
 //! Reserve a candidate before committing settings; failed changes retain the old key.
+#[cfg(target_os = "macos")]
 pub use super::exclusive_hotkey::NativeHotkeyBackend;
 use global_hotkey::hotkey::HotKey;
 use std::rc::Rc;
@@ -30,6 +31,7 @@ impl<B: HotkeyBackend> HotkeyRegistration<B> {
             current: None,
         }
     }
+    #[cfg(target_os = "macos")]
     pub(crate) fn backend(&self) -> &B {
         &self.backend
     }

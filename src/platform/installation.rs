@@ -17,7 +17,13 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     let weak = window.as_weak();
     slint::Timer::single_shot(Duration::from_millis(400), move || {
         if let Some(window) = weak.upgrade() {
+            #[cfg(target_os = "macos")]
             result.set(super::renderer::uses_metal(window.window()).unwrap_or(false));
+            #[cfg(not(target_os = "macos"))]
+            result.set(window.window().take_snapshot().is_ok_and(|image| {
+                let bytes = image.as_bytes();
+                bytes.len() >= 8 && bytes.chunks_exact(4).any(|pixel| pixel != &bytes[..4])
+            }));
             let _ = window.hide();
         }
         let _ = slint::quit_event_loop();
@@ -25,9 +31,19 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if !checked.get() {
-        return Err("installation check did not observe a native Metal window".into());
+        return Err("installation check did not observe a rendered native window".into());
     }
+    #[cfg(target_os = "macos")]
     println!("graphics_backend: metal");
+    #[cfg(not(target_os = "macos"))]
+    println!(
+        "graphics_backend: {}",
+        if super::desktop::software_renderer() {
+            "software"
+        } else {
+            "wgpu"
+        }
+    );
     println!("installation_check: true");
     Ok(())
 }

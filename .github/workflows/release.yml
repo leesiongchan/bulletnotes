@@ -1,0 +1,147 @@
+name: Development desktop release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+      - name: Validate version and release ref
+        id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          python - <<'PY'
+          import importlib.util, os, pathlib, tomllib
+          spec = importlib.util.spec_from_file_location('package_desktop', 'scripts/package-desktop.py')
+          package = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(package)
+          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['package']['version']
+          package.validate_release(version, version, os.environ['RELEASE_REF'] if os.environ['REF_TYPE'] == 'tag' else None)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('version=' + version + '\n')
+          PY
+      - name: Install Linux build and bundle libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libfreetype-dev libxkbcommon-dev libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libvulkan1 libwayland-dev libgtk-3-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev libssl-dev pkg-config dpkg-dev patchelf librsvg2-bin xvfb xauth
+      - name: Install pinned Rust and packaging tools
+        run: |
+          rustup set default-host "$TARGET"
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target "$TARGET"
+          rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --locked
+          rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked
+      - name: Check packaging contracts
+        run: python -m unittest discover -s tests -p 'test_package_desktop.py'
+      - name: Check formatting, lints, and tests
+        run: bash scripts/check.sh
+      - name: Package and verify development installers
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          arguments=(--version "$VERSION" --target "$TARGET" --output target/packages/ci)
+          if [[ "$REF_TYPE" == tag ]]; then arguments+=(--release-ref "$RELEASE_REF"); fi
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            # Hosted macOS does not establish a hardware Metal launch; local release verification does.
+            python scripts/package-desktop.py "${arguments[@]}" --static-only
+          elif [[ "$RUNNER_OS" == Linux ]]; then
+            SLINT_BACKEND=winit-software xvfb-run -a python scripts/package-desktop.py "${arguments[@]}"
+          else
+            SLINT_BACKEND=winit-software python scripts/package-desktop.py "${arguments[@]}"
+          fi
+      - name: Upload installers, hashes, and verification report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bulletnotes-${{ matrix.target }}-development
+          path: target/packages/ci/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bulletnotes-*-development
+          merge-multiple: true
+          path: packages
+      - name: Publish development prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          reports = list(pathlib.Path('packages').glob('*.verification.json'))
+          expected = {'aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc', 'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu'}
+          evidence = [json.loads(report.read_text()) for report in reports]
+          if len(evidence) != 6 or {report['target'] for report in evidence} != expected:
+              raise SystemExit('All six target reports are required before publication')
+          for report in evidence:
+              for filename, digest in report['artifacts'].items():
+                  path = pathlib.Path('packages') / filename
+                  if path.parent != pathlib.Path('packages') or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                      raise SystemExit('Downloaded artifact checksum mismatch')
+          PY
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          Development desktop builds for macOS 14+, Windows, and Linux, on x64 and ARM64.
+
+          macOS: open the DMG and drag Bulletnotes to Applications. The app is ad-hoc signed and is not notarized by Apple. Windows: run the unsigned NSIS installer. Linux: install the deb package or make the AppImage executable and run it. These are development artifacts, and operating-system trust prompts are expected.
+
+          Each verification report records exact source provenance, target, hashes, and observed launch evidence. Hosted macOS UI/Metal launch remains unobserved. Windows/Linux CI smoke tests use the Slint software renderer; production GPU rendering requires native hardware verification.
+          NOTES
+          gh release create "$RELEASE_TAG" packages/* \
+            --verify-tag --prerelease --latest=false \
+            --title "Bulletnotes ${RELEASE_TAG#v} (development)" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

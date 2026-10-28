@@ -14,7 +14,7 @@ impl fmt::Display for PlatformError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WrongThread => f.write_str("native probe requires the main thread"),
-            Self::WindowUnavailable => f.write_str("native macOS window is not available"),
+            Self::WindowUnavailable => f.write_str("native window is not available"),
             Self::HotkeyUnavailable => {
                 f.write_str("shortcut is unavailable; use the menu or choose another shortcut")
             }
@@ -125,9 +125,9 @@ pub enum SyncError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum CredentialError {
-    #[error("Keychain access was denied; this session can still be used")]
+    #[error("Secure credential storage access was denied; this session can still be used")]
     Denied,
-    #[error("Keychain is unavailable; this session can still be used")]
+    #[error("Secure credential storage is unavailable; this session can still be used")]
     Unavailable,
     #[error("the saved credential is invalid")]
     Invalid,

@@ -3,8 +3,15 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
+fn native_architecture() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x86_64"
+    }
+}
 fn fixture(minimum: &str, signed: bool, resources: bool) -> (tempfile::TempDir, PathBuf) {
-    fixture_for_architecture("arm64", minimum, signed, resources)
+    fixture_for_architecture(native_architecture(), minimum, signed, resources)
 }
 fn fixture_for_architecture(
     architecture: &str,
@@ -137,23 +144,18 @@ fn verify_static(app: &Path) -> Output {
         .unwrap()
 }
 #[test]
-fn verifier_rejects_intel_even_with_valid_metadata_and_signature() {
+fn verifier_accepts_signed_thin_intel_artifacts() {
     let (_dir, app) = fixture_for_architecture("x86_64", "14.0", true, true);
     let output = verify_static(&app);
     assert!(
-        !output.status.success(),
-        "Intel artifact was accepted: {}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-    assert!(
-        reason(&output).contains("Apple Silicon"),
-        "{}",
+        output.status.success(),
+        "Intel artifact was rejected: {}",
         reason(&output)
     );
 }
 #[test]
-fn verifier_rejects_universal_bundles_with_an_intel_slice() {
-    let (_arm_dir, arm) = fixture("14.0", true, true);
+fn verifier_requires_a_thin_binary() {
+    let (_arm_dir, arm) = fixture_for_architecture("arm64", "14.0", true, true);
     let (_intel_dir, intel) = fixture_for_architecture("x86_64", "14.0", true, true);
     let binary = arm.join("Contents/MacOS/bulletnotes");
     let combined = arm.parent().unwrap().join("universal");
@@ -182,16 +184,13 @@ fn verifier_rejects_universal_bundles_with_an_intel_slice() {
     assert!(status.success());
     let output = verify_static(&arm);
     assert!(!output.status.success());
-    assert!(
-        reason(&output).contains("Apple Silicon"),
-        "{}",
-        reason(&output)
-    );
+    assert!(reason(&output).contains("thin"), "{}", reason(&output));
 }
 
 #[test]
 fn verifier_requires_explicit_metal_installation_evidence() {
-    let (_dir, app) = fixture_with_graphics_evidence("arm64", "14.0", true, true, false);
+    let (_dir, app) =
+        fixture_with_graphics_evidence(native_architecture(), "14.0", true, true, false);
     let output = verify(&app, true);
     assert!(
         !output.status.success(),

@@ -1,4 +1,4 @@
-//! Main-thread form ownership; HTTP and Keychain work runs on the Tokio runtime.
+//! Main-thread form ownership; HTTP and credential work runs on the Tokio runtime.
 use super::connection::{ConnectionController, ConnectionInput, ConnectionOutcome};
 use crate::{
     AppWindow,

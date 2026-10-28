@@ -1,6 +1,6 @@
 # Bulletnotes development usage
 
-Bulletnotes is a native Rust/Slint macOS client for a SilverBullet space. It is
+Bulletnotes is a native Rust/Slint client for macOS, Windows, and Linux for a SilverBullet space. It is
 currently a development build; input, accessibility, selection, performance, and
 distribution release gates remain open. The note window has solid paper. Markdown source stays visible and editable,
 with bold first/second-level headings, regular-weight lower headings, true bold and
@@ -26,7 +26,8 @@ deferred.
 ## Capture and browse
 
 Use **BN → Show Bulletnotes** to reopen the window. The default shortcut is
-Option+A. If another application owns it, keep using the menu and choose another
+Option+A on macOS and Alt+A on Windows/X11. Wayland global shortcuts are
+currently unavailable; use the window or tray menu instead. If another application owns it, keep using the menu and choose another
 combination in Appearance. Supported physical keys are A–Z, digits, Space and
 F1–F20 with at least one modifier. A failed change keeps the working shortcut.
 
@@ -34,7 +35,8 @@ Hover near the top or bottom edge to reveal the matching header or footer.
 F6 moves keyboard focus through header, footer and the active view; Escape returns
 to that view. Revealing controls does not move or rewrap the note. The header
 includes native window controls, Settings, Search, New scratchpad, Pin, and the drag area. The capsule footer contains Trash, the note date/position, Older, Newer, Jump to Newest, and Changes. Resize from edges/corners; Pin keeps the note above ordinary windows. Closing
-hides the window after local saves finish. **BN → Quit Bulletnotes** drains local
+hides the window after local saves finish on macOS and Windows with a tray.
+On Linux, or Windows without a tray, closing saves and exits. **BN → Quit Bulletnotes** drains local
 writes and cancels network work. A failed local save retains the editable buffer;
 retry or copy the source using normal editing commands.
 
@@ -70,6 +72,8 @@ editor. VoiceOver and the broader supported-device release checks remain open.
 
 ## Source editing shortcuts
 
+The Command shortcuts below use Control on Windows/Linux; Option uses Alt.
+
 On macOS, Command+B/I toggles bold/italic, Command+Shift+X toggles strikethrough,
 and Command+Shift+H cycles the current line through plain, H1, H2, H3, and plain.
 Command+Shift+K toggles an existing task. Option+Up/Down moves the current line or
@@ -95,10 +99,10 @@ Both preserve the current Light/Dark/System mode. Clicking the rest of a card
 assigns the currently effective slot. The 14 featured palettes appear first in
 their catalog order, followed by the remaining palettes. Cards use two columns
 when space permits and a single column in narrow windows. Settings controls use
-the macOS light/dark appearance independently of note colors.
+the desktop light/dark appearance independently of note colors.
 
 Paper, Graphite, Matcha and Rose are built in. Light and Dark assignments are
-independent; System follows macOS appearance notifications. Font size (11–24
+independent; System follows desktop appearance changes. Font size (11–24
 points) and Plain/Dots/Ruled/Grid paper are independent of the palette. macOS
 Increase Contrast adjusts the displayed palette without replacing saved theme
 colors. Solid paper and static transitions honor reduced transparency/motion.
@@ -128,8 +132,9 @@ names cannot overwrite a built-in theme identity.
 ## Connection and recovery
 
 Connection settings target an HTTPS SilverBullet server; the initial endpoint is
-`https://notes.harflix.lol`. Tokens are stored in macOS Keychain only when chosen;
-session-only use remains available. Denied Keychain access does not prevent local
+`https://notes.harflix.lol`. Tokens are stored in macOS Keychain, Windows Credential Manager, or Linux Secret
+Service only when chosen; session-only use remains available. Linux needs a running
+Secret Service provider. Denied credential-store access does not prevent local
 capture. Server writes require successful conditional-write verification with an
 owned temporary probe page. An incompatible server remains read only.
 
@@ -142,12 +147,14 @@ available for explicit restoration. Sync stays pending until recovery copies are
 acknowledged too. Reused destinations use guarded reconciliation and preservation
 instead of silent overwrite.
 
-The local store is in
+On macOS the local store is in
 `~/Library/Application Support/lol.harflix.bulletnotes/bulletnotes.sqlite`.
+Windows uses the user-local application data directory; Linux uses the XDG data
+directory. See [desktop integration](build.md#desktop-integration).
 Keep this directory when replacing a development app. Do not copy a live SQLite
 file alone: its WAL may contain committed data. Stop the app before filesystem
-backup or use SQLite's backup facility. A second launch asks the existing owner
-to reopen and cannot open a second writer.
+backup or use SQLite's backup facility. A second launch cannot open a second writer. On macOS it asks the existing owner
+to reopen; on Windows/Linux, reopen the existing window from the taskbar or tray.
 
 ## Diagnostics and development checks
 

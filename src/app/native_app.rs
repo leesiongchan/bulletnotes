@@ -1,22 +1,23 @@
-//! Composition of the durable local app and its public macOS lifecycle adapter.
+//! Composition of the durable local app and its desktop lifecycle adapters.
 use super::{
     appearance_ui::{self, AppearanceUi},
     coordinator::AppAction,
-    lifecycle::CloseIntent,
+    lifecycle::{CloseIntent, close_intent},
     local_ui::{self, LocalUi},
     startup::Startup,
-    window_placement::{self, ScreenFrame},
 };
+use crate::{AboutWindow, AppWindow, LocalTray, platform::application::NativeApplication};
+#[cfg(target_os = "macos")]
 use crate::{
-    AboutWindow, AppWindow, LocalTray,
-    platform::{
-        application::NativeApplication,
-        window_chrome::{ChromeMonitor, native_window},
-    },
+    app::window_placement::{self, ScreenFrame},
+    platform::window_chrome::{ChromeMonitor, native_window},
     store::settings::WindowPlacement,
 };
+#[cfg(target_os = "macos")]
 use objc2::MainThreadMarker;
+#[cfg(target_os = "macos")]
 use objc2_app_kit::NSScreen;
+#[cfg(target_os = "macos")]
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use slint::ComponentHandle;
 use std::{cell::RefCell, rc::Rc};
@@ -29,6 +30,7 @@ pub struct LocalApplication {
     integration: super::native_ui::NativeUi,
     _appearance: AppearanceUi,
     _recovery: super::recovery_ui::RecoveryUi,
+    #[cfg(target_os = "macos")]
     _chrome: Rc<RefCell<Option<ChromeMonitor>>>,
 }
 impl LocalApplication {
@@ -62,6 +64,7 @@ impl LocalApplication {
         );
         {
             let about = Rc::new(RefCell::new(None::<AboutWindow>));
+            #[cfg(target_os = "macos")]
             let native = native.clone();
             let weak = window.as_weak();
             window.on_show_about(move || {
@@ -74,8 +77,17 @@ impl LocalApplication {
                         );
                         *about = Some(window);
                     }
-                    about.as_ref().ok_or("About is unavailable")?.show()?;
+                    let about = about.as_ref().ok_or("About is unavailable")?;
+                    about.show()?;
+                    #[cfg(target_os = "macos")]
                     native.activate();
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        use slint::winit_030::WinitWindowAccessor;
+                        about
+                            .window()
+                            .with_winit_window(|window| window.focus_window());
+                    }
                     Ok(())
                 })();
                 if result.is_err()
@@ -121,8 +133,10 @@ impl LocalApplication {
                 }
             });
         }
+        #[cfg(target_os = "macos")]
         let chrome = Rc::new(RefCell::new(None));
         {
+            #[cfg(target_os = "macos")]
             let owner = chrome.clone();
             let weak = window.as_weak();
             let local = local.clone();
@@ -134,7 +148,10 @@ impl LocalApplication {
                 };
                 if let Some(window) = weak.upgrade() {
                     let result = (|| -> AppResult<()> {
-                        *owner.borrow_mut() = Some(ChromeMonitor::install(&window, None)?);
+                        #[cfg(target_os = "macos")]
+                        {
+                            *owner.borrow_mut() = Some(ChromeMonitor::install(&window, None)?);
+                        }
                         restore_window(&window, placement.as_ref())?;
                         integration.attach(&settings)?;
                         Ok(())
@@ -154,16 +171,25 @@ impl LocalApplication {
                 }
             });
             let weak = window.as_weak();
-            let mut notified = false;
-            window.window().set_rendering_notifier(move |state, _| {
-                if matches!(state, slint::RenderingState::AfterRendering) && !notified {
-                    notified = true;
-                    // The first frame proves that the native window exists. Queue UI
-                    // work after rendering; Slint APIs must not be reentered here.
-                    let _ =
-                        weak.upgrade_in_event_loop(|window| window.invoke_native_window_ready());
-                }
-            })?;
+            if !cfg!(target_os = "macos") && crate::platform::desktop::software_renderer() {
+                // The software renderer has no rendering notifier. A queued timer
+                // runs after show() has created the native desktop window.
+                slint::Timer::single_shot(std::time::Duration::from_millis(16), move || {
+                    if let Some(window) = weak.upgrade() {
+                        window.invoke_native_window_ready();
+                    }
+                });
+            } else {
+                let mut notified = false;
+                window.window().set_rendering_notifier(move |state, _| {
+                    if matches!(state, slint::RenderingState::AfterRendering) && !notified {
+                        notified = true;
+                        // Queue UI work after rendering; Slint APIs must not be reentered here.
+                        let _ = weak
+                            .upgrade_in_event_loop(|window| window.invoke_native_window_ready());
+                    }
+                })?;
+            }
         }
         Ok(Self {
             window,
@@ -172,6 +198,7 @@ impl LocalApplication {
             integration,
             _appearance: appearance,
             _recovery: recovery,
+            #[cfg(target_os = "macos")]
             _chrome: chrome,
         })
     }
@@ -191,12 +218,31 @@ impl LocalApplication {
     pub fn run(&self, runtime: &tokio::runtime::Runtime) -> AppResult<()> {
         // Slint polls local reconciliation futures on the main thread outside Tokio's executor.
         let _entered = runtime.enter();
+        #[cfg(target_os = "macos")]
         self.tray.show()?;
+        #[cfg(not(target_os = "macos"))]
+        {
+            let tray_available = self.tray.show().is_ok();
+            self.window
+                .set_can_hide_to_tray(tray_available && cfg!(target_os = "windows"));
+            if !tray_available {
+                crate::diagnostics::record(
+                    crate::diagnostics::DiagnosticEvent::DesktopCapabilityUnavailable {
+                        capability: crate::diagnostics::DesktopCapability::Tray,
+                    },
+                );
+                self.window.set_native_message(
+                    "Tray unavailable. Closing exits Bulletnotes after saving.".into(),
+                );
+                self.window.set_native_warning(true);
+            }
+        }
         self.show()?;
         slint::run_event_loop_until_quit()?;
         Ok(())
     }
 }
+#[cfg(target_os = "macos")]
 pub(super) fn capture(window: &AppWindow) -> AppResult<WindowPlacement> {
     let frame = native_window(window.window())?.frame();
     Ok(WindowPlacement {
@@ -207,6 +253,7 @@ pub(super) fn capture(window: &AppWindow) -> AppResult<WindowPlacement> {
         pinned: window.get_is_pinned(),
     })
 }
+#[cfg(target_os = "macos")]
 pub(super) fn restore_window(window: &AppWindow, saved: Option<&WindowPlacement>) -> AppResult<()> {
     let mtm = MainThreadMarker::new().ok_or("window restoration requires main thread")?;
     let native = native_window(window.window())?;
@@ -237,6 +284,9 @@ pub(super) fn restore_window(window: &AppWindow, saved: Option<&WindowPlacement>
     Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
+pub(super) use crate::platform::desktop::{capture, restore_window};
+
 fn bind_lifecycle(
     window: &AppWindow,
     local: LocalUi,
@@ -249,6 +299,9 @@ fn bind_lifecycle(
         let appearance = appearance.clone();
         let recovery = recovery.clone();
         let action = move || {
+            let intent = weak.upgrade().map_or(intent, |window| {
+                close_intent(intent, window.get_can_hide_to_tray())
+            });
             if !local.prepare_close(intent) {
                 return;
             }

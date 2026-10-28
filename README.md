@@ -1,6 +1,6 @@
 # Bulletnotes
 
-A native Rust/Slint macOS quick-note development client for SilverBullet, with automatic sync, whole-space browsing, and custom themes.
+A native Rust/Slint quick-note development client for SilverBullet on macOS, Windows, and Linux, with automatic sync, whole-space browsing, and custom themes.
 
 **Current state: implemented development build.** Local persistence, themes, automatic guarded synchronization, compatible-edit merging and separate recovery copies are implemented. The note window uses circular header controls and an independent capsule footer, with a durable synced scratchpad stack under `Quick Notes/`. Visible Markdown source has theme-aware heading weights/colors, bold, italics, strikethrough, muted punctuation, underlined link destinations, and code backgrounds. List/task prefixes paint bullets and clickable boxes through a pinned Slint extension. Source editing commands use one-step undo/redo; search shows literal, match-centered highlighted previews. Blur remains deferred. Exact selection/IME/VoiceOver, hardware/OS coverage, performance and distribution gates remain explicit.
 

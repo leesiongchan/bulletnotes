@@ -15,7 +15,6 @@ impl SecretToken {
         header.set_sensitive(true);
         Ok(Self(header))
     }
-    #[cfg(target_os = "macos")]
     pub(crate) fn credential_bytes(&self) -> &[u8] {
         &self.0.as_bytes()["Bearer ".len()..]
     }

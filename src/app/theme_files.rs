@@ -33,6 +33,7 @@ pub fn save_theme_file(path: &Path, theme: &Theme) -> Result<(), ThemeFileError>
     temporary.write_all(&bytes)?;
     temporary.as_file().sync_all()?;
     temporary.persist(path).map_err(|error| error.error)?;
+    #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())
 }

@@ -16,7 +16,7 @@ export component AppWindow inherits Window {
     min-width: 400px;
     min-height: 440px;
     background: transparent;
-    no-frame: true;
+    no-frame: Platform.os == OperatingSystemType.macos;
     resize-border-width: 0px;
     always-on-top: root.is-pinned;
     in property <UiTheme> theme;
@@ -162,6 +162,8 @@ export component AppWindow inherits Window {
     in property <string> native-message;
     in property <bool> native-warning:false;
     in property <bool> hotkey-busy:false;
+    in property <bool> can-hide-to-tray:true;
+    property <string> shortcut-modifier:Platform.os == OperatingSystemType.macos ? "Command" : "Control";
     callback apply-hotkey();
     in property <bool> prefers-reduced-motion:false;
     in property <bool> prefers-reduced-transparency:false;
@@ -385,13 +387,13 @@ export component AppWindow inherits Window {
                 appearance-button := ActionButton {
                     x:82px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
-                    icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, Command comma";
+                    icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, " + root.shortcut-modifier + " comma";
                     clicked => {root.show-appearance();}
                 }
                 browse := ActionButton {
                     x:120px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
-                    icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, Command K";
+                    icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, " + root.shortcut-modifier + " K";
                     clicked => {root.browse-pages();}
                 }
                 Text {
@@ -404,14 +406,14 @@ export component AppWindow inherits Window {
                 new-button := ActionButton {
                     x:parent.width - 82px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0 && !root.lifecycle-pending;
-                    icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, Command N";
+                    icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, " + root.shortcut-modifier + " N";
                     clicked => {root.new-note();}
                 }
                 pin := ActionButton {
                     x:parent.width - 42px; y:6px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/pin.svg");
-                    label:root.is-pinned ? "Unpin note, Command P" : "Pin above other windows, Command P";
+                    label:root.is-pinned ? "Unpin note, " + root.shortcut-modifier + " P" : "Pin above other windows, " + root.shortcut-modifier + " P";
                     selected:root.is-pinned; clicked => {root.toggle-pin();}
                 }
             }
@@ -436,17 +438,17 @@ export component AppWindow inherits Window {
                         Text {text:root.status-text; color:root.theme.muted; font-size:9px; vertical-alignment:center; overflow:elide;}
                     }
                     back := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, Command left bracket";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, " + root.shortcut-modifier + " left bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-older && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(-1);}
                     }
                     next := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, Command right bracket";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, " + root.shortcut-modifier + " right bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-newer && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(1);}
                     }
                     newest := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, Command 1";
+                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, " + root.shortcut-modifier + " 1";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-jump-to-newest && !root.lifecycle-pending;
                         clicked => {root.jump-to-newest();}
                     }

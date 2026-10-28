@@ -136,7 +136,6 @@ fn new_drafts_are_recorded_as_the_last_visited_note_after_creation_acknowledges(
     );
 }
 
-#[cfg(target_os = "macos")]
 #[test]
 fn hotkey_conflict_preserves_the_previous_registration() {
     use bulletnotes::platform::hotkey::{HotkeyBackend, HotkeyError, HotkeyRegistration};

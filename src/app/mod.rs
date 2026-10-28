@@ -1,11 +1,11 @@
 pub mod appearance;
 pub mod appearance_ui;
 pub mod coordinator;
+pub mod desktop_ui;
 pub mod editor;
 pub mod find;
 pub mod local_ui;
 pub mod model;
-#[cfg(target_os = "macos")]
 pub mod native_app;
 pub mod navigation;
 pub mod scratchpads;
@@ -25,8 +25,9 @@ pub mod recovery_ui;
 
 #[cfg(target_os = "macos")]
 pub mod native_ui;
+#[cfg(not(target_os = "macos"))]
+pub use desktop_ui as native_ui;
 
-#[cfg(target_os = "macos")]
 pub mod diagnostics_ui;
 
 mod lifecycle;

@@ -10,6 +10,7 @@ default = []
 protocol-validation = []
 
 [dependencies]
+directories = "=6.0.0"
 pulldown-cmark = { version = "=0.13.4", default-features = false }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["std", "fmt", "json", "registry"] }
@@ -28,22 +29,32 @@ gix-imara-diff = "=0.3.1"
 unicode-segmentation = "=1.13.3"
 sha2 = "=0.11.1"
 url = "=2.5.8"
-slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-skia", "unstable-wgpu-29", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-skia", "renderer-software", "unstable-wgpu-29", "unstable-winit-030", "accessibility", "compat-1-18", "raw-window-handle-06", "system-tray"] }
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "wayland"] }
+global-hotkey = "=0.9.0"
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+keyring-core = "=1.0.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "=1.1.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "=1.0.1", default-features = false, features = ["rt-async-io-crypto-rust"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "=3.7.0"
-rfd = { version = "=0.17.2", default-features = false }
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSView", "NSWindow", "NSResponder", "NSApplication", "NSEvent", "NSButton", "NSControl", "NSScreen", "NSAppearance", "NSWorkspace", "NSRunningApplication", "NSAccessibility", "NSAnimation", "NSAnimationContext", "libc", "block2"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo", "NSFileManager", "NSPathUtilities", "NSURL", "NSArray", "NSError", "NSGeometry", "NSNotification", "NSDistributedNotificationCenter", "NSAppleEventManager", "NSAppleEventDescriptor", "NSOperation", "NSKeyValueObserving", "NSDictionary", "block2"] }
 raw-window-handle = "=0.6.2"
 block2 = "=0.6.2"
-global-hotkey = "=0.9.0"
 
 [build-dependencies]
 slint-build = "=1.18.1"
 
 [dev-dependencies]
+keyring-core = "=1.0.1"
 i-slint-core = "=1.18.1"
 i-slint-backend-testing = { version = "=1.18.1", features = ["renderer-skia"] }
 axum = { version = "=0.8.9", default-features = false, features = ["tokio", "http1", "json"] }
@@ -79,6 +90,7 @@ i-slint-core = { git = "https://github.com/leesiongchan/slint", rev = "20e807141
 i-slint-backend-winit = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
 i-slint-core-macros = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
 i-slint-renderer-skia = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
+i-slint-renderer-software = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
 vtable = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
 vtable-macro = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }
 const-field-offset = { git = "https://github.com/leesiongchan/slint", rev = "20e807141ad55c2a249b3c6756ce157a4fb0033d" }

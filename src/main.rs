@@ -1,7 +1,8 @@
-#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-compile_error!("Bulletnotes supports Apple Silicon macOS only; build for aarch64-apple-darwin.");
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
-#[cfg(target_os = "macos")]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     use bulletnotes::{
         app::{
@@ -29,7 +30,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if activated {
                 return Ok(());
             }
-            return Err("Bulletnotes is already open. Reopen the existing app from its BN menu; a second writer was not opened".into());
+            return Err("Bulletnotes is already open. Reopen the existing app from the Dock, taskbar, or tray menu; a second writer was not opened".into());
         }
         Err(error) => return Err(error.into()),
     };
@@ -78,7 +79,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     runtime.shutdown_timeout(std::time::Duration::from_millis(100));
     result
 }
-#[cfg(target_os = "macos")]
 fn main() {
     let arguments: Vec<_> = std::env::args_os().collect();
     if arguments.len() > 1 {
@@ -108,8 +108,4 @@ fn main() {
             .show();
         std::process::exit(1);
     }
-}
-#[cfg(not(target_os = "macos"))]
-fn main() {
-    eprintln!("Bulletnotes currently requires macOS.");
 }

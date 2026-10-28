@@ -8,6 +8,14 @@ pub(crate) enum CloseIntent {
     Quit,
 }
 
+pub(crate) fn close_intent(intent: CloseIntent, can_hide: bool) -> CloseIntent {
+    if intent == CloseIntent::Hide && !can_hide {
+        CloseIntent::Quit
+    } else {
+        intent
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Phase {
     #[default]
@@ -83,6 +91,14 @@ impl Lifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closing_without_a_reliable_tray_quits_instead_of_stranding_the_window() {
+        assert_eq!(close_intent(CloseIntent::Hide, false), CloseIntent::Quit);
+        assert_eq!(close_intent(CloseIntent::Hide, true), CloseIntent::Hide);
+        assert_eq!(close_intent(CloseIntent::Quit, false), CloseIntent::Quit);
+        assert_eq!(close_intent(CloseIntent::Quit, true), CloseIntent::Quit);
+    }
 
     #[test]
     fn preparation_freezes_before_any_async_work_and_rejects_overlaps() {

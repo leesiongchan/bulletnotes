@@ -284,12 +284,10 @@ pub fn bind(
             state.message("Theme import cancelled");
         });
     }
-    #[cfg(target_os = "macos")]
     bind_dialogs(window, &state);
     Ok(AppearanceUi(state))
 }
 
-#[cfg(target_os = "macos")]
 async fn blocking_file<T: Send + 'static>(
     job: impl FnOnce() -> Result<T, super::theme_files::ThemeFileError> + Send + 'static,
 ) -> Result<T, super::theme_files::ThemeFileError> {
@@ -303,7 +301,6 @@ async fn blocking_file<T: Send + 'static>(
         .await
         .map_err(|_| std::io::Error::other("theme file worker stopped"))?
 }
-#[cfg(target_os = "macos")]
 fn bind_dialogs(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
