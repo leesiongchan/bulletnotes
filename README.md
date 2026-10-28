@@ -1,19 +1,45 @@
 # Bulletnotes
 
-A native Rust/Slint quick-note development client for SilverBullet on macOS, Windows, and Linux, with automatic sync, whole-space browsing, and custom themes.
+A small desktop notebook for [SilverBullet](https://silverbullet.md/). Capture thoughts in Markdown, keep working offline, and sync when you’re connected.
 
-**Current state: implemented development build.** Local persistence, themes, automatic guarded synchronization, compatible-edit merging and separate recovery copies are implemented. The note window uses circular header controls and an independent capsule footer, with a durable synced scratchpad stack under `Quick Notes/`. Visible Markdown source has theme-aware heading weights/colors, bold, italics, strikethrough, muted punctuation, underlined link destinations, and code backgrounds. List/task prefixes paint bullets and clickable boxes through a pinned Slint extension. Source editing commands use one-step undo/redo; search shows literal, match-centered highlighted previews. Blur remains deferred. Exact selection/IME/VoiceOver, hardware/OS coverage, performance and distribution gates remain explicit.
+<p align="center">
+  <img src="docs/screenshots/light.png" alt="Bulletnotes note editor in a light theme" width="45%">
+  <img src="docs/screenshots/dark.png" alt="Bulletnotes note editor in a dark theme" width="45%">
+</p>
 
-## Documentation
+## What it does
 
-- [Development usage](docs/usage.md): features, shortcuts, sync and recovery behavior.
-- [Build and artifact verification](docs/build.md): toolchain, pinned Slint patch, packaging and release prerequisites.
-- [Themes](docs/themes.md): palette file format and the bundled catalog.
+- **Capture quickly:** create scratchpads that sync to `Quick Notes/` in your SilverBullet space.
+- **Work offline:** edits are saved locally and synced when a compatible server is available.
+- **Find your notes:** search across pages or within the current note.
+- **Write in Markdown:** edit source with syntax highlighting, task checkboxes, and formatting shortcuts.
+- **Make it yours:** choose light and dark themes, font size, and plain, dotted, ruled, or grid paper.
+- **Keep your work:** conflicting edits are preserved in recovery pages; deleted notes go to Trash.
 
-## Development
+## Get started
+
+Download a development build from [GitHub Releases](https://github.com/leesiongchan/bulletnotes/releases), or build from source below. Bulletnotes targets macOS 14+ on Apple Silicon, and Windows and Linux on x64 or ARM64. Development builds are not production releases; see the [build notes](docs/build.md) for platform requirements and installation details.
+
+Open Bulletnotes and use **Settings** to connect to your SilverBullet server over HTTPS. You can save the token in your system credential store or use it for the current session. Notes can be captured locally before connecting.
+
+## Shortcuts
+
+| Action | macOS | Windows / Linux |
+| --- | --- | --- |
+| New scratchpad | ⌘ N | Ctrl N |
+| Search pages | ⌘ K | Ctrl K |
+| Find in note | ⌘ F | Ctrl F |
+| Older / newer scratchpad | ⌘ [ / ⌘ ] | Ctrl [ / Ctrl ] |
+| Appearance settings | ⌘ , | Ctrl , |
+
+See the [usage guide](docs/usage.md) for editing shortcuts, sync, and recovery.
+
+## Build from source
+
+Install Rust 1.99.1 and the native dependencies for your platform, then run:
 
 ```sh
-scripts/check.sh   # fmt, strict all-feature Clippy, and the test suite
+rustup run 1.99.1 cargo run
 ```
 
-Use `rustup run 1.99.1 cargo ...` when the session sets a different `RUSTUP_TOOLCHAIN` override.
+For platform prerequisites, packaging, and development checks, see the [build guide](docs/build.md). For custom palettes, see the [theme guide](docs/themes.md).
