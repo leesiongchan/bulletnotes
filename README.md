@@ -4,6 +4,8 @@
 
 A small desktop notebook for [SilverBullet](https://silverbullet.md/). Capture thoughts in Markdown, keep working offline, and sync when you’re connected.
 
+[Explore Bulletnotes](https://leesiongchan.github.io/bulletnotes/) · [Product page development](website/README.md)
+
 <p align="center">
   <img src="docs/screenshots/light.png" alt="Bulletnotes note editor in a light theme" width="45%">
   <img src="docs/screenshots/dark.png" alt="Bulletnotes note editor in a dark theme" width="45%">
