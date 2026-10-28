@@ -24,6 +24,16 @@ pub(super) struct Worker {
 struct InstanceGuard {
     _file: File,
 }
+impl Drop for InstanceGuard {
+    fn drop(&mut self) {
+        // A concurrently forked child can retain the lock after this descriptor closes.
+        if let Err(error) = self._file.unlock() {
+            tracing::warn!(%error, "Failed to release local store ownership");
+        } else {
+            tracing::debug!(pid = std::process::id(), "Local store ownership released");
+        }
+    }
+}
 pub(super) type Job = Box<dyn FnOnce(&mut Worker) + Send>;
 pub(super) enum Command {
     Run(Job),
@@ -205,4 +215,28 @@ pub fn owner_process_id(path: &Path) -> Result<u32, StoreError> {
         return Err(StoreError::InvalidData);
     }
     Ok(pid)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ownership_is_released_while_an_inherited_descriptor_remains_open() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.sqlite");
+        let guard = acquire_instance_lock(&path).unwrap();
+        let inherited = guard._file.try_clone().unwrap();
+        drop(guard);
+
+        let reopened = acquire_instance_lock(&path)
+            .expect("a duplicate descriptor must not retain ownership after shutdown");
+        drop(inherited);
+        assert!(matches!(
+            acquire_instance_lock(&path),
+            Err(StoreError::AlreadyRunning)
+        ));
+        drop(reopened);
+        assert!(acquire_instance_lock(&path).is_ok());
+    }
 }

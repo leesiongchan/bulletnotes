@@ -39,7 +39,8 @@ with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
             sys.exit("Uncovered attribution warning: " + line)
         warnings.add(match.groups())
     license_file = root / "packaging/Slint-License.md"
-    full_text = license_file.read_bytes()
+    # Windows Git checkouts may use CRLF while registry sources use LF.
+    full_text = license_file.read_bytes().replace(b"\r\n", b"\n")
     components = []
     for name, version in sorted(warnings):
         package = packages[(name, version)]
@@ -48,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
         clarification = config[name]["clarify"]
         reference = clarification["files"][0]
         source = pathlib.Path(package["manifest_path"]).parent / reference["path"]
-        source_bytes = source.read_bytes()
+        source_bytes = source.read_bytes().replace(b"\r\n", b"\n")
         if hashlib.sha256(source_bytes).hexdigest() != reference["checksum"] or source_bytes != full_text:
             sys.exit("Slint license text changed; review attribution")
         components.append(name + " " + version)

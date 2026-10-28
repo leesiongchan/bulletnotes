@@ -1,9 +1,16 @@
 """Safety contracts for the development desktop packager (no compiler required)."""
 import importlib.util
+import io
 import json
 import pathlib
+import runpy
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/package-desktop.py'
@@ -14,6 +21,56 @@ class DesktopPackagingTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('package_desktop', SCRIPT)
         self.package = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.package)
+
+    def generate_notices(self, bundled_license, source_license):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / 'scripts').mkdir()
+            (root / 'packaging').mkdir()
+            source = root / 'dependency/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md'
+            source.parent.mkdir(parents=True)
+            source.write_bytes(source_license)
+            (root / 'packaging/Slint-License.md').write_bytes(bundled_license)
+            shutil.copy(ROOT / 'packaging/about.toml', root / 'packaging/about.toml')
+            script = root / 'scripts/generate-notices.py'
+            shutil.copy(ROOT / 'scripts/generate-notices.py', script)
+            output = root / 'notices.html'
+            metadata = {'packages': [{
+                'name': 'slint', 'version': '1.18.1',
+                'license': 'LicenseRef-Slint-Royalty-free-2.0',
+                'manifest_path': str(root / 'dependency/Cargo.toml'),
+            }]}
+
+            def cargo_about(command, **kwargs):
+                pathlib.Path(command[command.index('--output-file') + 1]).write_text('<html></html>')
+                return subprocess.CompletedProcess(command, 0, stderr=
+                    "WARN LicenseRef-Slint-Royalty-free-2.0 has no license file for crate 'slint 1.18.1'\n")
+
+            with mock.patch.object(sys, 'argv', [str(script), '--output', str(output)]), \
+                    mock.patch('subprocess.check_output', return_value=json.dumps(metadata).encode()), \
+                    mock.patch('subprocess.run', side_effect=cargo_about), \
+                    redirect_stdout(io.StringIO()):
+                runpy.run_path(str(script), run_name='__main__')
+            return output.read_text(encoding='utf-8')
+
+    def test_notices_accept_windows_line_endings(self):
+        license_text = (ROOT / 'packaging/Slint-License.md').read_bytes().replace(b'\r\n', b'\n')
+        for bundled_eol in (b'\n', b'\r\n'):
+            for source_eol in (b'\n', b'\r\n'):
+                with self.subTest(bundled_eol=bundled_eol, source_eol=source_eol):
+                    rendered = self.generate_notices(
+                        license_text.replace(b'\n', bundled_eol),
+                        license_text.replace(b'\n', source_eol))
+                    self.assertIn('Slint Royalty-free License 2.0', rendered)
+                    self.assertIn('slint 1.18.1', rendered)
+
+    def test_notices_reject_changed_license_text(self):
+        license_text = (ROOT / 'packaging/Slint-License.md').read_bytes()
+        changed = license_text + b'Changed license terms\n'
+        for bundled, source in [(license_text, changed), (changed, license_text), (changed, changed)]:
+            with self.subTest(bundled_changed=bundled == changed, source_changed=source == changed), \
+                    self.assertRaisesRegex(SystemExit, 'Slint license text changed'):
+                self.generate_notices(bundled, source)
 
     def test_release_inputs_reject_injection_and_wrong_tags(self):
         for version in ['1.2.3;touch bad', '../1.2.3', '01.2.3', '1.2.3-01', '1.2.3-']:
