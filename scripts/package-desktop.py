@@ -18,7 +18,6 @@ TOOLCHAIN = '1.99.1'
 TAURI_VERSION = '2.12.4'
 TARGETS = {
     'aarch64-apple-darwin': ('Darwin', 'arm64', ['app', 'dmg']),
-    'x86_64-apple-darwin': ('Darwin', 'x86_64', ['app', 'dmg']),
     'x86_64-pc-windows-msvc': ('Windows', 'AMD64', ['nsis']),
     'aarch64-pc-windows-msvc': ('Windows', 'ARM64', ['nsis']),
     'x86_64-unknown-linux-gnu': ('Linux', 'x86_64', ['deb', 'appimage']),

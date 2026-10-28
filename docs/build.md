@@ -1,7 +1,8 @@
 # Build and release desktop artifacts
 
-The desktop build targets are macOS 14+, Windows, and Linux, each on x64 and
-ARM64. Mobile, web, and embedded targets are outside this release matrix.
+The desktop build targets are macOS 14+ on Apple Silicon (ARM64), and Windows
+and Linux on x64 and ARM64. Intel macOS is unsupported. Mobile, web, and embedded
+targets are outside this release matrix.
 Windows/Linux native execution and GPU behavior must be verified on those hosts;
 a successful macOS check alone does not establish their support.
 
@@ -26,7 +27,7 @@ substitute one of these targets:
 
 | OS | Rust targets | Downloads |
 | --- | --- | --- |
-| macOS | `aarch64-apple-darwin`, `x86_64-apple-darwin` | DMG and app ZIP |
+| macOS | `aarch64-apple-darwin` | DMG and app ZIP |
 | Windows | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` | NSIS installer |
 | Linux | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | deb and AppImage |
 
@@ -47,13 +48,13 @@ launch as unobserved.
 ## CI and development releases
 
 The **Desktop checks** workflow runs formatting, strict all-feature Clippy, Rust
-tests, and packaging contract tests on all six native runners for pushes and pull
+tests, and packaging contract tests on all five native runners for pushes and pull
 requests. **Development desktop release** repeats those gates before packaging.
-Use **Actions → Development desktop release → Run workflow** to download the six
+Use **Actions → Development desktop release → Run workflow** to download the five
 artifact sets without publishing a release.
 
 Pushing a matching version tag automatically creates a GitHub **prerelease** with
-all platform downloads and GitHub-generated release notes after all six targets
+all platform downloads and GitHub-generated release notes after all five targets
 pass. The installation and verification notes appear before the generated
 changelog. For the current version, from a committed checkout:
 
@@ -123,7 +124,7 @@ inherited renderer overrides. Windows uses DX12/Vulkan and Linux uses Vulkan;
 on Windows/Linux for CI or fallback. Native GPU validation remains necessary.
 Slint's version-specific `unstable-wgpu-29` and `unstable-winit-030` APIs are pinned
 and isolated in the platform/desktop adapters; review them when upgrading Slint.
-The macOS deployment target is 14.0 on both architectures.
+The macOS ARM64 deployment target is 14.0.
 
 ## Distribution prerequisites
 

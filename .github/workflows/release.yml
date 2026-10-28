@@ -20,8 +20,6 @@ jobs:
         include:
           - runner: macos-15
             target: aarch64-apple-darwin
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
           - runner: windows-11-arm
@@ -124,10 +122,10 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, pathlib
           reports = list(pathlib.Path('packages').glob('*.verification.json'))
-          expected = {'aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc', 'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu'}
+          expected = {'aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc', 'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu'}
           evidence = [json.loads(report.read_text()) for report in reports]
-          if len(evidence) != 6 or {report['target'] for report in evidence} != expected:
-              raise SystemExit('All six target reports are required before publication')
+          if len(evidence) != 5 or {report['target'] for report in evidence} != expected:
+              raise SystemExit('All five target reports are required before publication')
           for report in evidence:
               for filename, digest in report['artifacts'].items():
                   path = pathlib.Path('packages') / filename
@@ -135,7 +133,7 @@ jobs:
                       raise SystemExit('Downloaded artifact checksum mismatch')
           PY
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Development desktop builds for macOS 14+, Windows, and Linux, on x64 and ARM64.
+          Development desktop builds for macOS 14+ on ARM64, and Windows and Linux on x64 and ARM64.
 
           macOS: open the DMG and drag Bulletnotes to Applications. The app is ad-hoc signed and is not notarized by Apple. Windows: run the unsigned NSIS installer. Linux: install the deb package or make the AppImage executable and run it. These are development artifacts, and operating-system trust prompts are expected.
 

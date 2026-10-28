@@ -26,7 +26,7 @@ for name in ['ThirdPartyNotices.html','Slint-License.md']:
  resource=app/'Contents/Resources'/name
  if not resource.is_file() or resource.stat().st_size==0:fail('required attribution resource is missing')
 architecture=run(['xcrun','lipo','-archs',str(binary)],'architecture check').stdout.strip().split()
-if architecture not in [['arm64'], ['x86_64']]:fail('macOS artifacts require a thin arm64 or x86_64 binary')
+if architecture!=['arm64']:fail('macOS artifacts require a thin arm64 binary; Intel and universal artifacts are unsupported')
 load=run(['xcrun','vtool','-show-build',str(binary)],'deployment target inspection').stdout
 minimum=re.findall(r'^\s*minos\s+(\S+)',load,re.M)
 if not minimum or any(value not in ['14.0','14.0.0'] for value in minimum):fail('Mach-O deployment target must be 14.0')
