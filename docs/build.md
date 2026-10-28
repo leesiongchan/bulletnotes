@@ -16,7 +16,7 @@ override the toolchain file.
 ```sh
 bash scripts/check.sh
 python3 -m unittest discover -s tests -p 'test_package_desktop.py'
-rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --locked
+rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --features cli --locked
 rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked
 python3 scripts/package-desktop.py --version 0.1.0 --target aarch64-apple-darwin --output target/packages/local
 ```
