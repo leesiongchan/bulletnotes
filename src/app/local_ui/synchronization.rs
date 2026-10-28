@@ -88,11 +88,6 @@ impl LocalUi {
             );
         }
     }
-    pub fn refresh_sync(&self) {
-        if let Some(sync) = self.0.sync.handle.borrow().as_ref() {
-            sync.refresh();
-        }
-    }
     pub fn set_active(&self, active: bool) {
         if let Some(sync) = self.0.sync.handle.borrow().as_ref() {
             sync.set_active(active);

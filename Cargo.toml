@@ -8,8 +8,6 @@ publish = false
 [features]
 default = []
 protocol-validation = []
-native-validation = ["objc2-app-kit/NSVisualEffectView", "objc2-app-kit/NSColor", "objc2-app-kit/NSGraphics", "objc2-app-kit/NSApplication", "objc2-app-kit/NSWorkspace", "objc2-app-kit/NSRunningApplication", "objc2-app-kit/NSButton", "objc2-app-kit/NSControl", "objc2-app-kit/NSEvent", "objc2-app-kit/NSGraphicsContext", "objc2-foundation/NSGeometry", "objc2-app-kit/block2"]
-renderer-review = ["slint/renderer-skia-opengl"]
 
 [dependencies]
 pulldown-cmark = { version = "=0.13.4", default-features = false }
@@ -49,7 +47,6 @@ slint-build = "=1.18.1"
 i-slint-core = "=1.18.1"
 i-slint-backend-testing = { version = "=1.18.1", features = ["renderer-skia"] }
 axum = { version = "=0.8.9", default-features = false, features = ["tokio", "http1", "json"] }
-png = "=0.18.1"
 
 [lints.clippy]
 all = "warn"
@@ -70,14 +67,6 @@ required-features = ["protocol-validation"]
 name = "sync_lifecycle"
 required-features = ["protocol-validation"]
 
-[[example]]
-name = "sync_review"
-required-features = ["native-validation", "protocol-validation"]
-
-[[example]]
-name = "recovery_review"
-required-features = ["native-validation", "protocol-validation"]
-
 [[bench]]
 name = "interaction"
 harness = false
@@ -86,14 +75,6 @@ harness = false
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
-
-[[example]]
-name = "renderer_review"
-required-features = ["native-validation", "renderer-review"]
-
-[[example]]
-name = "editor_reconciliation_review"
-required-features = ["native-validation"]
 
 [patch.crates-io]
 i-slint-common = { path = "target/slint-source-highlighting/crates/i-slint-common-1.18.1" }

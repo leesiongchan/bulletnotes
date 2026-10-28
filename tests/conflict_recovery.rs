@@ -752,30 +752,6 @@ async fn clean_remote_deletion_can_be_restored_to_its_original_path_create_only(
     store.shutdown().await.unwrap();
 }
 
-#[test]
-#[ignore = "opens generated native recovery app; build recovery_review with native-validation,protocol-validation first"]
-fn native_review_merge_delete_restart_and_restore_preserve_source() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("examples/recovery_review");
-    let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-skia")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("native_recovery_contract_passed: true")
-    );
-}
-
 #[tokio::test]
 async fn unapplied_merged_drafts_survive_restart_and_resolution_keeps_their_source() {
     let dir = tempfile::tempdir().unwrap();

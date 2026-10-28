@@ -1,9 +1,8 @@
 # Bulletnotes development usage
 
 Bulletnotes is a native Rust/Slint macOS client for a SilverBullet space. It is
-currently a development build. [Release evidence](validation/release-matrix.md)
-tracks the remaining input, accessibility, selection, performance, and distribution
-gates. The note window has solid paper. Markdown source stays visible and editable,
+currently a development build; input, accessibility, selection, performance, and
+distribution release gates remain open. The note window has solid paper. Markdown source stays visible and editable,
 with bold first/second-level headings, regular-weight lower headings, true bold and
 italics (including combined emphasis), muted punctuation and strikethrough text,
 underlined link destinations, and subtle code backgrounds. Heading, link, and syntax colors
@@ -67,9 +66,7 @@ stack is empty. There is no automatic expiry. Command+P toggles Pin.
 
 Caret, directed selection and scroll are saved when switching notes or leaving
 the app, and restored when returning or relaunching. Auxiliary views retain the
-editor. Generated native restart and failure/retry checks are recorded in
-[live position validation](validation/editor-position.md); VoiceOver and the
-broader supported-device release checks remain open.
+editor. VoiceOver and the broader supported-device release checks remain open.
 
 ## Source editing shortcuts
 
@@ -86,8 +83,6 @@ delimiter, code, or frontmatter boundary decline the command. Heading cycling
 also declines list items. Line movement preserves literal content, mixed line
 endings, and the final newline. Commands wait while native composition is active
 or its state is unknown, and respect read-only, recovery, and local-save barriers.
-The [interaction validation record](validation/antinote-interactions.md) describes
-the real Pinyin coverage and remaining input/accessibility gates.
 
 ## Appearance
 
@@ -136,8 +131,7 @@ Connection settings target an HTTPS SilverBullet server; the initial endpoint is
 `https://notes.harflix.lol`. Tokens are stored in macOS Keychain only when chosen;
 session-only use remains available. Denied Keychain access does not prevent local
 capture. Server writes require successful conditional-write verification with an
-owned temporary probe page. An incompatible server remains read only. See the
-[protocol contract](validation/protocol-contract.md) for exact behavior.
+owned temporary probe page. An incompatible server remains read only.
 
 Local edits save independently of network availability. Sync uses guarded writes,
 backoff, and readback for unknown outcomes. Compatible changes merge automatically.
@@ -146,8 +140,7 @@ local edits survive, and the complete original local source becomes a separate
 recovery page. Changes is optional; retained drafts, Trash and kept versions remain
 available for explicit restoration. Sync stays pending until recovery copies are
 acknowledged too. Reused destinations use guarded reconciliation and preservation
-instead of silent overwrite. See
-[recovery behavior](validation/recovery.md).
+instead of silent overwrite.
 
 The local store is in
 `~/Library/Application Support/lol.harflix.bulletnotes/bulletnotes.sqlite`.
@@ -170,8 +163,7 @@ separate distribution prerequisites. The top-level About action includes Slint
 attribution.
 
 Run `scripts/check.sh` for formatting, strict all-feature Clippy, and automated
-regressions. Explicit native checks use `scripts/native-lifecycle-check.sh` and
-the named commands in validation documents. Run the native release benchmark with
+regressions. Run the native release benchmark with
 `rustup run 1.99.1 cargo bench --bench interaction --locked`; it opens generated
 content only and writes `target/interaction/latest.json`. The benchmark reports
 failure when a threshold is unmet; routine tests do not run it implicitly.

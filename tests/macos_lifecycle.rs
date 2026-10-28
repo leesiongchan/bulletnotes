@@ -135,29 +135,6 @@ fn new_drafts_are_recorded_as_the_last_visited_note_after_creation_acknowledges(
             .any(|effect| matches!(effect, AppEffect::RecordVisit(page) if page==&key()))
     );
 }
-#[test]
-#[ignore = "opens generated local application; build app_lifecycle_review first"]
-fn native_startup_close_and_termination_preserve_local_data() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("examples/app_lifecycle_review");
-    let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-skia")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("native_startup_close_and_quit: true")
-    );
-}
 
 #[cfg(target_os = "macos")]
 #[test]

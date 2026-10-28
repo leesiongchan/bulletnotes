@@ -42,19 +42,6 @@ impl ChromeWindow for crate::AppWindow {
         self.on_header_visibility_changed(callback);
     }
 }
-impl ChromeWindow for crate::NativePreviewWindow {
-    const FLOATING: bool = false;
-    fn hover_edges(&self, header: bool, _footer: bool) {
-        self.set_chrome_revealed(header);
-    }
-    fn visible_edges(&self) -> (bool, bool) {
-        (self.get_chrome_revealed(), false)
-    }
-    fn reset_chrome(&self) {
-        self.set_chrome_revealed(false);
-    }
-    fn observe_header(&self, _callback: Box<dyn Fn(bool, bool)>) {}
-}
 
 pub fn native_window(window: &slint::Window) -> ProbeResult<Retained<NSWindow>> {
     MainThreadMarker::new().ok_or("native chrome requires main thread")?;

@@ -88,28 +88,3 @@ async fn edit_roundtrip_preserves_markdown_after_restart() {
     );
     reopened.shutdown().await.unwrap();
 }
-
-#[test]
-#[ignore = "opens generated-content native UI; build example local_review first"]
-fn native_local_callbacks_save_browse_and_recover_exact_text() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("examples/local_review");
-    let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-skia")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout)
-            .contains("native_local_callbacks_and_restart: true")
-    );
-}

@@ -8,8 +8,6 @@ pub enum PlatformError {
     HotkeyUnavailable,
     MaterialUnavailable,
     ActivationDeclined,
-    #[cfg(target_os = "macos")]
-    Handle(raw_window_handle::HandleError),
 }
 
 impl fmt::Display for PlatformError {
@@ -24,8 +22,6 @@ impl fmt::Display for PlatformError {
                 f.write_str("native materials are deferred; solid paper is available")
             }
             Self::ActivationDeclined => f.write_str("previous application declined activation"),
-            #[cfg(target_os = "macos")]
-            Self::Handle(error) => write!(f, "native window handle: {error}"),
         }
     }
 }

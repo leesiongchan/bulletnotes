@@ -61,8 +61,6 @@ mod native {
         let renderer =
             std::env::var("BULLETNOTES_BENCH_RENDERER").unwrap_or_else(|_| "skia".into());
         match renderer.as_str() {
-            #[cfg(feature = "renderer-review")]
-            "skia-opengl" => bulletnotes::platform::renderer::select_opengl_for_review()?,
             "skia" => bulletnotes::platform::renderer::select()?,
             _ => return Err("unsupported benchmark renderer".into()),
         }

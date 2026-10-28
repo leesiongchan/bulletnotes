@@ -37,18 +37,6 @@ pub fn select() -> Result<(), slint::PlatformError> {
     })
 }
 
-/// Explicit OpenGL comparison path, excluded from production features.
-#[cfg(feature = "renderer-review")]
-pub fn select_opengl_for_review() -> Result<(), slint::PlatformError> {
-    select_once(|| {
-        slint::BackendSelector::new()
-            .backend_name("winit".into())
-            .renderer_name("skia-opengl".into())
-            .require_opengl()
-            .select()
-    })
-}
-
 /// Check the application's own view hierarchy after native rendering starts.
 /// No accessibility client, other process, or private view property is involved.
 pub fn uses_metal(window: &slint::Window) -> Result<bool, Box<dyn std::error::Error>> {

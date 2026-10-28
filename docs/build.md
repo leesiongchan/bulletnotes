@@ -38,14 +38,14 @@ a new client that uses the same store; the writer lock prevents simultaneous use
 
 Application highlighting uses the foreground-decoration API in the maintained Slint
 1.18.1 patch in `patches/slint/`. The editor also uses its experimental marker API for
-[source-width-preserving bullets and task boxes](validation/markdown-markers.md). Run this before direct Cargo commands on a fresh checkout, after
+source-width-preserving bullets and task boxes. Run this before direct Cargo commands on a fresh checkout, after
 `cargo clean`, or after changing the patch:
 
 ```sh
 python3 scripts/prepare-slint.py
 ```
 
-The check, preview, lifecycle, notice-generation, and packaging scripts run it
+The check, notice-generation, and packaging scripts run it
 automatically. Preparation uses cached crate archives when their SHA256 matches
 `patches/slint/sources.json`; otherwise it downloads the exact archives from
 `static.crates.io`, verifies them, and patches private copies under
@@ -57,9 +57,8 @@ commands work normally. The generated path stays fixed even with `CARGO_TARGET_D
 
 The original archive checksums remain committed independently of Cargo.lock, whose
 three patched entries refer to local paths. Review those checksums, the compact
-patch, and both lockfiles together for a Slint upgrade; retain all upstream license
-files. [Highlighting evidence](validation/markdown-highlighting.md) records the
-editor contract and current verification scope.
+patch, and Cargo.lock together for a Slint upgrade; retain all upstream license
+files.
 
 ## Production renderer
 
@@ -73,21 +72,12 @@ when upgrading Slint/WGPU. The editor uses the locally maintained source-decorat
 no private selection getters or unstable winit API are enabled.
 The macOS 14 deployment target remains unchanged.
 
-[Renderer evaluation](validation/metal-renderer.md) records native checks,
-performance comparisons, candidate limitations and remaining acceptance gates.
-The optional `renderer-review` feature enables an explicit Skia/OpenGL comparison
-path in development fixtures; production defaults do not enable it.
-
 ## Distribution prerequisites
 
-Distribution is not available merely because a development check passed. The
-latest [position evidence](validation/editor-position.md) records passing live
-directed selection/scroll restoration across process restart, full Pinyin input,
-signed lifecycle and isolated development-package launch checks on the current
-host. The [release matrix](validation/release-matrix.md) retains VoiceOver, other
-IMEs, physical accessibility preferences, full-screen/Spaces, supported OS/hardware
-coverage and the 1 MiB performance target. Developer ID signing and notarization
-remain separate requirements. No notarized artifact or production readiness is
+Distribution is not available merely because a development check passed. VoiceOver,
+other IMEs, physical accessibility preferences, full-screen/Spaces, supported
+OS/hardware coverage and the 1 MiB performance target remain open release checks.
+Developer ID signing and notarization remain separate requirements. No notarized artifact or production readiness is
 claimed.
 
 For an explicitly requested release, supply `BULLETNOTES_SIGNING_IDENTITY` and a

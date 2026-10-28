@@ -62,8 +62,3 @@ The [Antinote theme maker](https://antinote.io/theme-maker) defines `accent1Main
 North Star's translucent white background and fade become solid white; its `#0000000D` scrollbar becomes the equivalent `#F2F2F2` over white. Piccolo and Knight also flatten their translucent second-heading colors over paper.
 Other mapped text colors are opaque. Markdown punctuation and strikethrough share the syntax role. No runtime access
 to Antinote is required.
-
-[Theme-selection checks and installed catalog audit](validation/theme-selection.md)
-cover every palette through the production appearance callbacks and persistence.
-See [theme configuration evidence](validation/theme-configuration.md) for native
-layout comparisons and captures.

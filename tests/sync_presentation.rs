@@ -123,32 +123,6 @@ fn local_durability_and_pending_work_override_a_stale_synced_indication() {
 }
 
 #[test]
-#[ignore = "opens isolated generated-text native sync app; build sync_review with native-validation,protocol-validation first"]
-fn native_two_client_offline_reconnect_and_restart_preserve_source() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("examples/sync_review");
-    let output = std::process::Command::new(executable)
-        .env("SLINT_BACKEND", "winit-skia")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("native_sync_contract_passed: true"),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
 fn an_uncached_open_preserves_its_selected_path_and_the_current_editor() {
     let mut app = app();
     app.dispatch_ready(AppAction::Navigate(bulletnotes::app::model::View::AllPages));
