@@ -1,22 +1,25 @@
 # Bulletnotes product page
 
-Build a GitHub Pages landing page that introduces the native SilverBullet notebook and directs visitors to development builds and build instructions.
+Build a GitHub Pages landing page that introduces Bulletnotes as a simple desktop scratchpad and directs visitors to development builds and build instructions.
 
 ## Direction
 
-Proposed direction: an editorial field notebook, using Paper's cream (#FCFAF4), ink (#353B32), and forest accent (#54705C), oversize serif headlines, small monospaced annotations, layered real screenshots, and fine notebook rules. The alternate desktop scene would emphasize floating windows and motion; the notebook direction better reflects the existing icon and paper controls. This is the implementation's design choice, not a recorded user preference.
+Use Paper's cream (#FCFAF4), ink (#353B32), and forest accent (#54705C), serif headlines, and real editor screenshots. Keep the existing visual identity while replacing promotional language with straightforward explanations of scratchpads, simplicity, offline saving, and optional SilverBullet sync.
+
+The user specifically rejected the editable browser sampler and its invented editor frame/footer. All product previews must now be non-editable images from the app renderer. Palette swatches are selection controls, not representations of editor chrome.
 
 ## Experience
 
-- Header: identity, feature/appearance links, and Get Bulletnotes.
-- Hero: “A little space to think.” beside real app imagery and paper annotations.
+- Header: identity, Features/Themes links, and Get Bulletnotes.
+- Hero: “A simple scratchpad.” beside an actual editor capture.
 - Three concise benefits: capture, local work, SilverBullet sync.
-- Interactive appearance sampler: Paper/Graphite/Matcha/Rose palettes and plain/dotted/ruled/grid paper. Clearly labeled website preview; edits stay in the current tab.
+- Screenshot gallery: twelve diverse bundled themes, each with plain/dotted/ruled/grid paper. Theme/pattern controls select one of 48 captures. Captions stay outside the editor image; no textarea, editable content, resize handle, or fabricated editor chrome.
+- Three static theme screenshots show variety even without JavaScript.
 - SilverBullet explanation, keyboard shortcuts, development download/build section, and footer.
 
 ## Constraints
 
-Plain static HTML/CSS/JS, no runtime dependencies, no analytics or forms. Self-host fonts with licenses. Respect reduced motion, provide visible focus, accessible labels, and layouts down to 320px. Use existing screenshots and icon; do not fabricate product screenshots, reviews, adoption numbers, or production releases. No releases exist at implementation time. Source/build and release links must reflect this.
+Plain static HTML/CSS/JS, no runtime dependencies, no analytics or forms. Self-host fonts with licenses. Respect reduced motion, provide visible focus, accessible labels, and layouts down to 320px. Generate product screenshots using the real AppWindow and Slint Skia renderer without opening notes/settings/credentials/network; keep a reproducible capture example. Do not fabricate screenshots, reviews, adoption numbers, or production releases. No releases exist at implementation time. Source/build and release links must reflect this.
 
 GitHub Pages workflow publishes only the site directory, with immutable action pins, minimal permissions, and no persisted checkout credentials. Keep app code untouched.
 
@@ -29,4 +32,4 @@ GitHub Pages workflow publishes only the site directory, with immutable action p
 
 ## Verification
 
-Inspect desktop and mobile screenshots, exercise every sampler control and editable note, audit accessibility, check local asset/anchor resolution and JavaScript syntax, and validate workflow configuration. Confirm remote publishing status before claiming the site is live.
+Inspect desktop and mobile screenshots, exercise all 48 image selections, confirm no editable fields remain, check image/caption agreement and screenshot provenance, audit accessibility, check local asset/anchor resolution and JavaScript syntax, and validate workflow configuration. Confirm remote publishing status before claiming the site is live.
