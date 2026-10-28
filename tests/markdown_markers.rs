@@ -213,7 +213,7 @@ fn tasks_and_bullets_align_their_body_text_in_compact_slots() {
 }
 
 #[test]
-fn editor_rows_follow_antinote_font_spacing() {
+fn editor_rows_follow_font_size_spacing() {
     let source = "MMMM\nMMMM\n";
     let window = setup(source);
     for font in [11.0, 15.0, 24.0] {
@@ -229,7 +229,7 @@ fn editor_rows_follow_antinote_font_spacing() {
 }
 
 #[test]
-fn grid_pitch_and_text_inset_match_antinote() {
+fn grid_pitch_and_text_inset_match_editor_geometry() {
     let window = setup("MMMM\nMMMM\n");
     window.set_font_size_px(14.0);
     window.set_paper_style("grid".into());

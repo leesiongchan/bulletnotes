@@ -227,7 +227,7 @@ fn emphasis_punctuation_is_muted_and_struck_text_is_quiet() {
 }
 
 #[test]
-fn tartan_preserves_antinote_native_palette_components() {
+fn tartan_preserves_native_palette_components() {
     use bulletnotes::theme::ThemeId;
     use slint::Model;
     let source = "# First\n## Second\n### Third\n*Italic*\n~~Done~~\n[link](https://example.com)";

@@ -18,7 +18,7 @@ Click a visible task box to toggle its Markdown source, or use Command+Shift+K
 on the current task. Dragging, modifier clicks, and clicks on text or padding do
 not toggle tasks. Markdown inside code stays literal, and YAML frontmatter stays
 plain. Standard Markdown semantics apply,
-including `__bold__` rather than Antinote's underline convention.
+including `__bold__` for bold text.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains
 deferred.
@@ -89,11 +89,11 @@ or its state is unknown, and respect read-only, recovery, and local-save barrier
 Text size and paper controls appear before the theme collection. Command+comma
 opens these settings.
 
-Themes use AntiNote's grid-backed cards, eight color swatches, and separate sun
+Themes use grid-backed cards, eight color swatches, and separate sun
 and moon buttons. The sun assigns a palette to Light; the moon assigns it to Dark.
 Both preserve the current Light/Dark/System mode. Clicking the rest of a card
-assigns the currently effective slot. The 14 AntiNote built-ins appear first in
-their original order, followed by the remaining palettes. Cards use two columns
+assigns the currently effective slot. The 14 featured palettes appear first in
+their catalog order, followed by the remaining palettes. Cards use two columns
 when space permits and a single column in narrow windows. Settings controls use
 the macOS light/dark appearance independently of note colors.
 
@@ -106,9 +106,9 @@ colors. Solid paper and static transitions honor reduced transparency/motion.
 Import/export uses Bulletnotes JSON schema version 1, at most 32 KiB. Theme names
 contain 1–32 Unicode scalars after trimming; colors are opaque `#RRGGBB`. Duplicate
 JSON keys are rejected. New low-contrast imports require confirmation before
-adding them. Existing themes, including every bundled AntiNote palette, apply
+adding them. Existing themes, including every bundled palette, apply
 and save immediately when selected. Imported
-names cannot overwrite a built-in theme identity. Antinote theme import is deferred.
+names cannot overwrite a built-in theme identity.
 
 ```json
 {
@@ -163,7 +163,4 @@ separate distribution prerequisites. The top-level About action includes Slint
 attribution.
 
 Run `scripts/check.sh` for formatting, strict all-feature Clippy, and automated
-regressions. Run the native release benchmark with
-`rustup run 1.99.1 cargo bench --bench interaction --locked`; it opens generated
-content only and writes `target/interaction/latest.json`. The benchmark reports
-failure when a threshold is unmet; routine tests do not run it implicitly.
+regressions.

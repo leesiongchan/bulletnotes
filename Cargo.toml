@@ -67,10 +67,6 @@ required-features = ["protocol-validation"]
 name = "sync_lifecycle"
 required-features = ["protocol-validation"]
 
-[[bench]]
-name = "interaction"
-harness = false
-
 [profile.release]
 lto = "thin"
 codegen-units = 1

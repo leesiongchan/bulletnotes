@@ -9,7 +9,7 @@ use bulletnotes::{
 };
 
 #[test]
-fn all_antinote_palettes_resolve_with_cursor_and_scrollbar_colors() {
+fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
     let expected = [
         (
             "antinote-vancouver",

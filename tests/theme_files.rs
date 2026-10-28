@@ -20,7 +20,7 @@ fn import_reads_only_the_bounded_own_format() {
         load_theme_file(&path),
         Err(ThemeFileError::Theme(ThemeError::TooLarge))
     ));
-    std::fs::write(&path, b"[Antinote]\nbackground=white").unwrap();
+    std::fs::write(&path, b"[Theme]\nbackground=white").unwrap();
     assert!(load_theme_file(&path).is_err());
 }
 #[test]
