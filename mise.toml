@@ -1,5 +1,6 @@
 # Release and packaging CLIs used by CI; Rust itself stays pinned in rust-toolchain.toml.
 [tools]
 git-cliff = "2.14.2"
-tauri-cli = "2.12.4"
+# The aqua registry entry for tauri-cli has no linux/arm64 asset, so use the release assets directly.
+"github:tauri-apps/tauri" = { version = "2.12.4", version_prefix = "tauri-cli-v", bin = "cargo-tauri" }
 "github:EmbarkStudios/cargo-about" = "0.9.2"
