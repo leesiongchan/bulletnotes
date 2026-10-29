@@ -62,8 +62,8 @@ version since the latest `v*` tag:
 
 - `feat` bumps the minor version.
 - `fix` and `perf` bump the patch version.
-- A breaking change (`!` or a `BREAKING CHANGE` footer) bumps the minor
-  version while below 1.0.
+- A breaking change (`!` or a `BREAKING CHANGE` footer) bumps the major
+  version.
 - `docs`, `chore`, `ci`, `test`, `style`, `refactor` and `build` never
   release unless marked breaking.
 

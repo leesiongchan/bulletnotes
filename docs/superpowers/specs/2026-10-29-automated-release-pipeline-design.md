@@ -76,10 +76,8 @@ Verified on 2026-10-29.
     non-releasing types from bumping.
 
   Pre-convention history is therefore skipped too.
-- `[bump]`:
-  - `features_always_bump_minor = true`
-  - `breaking_always_bump_major = false` (a `!` on 0.x must not declare 1.0)
-  - `initial_tag = "v0.1.0"`
+- `[bump]`: `initial_tag = "v1.0.0"`. Releases start at 1.0, so the 0.x
+  bump options do not apply.
 - Body template: grouped entries. When no entries survive filtering, it
   prints `Initial release.`
 
@@ -233,7 +231,7 @@ unchanged.
 ## Bootstrap
 
 No tags exist. The first green `main` push after this pipeline merges
-publishes **v0.1.0**. Its notes list the earlier conventional `feat` and
+publishes **v1.0.0**. Its notes list the earlier conventional `feat` and
 `fix` commits, because the pre-convention commits are filtered out;
 `Initial release.` only appears when no grouped entries exist. From then
 on, only `feat`, `fix`, `perf` and breaking changes release.
@@ -246,10 +244,10 @@ on, only `feat`, `fix`, `perf` and breaking changes release.
   test asserts that `cargo metadata --locked` succeeds afterwards.
 - **`cliff.toml`.** Re-run the scratch-repo bump matrix against the real
   config: `docs` gives no release, `fix` a patch, `feat` a minor, `feat!` a
-  minor at 0.x. Also check the lint range fails on `Bad message` and
+  major. Also check the lint range fails on `Bad message` and
   passes on conventional commits.
 - **Workflows.** `actionlint` on both workflows.
-- **End to end.** This pipeline's own merge produces v0.1.0. Afterwards,
+- **End to end.** This pipeline's own merge produces v1.0.0. Afterwards,
   check:
   - the release is Latest and has 5 targets' assets plus reports
   - the notes render

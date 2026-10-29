@@ -36,7 +36,4 @@ commit_parsers = [
 ]
 
 [bump]
-features_always_bump_minor = true
-# A breaking change on 0.x must not silently declare 1.0.
-breaking_always_bump_major = false
-initial_tag = "v0.1.0"
+initial_tag = "v1.0.0"
