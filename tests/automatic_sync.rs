@@ -1163,6 +1163,11 @@ async fn watched_missing_uses_current_source_and_survives_denied_repair_restart(
         .save_local(key("one.md"), "newest\r\n原稿".into(), LocalRevision(1))
         .await
         .unwrap();
+    // Settle the ordinary upload so its denial cannot be mistaken for a repair denial.
+    let sync = start(&store, &f).await;
+    until(|| f.body("one.md").as_deref() == Some("newest\r\n原稿") && sync.snapshot().pending == 0)
+        .await;
+    sync.shutdown().await.unwrap();
     {
         let mut data = f.data.lock().unwrap();
         data.files.remove("one.md");
