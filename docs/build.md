@@ -49,22 +49,44 @@ launch as unobserved.
 
 The **Desktop checks** workflow runs formatting, strict all-feature Clippy, Rust
 tests, and packaging contract tests on all five native runners for pushes and pull
-requests. **Development desktop release** repeats those gates before packaging.
-Use **Actions → Development desktop release → Run workflow** to download the five
-artifact sets without publishing a release.
+requests. On pull requests it also requires every commit to follow
+[Conventional Commits](https://www.conventionalcommits.org/). Merges are
+rebase-only, so each commit lands on `main` as written and feeds the version
+calculation.
 
-Pushing a matching version tag automatically creates a GitHub **prerelease** with
-all platform downloads and GitHub-generated release notes after all five targets
-pass. The installation and verification notes appear before the generated
-changelog. For the current version, from a committed checkout:
+Releases are automatic. When **Desktop checks** passes on a push to `main`, the
+**Release** workflow asks git-cliff (configured in `cliff.toml`) for the next
+version since the latest `v*` tag:
+
+- `feat` bumps the minor version.
+- `fix` and `perf` bump the patch version.
+- A breaking change (`!` or a `BREAKING CHANGE` footer) bumps the minor
+  version while below 1.0.
+- `docs`, `chore`, `ci`, `test`, `style`, `refactor` and `build` never
+  release.
+
+When a release is due, all five targets are packaged from the tested commit.
+Only after every target passes are the `vX.Y.Z` tag and a GitHub Release
+marked Latest created together. The release notes are the installation text
+followed by the git-cliff changelog. Nothing is committed back to `main`.
+
+`Cargo.toml` holds the placeholder version `0.0.0`; release tags are the source
+of truth. `package-desktop.py` stamps `--version` into `Cargo.toml` and
+`Cargo.lock` for the build and restores both afterwards. Local builds
+therefore report `0.0.0`, while packaged builds report the version passed to
+the packager. To download the five artifact sets without publishing, use
+**Actions → Release → Run workflow**.
+
+Release assets carry GitHub build provenance attestations:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+gh attestation verify path/to/downloaded-file -R leesiongchan/bulletnotes
 ```
 
-The workflow requires no custom secrets. Only the publication job receives
-repository contents write permission. It refuses to replace an existing release.
+If publishing fails after the tag was created, delete the partial release and
+tag with `gh release delete vX.Y.Z --cleanup-tag --yes`. Then re-run the
+failed jobs of that **Release** run. The workflows require no custom secrets.
+Only the publication job receives write permissions.
 macOS CI uses `--static-only`; Windows/Linux perform isolated software-rendered
 UI smoke checks (Xvfb on Linux). These checks do not establish production GPU
 behavior. Reports distinguish observed from unobserved launch evidence.
@@ -140,6 +162,10 @@ preconfigured `BULLETNOTES_NOTARY_PROFILE` from the release environment/Keychain
 Do not store signing keys, Apple passwords, API keys or notary secrets in the
 repository. `BULLETNOTES_BUILD_NUMBER` may be set to 1–9999. Distribution also
 requires a clean committed worktree and explicit `--notarize`:
+
+`package-macos.sh` requires `--version` to equal the `Cargo.toml` version, and
+`main` and release tags hold the `0.0.0` placeholder. A numbered notarized
+build therefore needs release-version support in that script first.
 
 ```sh
 scripts/package-macos.sh --version 0.1.0 --output target/packages/release --notarize
