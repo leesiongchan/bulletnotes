@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101411" />
+    <meta
+      name="description"
+      content="A native Markdown scratchpad for the notes you need right now. Capture ideas, save locally, work offline, and connect to SilverBullet."
+    />
+    <meta property="og:title" content="Bulletnotes — Write it. Keep going." />
+    <meta
+      property="og:description"
+      content="Quick scratchpads, Markdown editing, and offline saving. A simple native app that connects to your SilverBullet space."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://leesiongchan.github.io/bulletnotes/"
+    />
+    <meta
+      property="og:image"
+      content="https://leesiongchan.github.io/bulletnotes/assets/bulletnotes-logo.png"
+    />
+    <link rel="canonical" href="https://leesiongchan.github.io/bulletnotes/" />
+    <link rel="icon" type="image/png" href="assets/bulletnotes-logo.png" />
+    <link
+      rel="preload"
+      href="assets/fonts/dm-sans.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="stylesheet" href="styles.css?v=cinematic-1" />
+    <script src="script.js?v=cinematic-1" defer></script>
+    <title>Bulletnotes — Write it. Keep going.</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header wrap">
+      <a class="wordmark" href="#" aria-label="Bulletnotes home"
+        ><img
+          src="assets/bulletnotes-logo.png"
+          alt=""
+          width="44"
+          height="44"
+        />bulletnotes<span>.</span></a
+      >
+      <nav aria-label="Main navigation">
+        <a class="nav-detail" href="#details">The app</a
+        ><a class="nav-detail" href="#appearance">The themes</a
+        ><a class="button button-small" href="#get"
+          >Get Bulletnotes <span aria-hidden="true">↗</span></a
+        >
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-kicker">
+          <p class="eyebrow">
+            <span class="status-dot" aria-hidden="true"></span>Native Markdown
+            scratchpad
+          </p>
+          <span class="development-badge">In development</span>
+        </div>
+        <h1 id="hero-title">Write it<span>.</span></h1>
+        <div class="hero-intro">
+          <p>
+            A task. A thought. A rough first draft.<br />A small scratchpad to
+            get it down and keep going.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="#get"
+              >Get Bulletnotes <span aria-hidden="true">↗</span></a
+            ><a class="text-link" href="#appearance"
+              >Explore the themes <span aria-hidden="true">↓</span></a
+            >
+          </div>
+        </div>
+        <div
+          class="hero-stage"
+          role="img"
+          aria-label="Actual Bulletnotes editor captures in Paper, Graphite, and Dot Matrix themes"
+        >
+          <div class="stage-orbit" aria-hidden="true"></div>
+          <div class="note-ensemble">
+            <img
+              class="hero-note note-left"
+              src="assets/themes/paper-plain.png"
+              alt=""
+              width="505"
+              height="552"
+            /><img
+              class="hero-note note-right"
+              src="assets/themes/dot-matrix-plain.png"
+              alt=""
+              width="505"
+              height="552"
+            /><img
+              class="hero-note note-center"
+              src="assets/themes/graphite-plain.png"
+              alt=""
+              width="505"
+              height="552"
+              fetchpriority="high"
+            />
+          </div>
+        </div>
+        <div class="hero-foot">
+          <span>macOS · Windows · Linux</span
+          ><a href="#details"
+            >Less setup. More scratchpad. <span aria-hidden="true">↓</span></a
+          >
+        </div>
+      </section>
+
+      <section
+        id="details"
+        class="details wrap section-space"
+        aria-labelledby="details-title"
+      >
+        <div class="details-statement">
+          <p class="eyebrow">01 / A small tool. A clear purpose.</p>
+          <h2 id="details-title">
+            Open.<br />Write.<br /><span>Carry on.</span>
+          </h2>
+        </div>
+        <div class="feature-rows">
+          <article class="feature-row">
+            <span class="feature-number" aria-hidden="true">01</span>
+            <div>
+              <h3>A fresh page, one shortcut away.</h3>
+              <p>
+                Start a scratchpad with ⌘N or Ctrl+N. Write a list, leave a
+                reminder, or start a draft. Markdown keeps it familiar.
+              </p>
+              <div class="feature-meta">
+                <kbd>⌘ / Ctrl</kbd><kbd>N</kbd><span>New scratchpad</span>
+              </div>
+            </div>
+          </article>
+          <article class="feature-row">
+            <span class="feature-number" aria-hidden="true">02</span>
+            <div>
+              <h3>Saved on your device.</h3>
+              <p>
+                Your edits save locally as you type. Keep working without a
+                connection and return to your notes later.
+              </p>
+              <span class="feature-meta"
+                ><span class="status-dot" aria-hidden="true"></span>Offline is
+                fine.</span
+              >
+            </div>
+          </article>
+          <article class="feature-row">
+            <span class="feature-number" aria-hidden="true">03</span>
+            <div>
+              <h3>Find the thought again.</h3>
+              <p>
+                Browse your scratchpads or search for a phrase. Cached notes
+                stay available offline.
+              </p>
+              <div class="feature-meta">
+                <kbd>⌘ / Ctrl</kbd><kbd>K</kbd><span>Search pages</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section
+        id="appearance"
+        class="appearance section-space"
+        aria-labelledby="appearance-title"
+      >
+        <div class="wrap">
+          <div class="theme-heading">
+            <p class="eyebrow">02 / Same scratchpad. Different energy.</p>
+            <h2 id="appearance-title">Change the<br /><span>mood.</span></h2>
+            <p>
+              Pick a palette. Choose your paper.<br />Make yourself at home.
+            </p>
+          </div>
+        </div>
+        <div class="theme-stage">
+          <div class="theme-aura" aria-hidden="true"></div>
+          <img
+            id="theme-neighbor-left"
+            class="neighbor neighbor-left"
+            src="assets/themes/dracula-plain.png"
+            alt="Bulletnotes in the Dracula theme."
+            width="505"
+            height="552"
+            loading="lazy"
+          /><img
+            id="theme-neighbor-right"
+            class="neighbor neighbor-right"
+            src="assets/themes/tokyo-drift-plain.png"
+            alt="Bulletnotes in the Tokyo Drift theme."
+            width="505"
+            height="552"
+            loading="lazy"
+          />
+          <figure class="theme-preview">
+            <img
+              id="theme-screenshot"
+              src="assets/themes/paper-plain.png"
+              alt="Bulletnotes editor in the Paper theme with Plain paper, showing the sample Scratchpad note."
+              width="505"
+              height="552"
+              loading="lazy"
+            />
+            <figcaption id="theme-caption" aria-live="polite">
+              <span>Paper · Plain</span><small>Actual editor preview</small>
+            </figcaption>
+          </figure>
+        </div>
+        <div class="wrap theme-bottom">
+          <div class="theme-controls" hidden>
+            <fieldset>
+              <legend>Explore 12 included themes</legend>
+              <div class="theme-options">
+                <button
+                  class="theme-option active"
+                  type="button"
+                  data-theme="paper"
+                  aria-pressed="true"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #fcfaf4;
+                      --chip-ink: #353b32;
+                      --chip-accent: #54705c;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Paper</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="graphite"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #222526;
+                      --chip-ink: #e3e4dc;
+                      --chip-accent: #b8cd9c;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Graphite</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="matcha"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #edf1e5;
+                      --chip-ink: #35442d;
+                      --chip-accent: #4d6b3c;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Matcha</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="rose"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #f7ede8;
+                      --chip-ink: #59403d;
+                      --chip-accent: #934f56;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Rose</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="tartan"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #f3f1eb;
+                      --chip-ink: #3c280a;
+                      --chip-accent: #ff7828;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Tartan</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="sanrio"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #ffffff;
+                      --chip-ink: #e876b2;
+                      --chip-accent: #84b0dd;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Sanrio</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="dracula"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #282a36;
+                      --chip-ink: #f8f8f2;
+                      --chip-accent: #bd93f9;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Dracula</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="nord"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #2e3440;
+                      --chip-ink: #d8dee9;
+                      --chip-accent: #8fbcbb;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Nord</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="catppuccin-mocha"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #1e1e2e;
+                      --chip-ink: #cdd6f4;
+                      --chip-accent: #89b4fa;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Catppuccin Mocha</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="dot-matrix"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #9bbc0f;
+                      --chip-ink: #0f380f;
+                      --chip-accent: #306230;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Dot Matrix</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="tokyo-drift"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #2a2626;
+                      --chip-ink: #ebe3db;
+                      --chip-accent: #58c2ff;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Tokyo Drift</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="mononoke"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #03180c;
+                      --chip-ink: #dcdcdc;
+                      --chip-accent: #289a28;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Mononoke</span>
+                </button>
+              </div>
+            </fieldset>
+            <fieldset class="pattern-picker">
+              <legend>Choose your paper</legend>
+              <div class="pattern-buttons">
+                <button
+                  class="active"
+                  type="button"
+                  data-paper="plain"
+                  aria-pressed="true"
+                >
+                  Plain</button
+                ><button type="button" data-paper="dotted" aria-pressed="false">
+                  Dotted</button
+                ><button type="button" data-paper="ruled" aria-pressed="false">
+                  Ruled</button
+                ><button type="button" data-paper="grid" aria-pressed="false">
+                  Grid
+                </button>
+              </div>
+            </fieldset>
+          </div>
+          <noscript
+            ><p>
+              Enable JavaScript to compare all twelve themes and four paper
+              styles. The editor previews above remain available without it.
+            </p></noscript
+          ><a
+            class="text-link theme-guide"
+            href="https://github.com/leesiongchan/bulletnotes/blob/main/docs/themes.md"
+            >More themes & customization <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </section>
+
+      <section
+        id="silverbullet"
+        class="connection wrap section-space"
+        aria-labelledby="connection-title"
+      >
+        <div class="connection-heading">
+          <p class="eyebrow">03 / A place in your bigger picture.</p>
+          <h2 id="connection-title">
+            Local first.<br /><span>Connected<br />when you want.</span>
+          </h2>
+        </div>
+        <div class="connection-copy">
+          <p>
+            Use Bulletnotes for local scratchpads. Connect your own SilverBullet
+            server when you want to bring them into your existing notes.
+          </p>
+          <div
+            class="connection-route"
+            role="img"
+            aria-label="Bulletnotes scratchpads sync to Quick Notes in your SilverBullet space"
+          >
+            <span>Bulletnotes</span><span aria-hidden="true">↗</span
+            ><code>Quick Notes/</code>
+          </div>
+          <p>
+            Add your server address and token in Settings. Scratchpads sync when
+            your server is available, and you can search and open pages from
+            your space.
+          </p>
+          <a class="text-link" href="https://silverbullet.md/"
+            >Meet SilverBullet <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </section>
+
+      <section class="shortcuts wrap" aria-labelledby="shortcuts-title">
+        <div class="shortcuts-top">
+          <h2 id="shortcuts-title">Keep your hands on the keys.</h2>
+          <a
+            class="text-link"
+            href="https://github.com/leesiongchan/bulletnotes/blob/main/docs/usage.md"
+            >Usage guide <span aria-hidden="true">↗</span></a
+          >
+        </div>
+        <div class="shortcut-list">
+          <div><span>New scratchpad</span><kbd>⌘ / Ctrl</kbd><kbd>N</kbd></div>
+          <div><span>Search pages</span><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></div>
+          <div><span>Find in note</span><kbd>⌘ / Ctrl</kbd><kbd>F</kbd></div>
+        </div>
+        <p class="shortcut-help">⌘ on macOS. Ctrl on Windows and Linux.</p>
+      </section>
+
+      <section id="get" class="get-section" aria-labelledby="get-title">
+        <div class="wrap">
+          <p class="eyebrow">
+            <span class="status-dot" aria-hidden="true"></span>Currently in
+            development
+          </p>
+          <h2 id="get-title">
+            Got a<br />thought?<span aria-hidden="true">↗</span>
+          </h2>
+          <div class="get-bottom">
+            <div>
+              <p>
+                Give it a place. Build Bulletnotes from source, or follow the
+                releases page for development downloads.
+              </p>
+              <div class="get-actions">
+                <a
+                  class="button button-dark"
+                  href="https://github.com/leesiongchan/bulletnotes/blob/main/docs/build.md"
+                  >Build from source <span aria-hidden="true">↗</span></a
+                ><a
+                  class="text-link"
+                  href="https://github.com/leesiongchan/bulletnotes/releases"
+                  >View releases <span aria-hidden="true">↗</span></a
+                >
+              </div>
+              <p class="development-note">
+                No published builds yet. Development builds, when available, are
+                not production releases.
+              </p>
+            </div>
+            <div
+              class="platforms"
+              role="group"
+              aria-label="Supported platforms"
+            >
+              <div><strong>macOS 14+</strong><span>Apple Silicon</span></div>
+              <div><strong>Windows</strong><span>x64 & ARM64</span></div>
+              <div><strong>Linux</strong><span>x64 & ARM64</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer wrap">
+      <a class="wordmark" href="#">bulletnotes<span>.</span></a>
+      <p>Small app. Space to think.</p>
+      <nav aria-label="Footer navigation">
+        <a href="https://github.com/leesiongchan/bulletnotes"
+          >GitHub <span aria-hidden="true">↗</span></a
+        ><a
+          href="https://github.com/leesiongchan/bulletnotes/blob/main/docs/usage.md"
+          >Guide <span aria-hidden="true">↗</span></a
+        ><a href="#">Back to top <span aria-hidden="true">↑</span></a>
+      </nav>
+    </footer>
+  </body>
+</html>
