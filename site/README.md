@@ -7,7 +7,7 @@ A buildless product page for GitHub Pages. All fonts and images are local; there
 From the repository root:
 
 ```sh
-python3 -m http.server 4173 --directory website --bind 127.0.0.1
+python3 -m http.server 4173 --directory site --bind 127.0.0.1
 ```
 
 Open http://127.0.0.1:4173. Check desktop and mobile sizes, all 48 theme/paper combinations, image/caption agreement, keyboard focus, and reduced motion. The page must contain no editable fields. JavaScript is optional for reading the page; static theme screenshots remain visible without it.
@@ -25,7 +25,7 @@ rustup run 1.99.1 cargo run --locked --example capture_product_themes -- /tmp/bu
 python3 - <<'PY'
 from pathlib import Path
 import subprocess
-output = Path('website/assets/themes')
+output = Path('site/assets/themes')
 output.mkdir(exist_ok=True)
 for source in Path('/tmp/bulletnotes-product-captures').glob('*.pam'):
     subprocess.run(['sips', '-s', 'format', 'png', str(source), '--out',
@@ -35,7 +35,9 @@ PY
 
 ## Publish
 
-Enable **Settings → Pages → Source → GitHub Actions** for this repository. Push changes to `website/` or `.github/workflows/pages.yml` on `main`, or run the **Product page** workflow manually. The workflow deploys only this directory to https://leesiongchan.github.io/bulletnotes/.
+Publishing is automatic: a push to `main` that changes `site/` or `.github/workflows/pages.yml` runs the **Product page** GitHub Actions workflow. Merging a pull request with those changes into `main` triggers the same workflow. It uploads `site/` and deploys it to https://leesiongchan.github.io/bulletnotes/.
+
+To deploy manually, open **Actions → Product page → Run workflow** and select `main`. GitHub Pages uses **Settings → Pages → Source → GitHub Actions**.
 
 The download section currently says no builds are published. When releases become available, update that statement in `index.html` alongside the download links.
 
