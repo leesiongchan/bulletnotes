@@ -11,13 +11,15 @@ On macOS, install Xcode command-line tools. Linux package prerequisites are list
 in `.github/workflows/release.yml`; the workflow uses Ubuntu 24.04. On Windows,
 use the MSVC toolchain. On the project's Nix setup, a missing CLI can be run through
 comma. Commands use `rustup run` because an inherited `RUSTUP_TOOLCHAIN` can
-override the toolchain file.
+override the toolchain file. `mise.toml` pins git-cliff, cargo-about and tauri-cli
+for CI and local use; without mise, install the same versions with
+`rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --features cli --locked`
+and `rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked`.
 
 ```sh
 bash scripts/check.sh
 python3 -m unittest discover -s tests -p 'test_package_desktop.py'
-rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --features cli --locked
-rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked
+mise install
 python3 scripts/package-desktop.py --version 0.1.0 --target aarch64-apple-darwin --output target/packages/local
 ```
 
