@@ -31,7 +31,7 @@ substitute one of these targets:
 | Windows | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` | NSIS installer |
 | Linux | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | deb and AppImage |
 
-The version must match `Cargo.toml`. Output directories must be fresh; existing
+`--version` must be valid SemVer and equal the `Cargo.toml` version or its `0.0.0` placeholder. Output directories must be fresh; existing
 artifacts are never overwritten. Each target includes SHA-256 checksums and a
 verification report recording source revision, dirty state, lockfile hash,
 packaged binary hashes, attribution, architecture, version, and launch evidence.
