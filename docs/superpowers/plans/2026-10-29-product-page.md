@@ -4,7 +4,7 @@
 
 **Goal:** Redesign the product page with new copy, a modern layout, and consistently readable typography while preserving accurate editor imagery.
 
-**Architecture:** A buildless site in `website/`, with relative asset URLs. A dedicated GitHub Actions workflow uploads this directory and deploys it to Pages.
+**Architecture:** A buildless site in `site/`, with relative asset URLs. A dedicated GitHub Actions workflow uploads this directory and deploys it to Pages.
 
 **Tech Stack:** HTML, CSS, vanilla JavaScript, self-hosted Google Fonts.
 
@@ -29,7 +29,7 @@ Minimum 14px meaningful text; readable 16px controls; mobile/200% text enlargeme
 
 ### Task 1: Product page
 
-- [x] Create `website/index.html`, `website/styles.css`, `website/script.js`, and licensed font/image assets.
+- [x] Create `site/index.html`, `site/styles.css`, `site/script.js`, and licensed font/image assets.
 - [x] Capture twelve themes × four paper styles with the actual app renderer, using `examples/capture_product_themes.rs` without opening user data.
 - [x] Replace the editable sampler and fabricated editor decoration with an image gallery. Rewrite the copy around scratchpads and simplicity.
 - [x] Verify all 48 screenshot selections, no editable fields, desktop/mobile layouts, focus, reduced motion, and no-JavaScript behavior.
@@ -37,7 +37,7 @@ Minimum 14px meaningful text; readable 16px controls; mobile/200% text enlargeme
 ### Task 2: GitHub Pages
 
 - [x] Create `.github/workflows/pages.yml` with verified immutable action revisions, Pages environment, least permissions, and site-only artifact.
-- [x] Add preview/deployment guidance in `website/README.md` and a product-page link in the repository README.
+- [x] Add preview/deployment guidance in `site/README.md` and a product-page link in the repository README.
 - [x] Verify links/assets, JavaScript syntax, screenshot-helper formatting/lints, workflow validity, and publishing access; report the actual deployment state.
 
 ## Verification evidence
