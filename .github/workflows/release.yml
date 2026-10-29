@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
-# Serialize releases; a newer pending run replaces an older one and already includes its commits.
+# Only publishable runs share the queue, so dispatches and failed CI runs cannot replace a pending release.
+# A pending run replaced by a newer main push loses nothing, because the newer run covers its commits.
 concurrency:
-  group: release
+  group: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && 'release' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -47,6 +48,8 @@ jobs:
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           if [[ "$EVENT" != workflow_run ]]; then
             echo "::notice::Manual run builds $version artifacts without publishing"
+          elif [[ "$sha" != "$(git ls-remote origin refs/heads/main | cut -f1)" ]]; then
+            echo "::notice::$sha is no longer the tip of main; the newer push will release"
           elif [[ "$next" == "$latest" ]]; then
             echo "::notice::No releasable commits since ${latest:-the start of history}"
           elif git ls-remote --exit-code --tags origin "refs/tags/$next" > /dev/null; then
