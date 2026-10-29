@@ -13,6 +13,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  commits:
+    # Rebase merges land every commit on main, so each one feeds git-cliff's version calculation.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: git-cliff@2.14.2
+      - name: Require Conventional Commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '[git]\nconventional_commits = true\nfilter_unconventional = false\nrequire_conventional = true\n' > "$RUNNER_TEMP/cliff-commits.toml"
+          git-cliff --config "$RUNNER_TEMP/cliff-commits.toml" "$BASE_SHA..$HEAD_SHA" > /dev/null
+
   check:
     strategy:
       fail-fast: false
