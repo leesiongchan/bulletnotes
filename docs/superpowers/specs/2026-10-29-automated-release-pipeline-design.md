@@ -38,7 +38,11 @@ Verified on 2026-10-29.
 - **Commit linting.** git-cliff's `require_conventional = true` (with
   `filter_unconventional = false`) exits 1 with `UnconventionalCommitsError`
   when a range contains a non-conventional commit, and exits 0 otherwise.
-  No commitlint or Node toolchain is needed.
+  No commitlint or Node toolchain is needed. A catch-all `skip` commit
+  parser hides non-conventional commits from this check, so the lint must
+  use its own minimal config rather than the release `cliff.toml`. The
+  `initial_tag` value must include the `v` prefix to satisfy
+  `tag_pattern`.
 - **cargo-edit 0.13.14.** `cargo add` and `cargo rm` moved into cargo itself.
   `cargo set-version` and `cargo upgrade` remain cargo-edit only. Changing
   the `Cargo.toml` version alone breaks every `--locked` build. Both
@@ -63,7 +67,7 @@ Verified on 2026-10-29.
 ### `cliff.toml` (new, repo root)
 
 - `[git]`: `conventional_commits = true`, `filter_unconventional = false`,
-  `require_conventional = false`, `tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"`.
+  `require_conventional = false`, `tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"`.
 - Commit parsers:
   - `feat` goes to Features, `fix` to Fixes, `perf` to Performance.
   - Breaking commits are marked in the notes.
@@ -74,16 +78,13 @@ Verified on 2026-10-29.
   - `features_always_bump_minor = true`
   - `breaking_always_bump_major = false` (a `!` on 0.x must not declare 1.0)
   - `no_increment_regex = "^(docs|chore|ci|test|style|refactor|build)$"`
-  - `initial_tag = "0.1.0"`
+  - `initial_tag = "v0.1.0"`
 - Body template: grouped entries. When no entries survive filtering, it
   prints `Initial release.`
 
-`require_conventional` stays off in the file. Only the PR lint enables it,
-so an admin bypass push cannot break a release run. The lint enables it
-through a CLI or `GIT_CLIFF__GIT__REQUIRE_CONVENTIONAL` environment
-override. The exact override mechanism must be confirmed during
-implementation; if neither works, use a second minimal config file for the
-lint.
+`require_conventional` stays off in this file, so an admin bypass push
+cannot break a release run. The PR lint uses its own minimal strict config
+(see `ci.yml`).
 
 ### `Cargo.toml`
 
@@ -95,19 +96,24 @@ builds report the tagged version. `docs/build.md` explains this.
 - `validate_release(version, package_version, ref)` accepts a
   `package_version` of either `0.0.0` or exactly `version`. The SemVer and
   `refs/tags/v<version>` checks are unchanged.
-- With `--release-ref`:
-  1. Record `revision` and `dirty`.
-  2. If `Cargo.toml` holds the placeholder, rewrite the `[package]`
-     `version` line to `--version`.
-  3. Run `cargo update -p bulletnotes` so `Cargo.lock` matches, then build
-     with `--locked` as today.
+- When `Cargo.toml` holds the placeholder and `--version` differs from it,
+  with or without `--release-ref`:
+  1. Record `revision` and `dirty` first, as today.
+  2. Rewrite the root package's `version` in `Cargo.toml` and in
+     `Cargo.lock` as text: exactly one match each, line endings preserved.
+     This needs no network or `cargo update`.
+  3. Build with `--locked` and read `cargo metadata`.
+  4. Restore both files byte-for-byte, even on failure.
 
-  Provenance therefore reflects the clean checkout.
-- Without `--release-ref` (local runs, `workflow_dispatch`), behaviour is
-  unchanged. The placeholder version is accepted, so local packaging
-  needs `--version 0.0.0` or a matching edited version.
-- `tests/test_package_desktop.py` adds cases for the placeholder, an exact
-  match, a mismatch, and a placeholder with a release ref.
+  Provenance therefore reflects the clean checkout, and local runs leave no
+  diff. The `--locked` build is the safety net if the text edit were ever
+  wrong.
+- `tests/test_package_desktop.py` adds cases for:
+  - the placeholder, with and without a release ref
+  - a mismatch
+  - stamping only the root package
+  - CRLF preservation
+  - restoring the files after an exception
 
 ### `.github/workflows/ci.yml`
 
@@ -115,9 +121,12 @@ Add a `commits` job, run only for `pull_request`:
 
 1. Check out with `fetch-depth: 0` and `persist-credentials: false`.
 2. Install git-cliff 2.14.2 with `taiki-e/install-action`, pinned by SHA.
-3. Run `git-cliff <pull_request.base.sha>..<pull_request.head.sha>` with
-   `require_conventional` enabled. Output goes to `/dev/null`; the job
-   fails on a non-zero exit.
+3. Write a four-line strict config to `$RUNNER_TEMP`:
+   `conventional_commits = true`, `filter_unconventional = false`,
+   `require_conventional = true`.
+4. Run
+   `git-cliff --config <that file> <pull_request.base.sha>..<pull_request.head.sha>`.
+   Output goes to `/dev/null`; the job fails on a non-zero exit.
 
 The existing `check` matrix, its triggers, and
 `cancel-in-progress: true` are unchanged.
@@ -163,7 +172,7 @@ The existing `check` matrix, its triggers, and
    - Upload artifacts as today.
 3. **publish** (ubuntu-24.04). It runs when `release == 'true'`.
    - Permissions: `contents: write`, `id-token: write`,
-     `attestations: write`.
+     `attestations: write`, `artifact-metadata: write`.
    - Download all target artifacts and `release-notes`. Run the existing
      check that all five reports are present and checksums match.
    - `actions/attest` (pinned by SHA) creates build provenance for
