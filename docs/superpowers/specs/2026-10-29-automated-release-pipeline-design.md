@@ -233,10 +233,10 @@ unchanged.
 ## Bootstrap
 
 No tags exist. The first green `main` push after this pipeline merges
-publishes **v0.1.0**. Its notes are near-empty, because the
-pre-convention commits are filtered out, so the body reads
-`Initial release.` From then on, only `feat`, `fix`, `perf` and breaking
-changes release.
+publishes **v0.1.0**. Its notes list the earlier conventional `feat` and
+`fix` commits, because the pre-convention commits are filtered out;
+`Initial release.` only appears when no grouped entries exist. From then
+on, only `feat`, `fix`, `perf` and breaking changes release.
 
 ## Testing
 
