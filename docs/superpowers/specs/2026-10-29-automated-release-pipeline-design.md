@@ -70,14 +70,15 @@ Verified on 2026-10-29.
   `require_conventional = false`, `tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"`.
 - Commit parsers:
   - `feat` goes to Features, `fix` to Fixes, `perf` to Performance.
-  - Breaking commits are marked in the notes.
-  - Everything else is skipped.
+  - Breaking commits of any other type go to a Breaking changes group.
+    Breaking commits are also marked in the notes.
+  - Everything else is skipped. This catch-all skip is what keeps
+    non-releasing types from bumping.
 
   Pre-convention history is therefore skipped too.
 - `[bump]`:
   - `features_always_bump_minor = true`
   - `breaking_always_bump_major = false` (a `!` on 0.x must not declare 1.0)
-  - `no_increment_regex = "^(docs|chore|ci|test|style|refactor|build)$"`
   - `initial_tag = "v0.1.0"`
 - Body template: grouped entries. When no entries survive filtering, it
   prints `Initial release.`

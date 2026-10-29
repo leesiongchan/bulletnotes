@@ -63,7 +63,7 @@ version since the latest `v*` tag:
 - A breaking change (`!` or a `BREAKING CHANGE` footer) bumps the minor
   version while below 1.0.
 - `docs`, `chore`, `ci`, `test`, `style`, `refactor` and `build` never
-  release.
+  release unless marked breaking.
 
 When a release is due, all five targets are packaged from the tested commit.
 Only after every target passes are the `vX.Y.Z` tag and a GitHub Release
