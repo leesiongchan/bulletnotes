@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build development installers with Tauri's bundler, without a Tauri runtime."""
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -16,6 +17,8 @@ import tomllib
 
 TOOLCHAIN = '1.99.1'
 TAURI_VERSION = '2.12.4'
+# Cargo.toml keeps this version on main; release tags are the source of truth.
+PLACEHOLDER_VERSION = '0.0.0'
 TARGETS = {
     'aarch64-apple-darwin': ('Darwin', 'arm64', ['app', 'dmg']),
     'x86_64-pc-windows-msvc': ('Windows', 'AMD64', ['nsis']),
@@ -39,10 +42,37 @@ def validate_release(version, package_version, ref):
     identifier = r'(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
     semver = number + r'\.' + number + r'\.' + number
     semver += r'(?:-' + identifier + r'(?:\.' + identifier + r')*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?'
-    if not re.fullmatch(semver, version) or version != package_version:
-        raise ValueError('--version must be valid SemVer and match Cargo.toml')
+    if not re.fullmatch(semver, version) or package_version not in (PLACEHOLDER_VERSION, version):
+        raise ValueError('--version must be valid SemVer and match Cargo.toml or its ' + PLACEHOLDER_VERSION + ' placeholder')
     if ref is not None and ref != 'refs/tags/v' + version:
         raise ValueError('--release-ref must exactly equal refs/tags/v' + version)
+
+
+def stamp_version(manifest, lock, version):
+    # A text edit keeps Cargo.lock consistent without network access; --locked builds catch any drift.
+    stamped = []
+    for text, header in ((manifest, r'\[package\]'), (lock, r'\[\[package\]\]')):
+        pattern = r'(?m)^(' + header + r'\r?\nname = "bulletnotes"\r?\nversion = )"' + re.escape(PLACEHOLDER_VERSION) + '"'
+        text, count = re.subn(pattern, lambda match: match.group(1) + json.dumps(version), text)
+        if count != 1:
+            raise ValueError('Cargo.toml and Cargo.lock must hold the ' + PLACEHOLDER_VERSION + ' placeholder')
+        stamped.append(text)
+    return stamped
+
+
+@contextlib.contextmanager
+def stamped_version(root, version):
+    """Build with a release version while leaving the checkout byte-for-byte unchanged."""
+    paths = [root / 'Cargo.toml', root / 'Cargo.lock']
+    originals = [path.read_bytes() for path in paths]
+    stamped = stamp_version(*(data.decode() for data in originals), version)
+    try:
+        for path, text in zip(paths, stamped):
+            path.write_bytes(text.encode())
+        yield
+    finally:
+        for path, data in zip(paths, originals):
+            path.write_bytes(data)
 
 
 def development_environment(source):
@@ -242,8 +272,12 @@ def main():
     revision = capture(['git', 'rev-parse', 'HEAD'], cwd=ROOT)
     dirty = bool(capture(['git', 'status', '--porcelain'], cwd=ROOT))
     lock_hash = sha(ROOT / 'Cargo.lock')
-    run(cargo + ['build', '--release', '--locked', '--bin', 'bulletnotes', '--target', args.target], cwd=ROOT, env=environment)
-    metadata = json.loads(capture(cargo + ['metadata', '--no-deps', '--locked', '--format-version', '1'], cwd=ROOT, env=environment))
+    stamping = package['version'] == PLACEHOLDER_VERSION != args.version
+    if stamping:
+        print('Stamping Cargo version ' + args.version + ' over the ' + PLACEHOLDER_VERSION + ' placeholder', flush=True)
+    with stamped_version(ROOT, args.version) if stamping else contextlib.nullcontext():
+        run(cargo + ['build', '--release', '--locked', '--bin', 'bulletnotes', '--target', args.target], cwd=ROOT, env=environment)
+        metadata = json.loads(capture(cargo + ['metadata', '--no-deps', '--locked', '--format-version', '1'], cwd=ROOT, env=environment))
     executable = 'bulletnotes.exe' if system == 'Windows' else 'bulletnotes'
     binary = pathlib.Path(metadata['target_directory']) / args.target / 'release' / executable
     verify_binary_target(binary, args.target)

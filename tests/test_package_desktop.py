@@ -83,6 +83,44 @@ class DesktopPackagingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.package.validate_release('1.2.3', '1.2.4', None)
 
+    def test_release_version_accepts_cargo_placeholder(self):
+        self.package.validate_release('1.2.3', '0.0.0', None)
+        self.package.validate_release('1.2.3', '0.0.0', 'refs/tags/v1.2.3')
+        self.package.validate_release('0.0.0', '0.0.0', None)
+        with self.assertRaises(ValueError):
+            self.package.validate_release('1.2.3', '0.0.1', None)
+
+    def test_stamp_version_rewrites_only_the_root_package(self):
+        manifest = '[package]\r\nname = "bulletnotes"\r\nversion = "0.0.0"\r\n\r\n[dependencies]\r\nother = "0.0.0"\r\n'
+        lock = ('[[package]]\r\nname = "aaa"\r\nversion = "0.0.0"\r\n\r\n'
+                '[[package]]\r\nname = "bulletnotes"\r\nversion = "0.0.0"\r\ndependencies = [\r\n "aaa",\r\n]\r\n')
+        stamped_manifest, stamped_lock = self.package.stamp_version(manifest, lock, '1.2.3')
+        self.assertEqual(stamped_manifest, manifest.replace('version = "0.0.0"', 'version = "1.2.3"', 1))
+        self.assertEqual(stamped_lock, lock.replace('name = "bulletnotes"\r\nversion = "0.0.0"',
+                                                    'name = "bulletnotes"\r\nversion = "1.2.3"'))
+        with self.assertRaises(ValueError):
+            self.package.stamp_version(stamped_manifest, lock, '1.2.3')
+        with self.assertRaises(ValueError):
+            self.package.stamp_version(manifest, stamped_lock, '1.2.3')
+
+    def test_repository_cargo_files_hold_the_placeholder(self):
+        self.package.stamp_version((ROOT / 'Cargo.toml').read_text(), (ROOT / 'Cargo.lock').read_text(), '1.2.3')
+
+    def test_stamped_version_restores_the_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            manifest = b'[package]\nname = "bulletnotes"\nversion = "0.0.0"\n'
+            lock = b'[[package]]\nname = "bulletnotes"\nversion = "0.0.0"\n'
+            (root / 'Cargo.toml').write_bytes(manifest)
+            (root / 'Cargo.lock').write_bytes(lock)
+            with self.assertRaises(RuntimeError):
+                with self.package.stamped_version(root, '1.2.3'):
+                    self.assertIn(b'version = "1.2.3"', (root / 'Cargo.toml').read_bytes())
+                    self.assertIn(b'version = "1.2.3"', (root / 'Cargo.lock').read_bytes())
+                    raise RuntimeError('build failed')
+            self.assertEqual((root / 'Cargo.toml').read_bytes(), manifest)
+            self.assertEqual((root / 'Cargo.lock').read_bytes(), lock)
+
     def test_development_cannot_inherit_signing_or_notary_credentials(self):
         env = self.package.development_environment({
             'PATH': '/bin', 'APPLE_ID': 'secret', 'APPLE_API_KEY_PATH': 'secret',
