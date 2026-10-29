@@ -5,6 +5,9 @@ body = """
 ### {{ group | striptags | trim }}
 {% for commit in commits %}
 - {% if commit.breaking %}**Breaking:** {% endif %}{% if commit.scope %}{{ commit.scope }}: {% endif %}{{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})\
+{% if commit.breaking and commit.breaking_description != commit.message %}
+{{ "  - " }}{{ commit.breaking_description | indent(prefix="    ") }}\
+{% endif %}\
 {% endfor %}
 {% else %}
 Initial release.
@@ -14,7 +17,8 @@ trim = true
 
 [git]
 conventional_commits = true
-filter_unconventional = false
+# Admin-bypass pushes skip the PR lint; a stray "fix ..." commit must not cut a release.
+filter_unconventional = true
 # The PR commit lint uses its own strict config; releases must not fail on stray commits.
 require_conventional = false
 split_commits = false

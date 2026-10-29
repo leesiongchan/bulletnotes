@@ -66,7 +66,7 @@ Verified on 2026-10-29.
 
 ### `cliff.toml` (new, repo root)
 
-- `[git]`: `conventional_commits = true`, `filter_unconventional = false`,
+- `[git]`: `conventional_commits = true`, `filter_unconventional = true`,
   `require_conventional = false`, `tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"`.
 - Commit parsers:
   - `feat` goes to Features, `fix` to Fixes, `perf` to Performance.
