@@ -1,19 +1,78 @@
-name: Development desktop release
+name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_run:
+    workflows: [Desktop checks]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Serialize releases; a newer pending run replaces an older one and already includes its commits.
 concurrency:
-  group: development-release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  plan:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: git-cliff@2.14.2
+      - name: Decide release version
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          latest=$(git tag --list 'v[0-9]*' --merged HEAD --sort=-v:refname | sed -n 1p)
+          next=$(git-cliff --bumped-version)
+          release=false
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          if [[ "$EVENT" != workflow_run ]]; then
+            echo "::notice::Manual run builds $version artifacts without publishing"
+          elif [[ "$next" == "$latest" ]]; then
+            echo "::notice::No releasable commits since ${latest:-the start of history}"
+          elif git ls-remote --exit-code --tags origin "refs/tags/$next" > /dev/null; then
+            echo "::notice::$next already exists; nothing to publish"
+          else
+            release=true
+            version=${next#v}
+            git-cliff --unreleased --tag "$next" --strip all --output "$RUNNER_TEMP/release-notes.md"
+            echo "::notice::Releasing $next from $sha (previous: ${latest:-none})"
+          fi
+          {
+            echo "release=$release"
+            echo "version=$version"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+      - name: Upload release notes
+        if: steps.plan.outputs.release == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+
   build:
+    needs: plan
+    if: needs.plan.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -42,26 +101,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.plan.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
-      - name: Validate version and release ref
-        id: version
-        env:
-          RELEASE_REF: ${{ github.ref }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          python - <<'PY'
-          import importlib.util, os, pathlib, tomllib
-          spec = importlib.util.spec_from_file_location('package_desktop', 'scripts/package-desktop.py')
-          package = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(package)
-          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['package']['version']
-          package.validate_release(version, version, os.environ['RELEASE_REF'] if os.environ['REF_TYPE'] == 'tag' else None)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('version=' + version + '\n')
-          PY
       - name: Install Linux build and bundle libraries
         if: runner.os == 'Linux'
         run: |
@@ -70,7 +114,7 @@ jobs:
       - name: Install pinned Rust
         run: |
           rustup set default-host "$TARGET"
-          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target "$TARGET"
+          rustup toolchain install 1.99.1 --profile minimal --target "$TARGET"
       - name: Cache Rust dependencies and packaging tools
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -82,18 +126,14 @@ jobs:
           rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --features cli --locked
           rustup run 1.99.1 cargo about --version
           rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked
-      - name: Check packaging contracts
-        run: python -m unittest discover -s tests -p 'test_package_desktop.py'
-      - name: Check formatting, lints, and tests
-        run: bash scripts/check.sh
-      - name: Package and verify development installers
+      # Desktop checks already passed on this exact commit, so only packaging runs here.
+      - name: Package and verify installers
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          RELEASE_REF: ${{ github.ref }}
-          REF_TYPE: ${{ github.ref_type }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          RELEASE: ${{ needs.plan.outputs.release }}
         run: |
           arguments=(--version "$VERSION" --target "$TARGET" --output target/packages/ci)
-          if [[ "$REF_TYPE" == tag ]]; then arguments+=(--release-ref "$RELEASE_REF"); fi
+          if [[ "$RELEASE" == true ]]; then arguments+=(--release-ref "refs/tags/v$VERSION"); fi
           if [[ "$RUNNER_OS" == macOS ]]; then
             # Hosted macOS does not establish a hardware Metal launch; local release verification does.
             python scripts/package-desktop.py "${arguments[@]}" --static-only
@@ -110,23 +150,26 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: bulletnotes-*-development
           merge-multiple: true
           path: packages
-      - name: Publish development prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
+      - name: Verify all target reports and checksums
         run: |
           python3 - <<'PY'
           import hashlib, json, pathlib
@@ -141,14 +184,31 @@ jobs:
                   if path.parent != pathlib.Path('packages') or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
                       raise SystemExit('Downloaded artifact checksum mismatch')
           PY
-          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: packages/*
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: |
+          {
+            cat <<'NOTES'
           Development desktop builds for macOS 14+ on ARM64, and Windows and Linux on x64 and ARM64.
 
           macOS: open the DMG and drag Bulletnotes to Applications. The app is ad-hoc signed and is not notarized by Apple. Windows: run the unsigned NSIS installer. Linux: install the deb package or make the AppImage executable and run it. These are development artifacts, and operating-system trust prompts are expected.
 
           Each verification report records exact source provenance, target, hashes, and observed launch evidence. Hosted macOS UI/Metal launch remains unobserved. Windows/Linux CI smoke tests use the Slint software renderer; production GPU rendering requires native hardware verification.
+
+          ## Changes
           NOTES
-          gh release create "$RELEASE_TAG" packages/* \
-            --verify-tag --prerelease --latest=false --generate-notes \
-            --title "Bulletnotes ${RELEASE_TAG#v} (development)" \
+            cat notes/release-notes.md
+          } > "$RUNNER_TEMP/release-notes.md"
+          # Creating the tag here means a failed build never leaves an orphan tag behind.
+          gh release create "v$VERSION" packages/* \
+            --target "$SHA" --latest \
+            --title "Bulletnotes $VERSION" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
+          echo "::notice::Published v$VERSION at $SHA"
