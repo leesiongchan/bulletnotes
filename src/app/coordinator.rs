@@ -803,6 +803,24 @@ impl Coordinator {
                 match result {
                     Ok(outcome) => {
                         if request_id != self.transition_id {
+                            // A newer view cancels navigation follow-up, not a committed deletion.
+                            if outcome.page.is_none() && !outcome.affected.is_empty() {
+                                for key in &outcome.affected {
+                                    self.navigation.remove_unavailable(key);
+                                }
+                                if self.editor.as_ref().is_some_and(|editor| {
+                                    outcome.affected.contains(editor.key())
+                                        && !editor.dirty()
+                                        && !editor.writing()
+                                }) {
+                                    self.editor = None;
+                                    if self.pending_load.is_none()
+                                        && self.pending_transition.is_none()
+                                    {
+                                        self.finish_new_after_recovery(&mut effects);
+                                    }
+                                }
+                            }
                             self.refresh_scratchpads(&mut effects);
                             return effects;
                         }
@@ -817,10 +835,9 @@ impl Coordinator {
                                 .open_after
                                 .take()
                                 .filter(|(id, _)| *id == request_id)
+                                && self.view() == View::AllPages
                             {
-                                if self.view() == View::AllPages {
-                                    effects.extend(self.dispatch(AppAction::OpenPage(key)));
-                                }
+                                effects.extend(self.dispatch(AppAction::OpenPage(key)));
                             }
                             return effects;
                         }
@@ -1103,6 +1120,7 @@ impl Coordinator {
     }
     fn finish_new_after_recovery(&mut self, effects: &mut Vec<AppEffect>) {
         let view = self.navigation.view();
+        self.background_view = Some(view);
         self.pending_transition = Some(Transition::New(None));
         self.finish_transition(effects);
         self.navigation.set_view(view);

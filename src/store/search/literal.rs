@@ -18,6 +18,21 @@ impl LiteralQuery {
         self.0.is_match(text)
     }
     pub(super) fn ranges(&self, text: &str) -> Vec<Range<usize>> {
-        self.0.find_iter(text).map(|hit| hit.range()).collect()
+        self.0
+            .find_iter(text)
+            .take(320)
+            .map(|hit| hit.range())
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn display_ranges_are_bounded_without_truncating_search() {
+        let matcher = LiteralQuery::new("a").unwrap().unwrap();
+        assert_eq!(matcher.ranges(&"a".repeat(100_000)).len(), 320);
+        assert!(matcher.is_match(&format!("{}a", "z".repeat(100_000))));
     }
 }

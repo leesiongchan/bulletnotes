@@ -340,6 +340,104 @@ fn disabled_result_action_does_not_open_the_note_beneath_it() {
 }
 
 #[test]
+fn row_actions_and_shift_return_do_not_open_before_promotion_finishes() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_scratchpads(true);
+    let mut item = row(0);
+    item.can_promote = true;
+    item.can_trash = true;
+    ui.set_page_results(ModelRc::from([item]));
+    settle();
+    let promoted = Rc::new(RefCell::new(String::new()));
+    let observed = promoted.clone();
+    ui.on_search_promote(move |key, open| *observed.borrow_mut() = format!("{key}:{open}"));
+    let trashed = Rc::new(RefCell::new(String::new()));
+    let observed = trashed.clone();
+    ui.on_search_trash(move |key| *observed.borrow_mut() = key.to_string());
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    for x in [427.0, 461.0] {
+        let point = slint::LogicalPosition::new(x, 152.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: point,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: point,
+            button: slint::platform::PointerEventButton::Left,
+        });
+    }
+    assert_eq!(&*promoted.borrow(), "0:false");
+    assert_eq!(&*trashed.borrow(), "0");
+    assert!(opened.borrow().is_empty());
+    key(&ui, Key::DownArrow);
+    ui.window().dispatch_event(WindowEvent::KeyPressed {
+        text: Key::Shift.into(),
+    });
+    key(&ui, Key::Return);
+    ui.window().dispatch_event(WindowEvent::KeyReleased {
+        text: Key::Shift.into(),
+    });
+    assert_eq!(&*promoted.borrow(), "0:true");
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn confirmation_buttons_fit_inside_the_dialog_at_minimum_size() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
+    ui.set_search_confirm_count(2);
+    ui.set_search_confirm_id("test".into());
+    let _ = ui.window().take_snapshot().unwrap();
+    let button = text_item(&ui, "Move to Trash");
+    let point = button.map_to_window(button.geometry().origin);
+    assert!(
+        point.y + button.geometry().height() <= 330.0,
+        "confirmation action extends beyond its dialog"
+    );
+}
+
+#[test]
+fn minimum_card_keeps_its_footer_above_the_browser_status() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
+    let mut item = row(0);
+    item.modified_label = "Edited today".into();
+    ui.set_page_results(ModelRc::from([item]));
+    ui.set_index_status("Index status".into());
+    ui.set_search_cards(true);
+    let _ = ui.window().take_snapshot().unwrap();
+    let date = text_item(&ui, "Edited today");
+    let status = text_item(&ui, "Index status");
+    assert!(
+        date.map_to_window(date.geometry().origin).y + date.geometry().height()
+            < status.map_to_window(status.geometry().origin).y - 6.0,
+        "card actions/date require scrolling under the fixed footer"
+    );
+}
+
+#[test]
+fn result_refresh_during_press_cannot_open_a_replacement_note() {
+    let ui = setup();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    let point = slint::LogicalPosition::new(100.0, 165.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.set_page_results(ModelRc::from([row(99)]));
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
 fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));

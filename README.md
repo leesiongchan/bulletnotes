@@ -15,7 +15,8 @@ A small desktop notebook for [SilverBullet](https://silverbullet.md/). Capture t
 
 - **Capture quickly:** create scratchpads that sync to `Quick Notes/` in your SilverBullet space.
 - **Work offline:** edits are saved locally and synced when a compatible server is available.
-- **Find your notes:** search across pages or within the current note.
+- **Find your notes:** search parts of words across pages, browse lists or cards, or find text within the current note.
+- **Manage scratchpads:** select notes, reorder the stack, promote notes to the front, or move a batch to recoverable Trash.
 - **Write in Markdown:** edit source with syntax highlighting, task checkboxes, and formatting shortcuts.
 - **Make it yours:** choose light and dark themes, font size, and plain, dotted, ruled, or grid paper.
 - **Keep your work:** conflicting edits are preserved in recovery pages; deleted notes go to Trash.

@@ -6,7 +6,7 @@ use bulletnotes::{
     store::StoreHandle,
     theme::SystemAppearance,
 };
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 use std::{
     cell::Cell,
     rc::Rc,
@@ -16,6 +16,10 @@ use support::storage_fixture::{database, key};
 
 #[test]
 #[ignore = "release benchmark: 10k and 50k synthetic notes"]
+#[expect(
+    clippy::assertions_on_constants,
+    reason = "The ignored benchmark must reject accidental debug runs"
+)]
 fn substring_query_to_presentation_latency() {
     assert!(!cfg!(debug_assertions), "run with --release");
     slint::platform::set_platform(Box::new(i_slint_backend_testing::TestingBackend::new(
@@ -69,6 +73,25 @@ fn substring_query_to_presentation_latency() {
             let p95 = samples[94];
             println!("notes={count}, approximate_body_bytes=4096, samples=100, p95_ms={:.2}, renderer=skia, includes=count+highlights+snapshot",p95.as_secs_f64()*1000.0);
             if count == 10_000 { assert!(p95 <= Duration::from_millis(150), "p95={p95:?}"); }
+            let page = key("Notes/00000.md");
+            local.dispatch(bulletnotes::app::coordinator::AppAction::OpenPage(page.clone()));
+            local.wait_until_loaded(&page).await.unwrap();
+            local.dispatch(bulletnotes::app::coordinator::AppAction::EditText("saved while searching".into()));
+            window.invoke_browse_pages();
+            let burst = Instant::now();
+            for n in 0..250 {
+                window.set_search_query(format!("superseded-{n}").into());
+                window.invoke_query_changed(window.get_search_query());
+                if n % 16 == 0 { tokio::task::yield_now().await; }
+            }
+            local.wait_until_saved().await.unwrap();
+            window.set_search_query("saved while searching".into());
+            local.search_current().await.unwrap();
+            assert_eq!(store.load_page(&page).await.unwrap().unwrap().body,"saved while searching");
+            assert_eq!(window.get_page_results().row_count(),1);
+            assert_eq!(window.get_page_results().row_data(0).unwrap().path,"Notes/00000.md");
+            assert!(burst.elapsed() < Duration::from_secs(5),"obsolete query backlog delayed the save/latest result");
+            println!("notes={count}, superseded_requests=250, save_and_latest_result_ms={:.2}",burst.elapsed().as_secs_f64()*1000.0);
             window.hide().unwrap();
             store.shutdown().await.unwrap();
         }

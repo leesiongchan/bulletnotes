@@ -46,7 +46,7 @@ export component SearchResult inherits FocusScope {
         Text {
             x:root.selecting ? 40px : 14px; y:12px;
             width:parent.width - self.x - (root.cards ? 14px : 86px);
-            height:root.cards ? 150px : 48px;
+            height:root.cards ? min(150px,max(48px,parent.height - 76px)) : 48px;
             text:root.cards ? (root.data.excerpt != "" ? root.data.excerpt : root.data.title) : (root.data.list-excerpt != "" ? root.data.list-excerpt : root.data.excerpt != "" ? root.data.excerpt : root.data.title);
             text-decorations:root.cards ? root.data.excerpt-highlights : root.data.list-excerpt-highlights;
             font-family:"Menlo"; font-size:root.cards ? 11px : 12px;
@@ -62,13 +62,13 @@ export component SearchResult inherits FocusScope {
             text:root.data.modified-label; font-size:10px; color:root.theme.muted; overflow:elide;
         }
         Text {
-            x:parent.width - 82px; y:root.cards ? 169px : 64px; width:68px; height:12px;
+            x:parent.width - 82px; y:root.cards ? parent.height - 57px : 64px; width:68px; height:12px;
             text:root.data.availability == "Cached" ? "" : root.data.availability;
             font-size:9px; color:root.theme.muted; horizontal-alignment:right; overflow:elide;
         }
         ActionButton {
             x:8px;y:10px;theme:root.theme;visible:root.selecting;enabled:!root.busy;
-            icon:@image-url("../../assets/icons/select.svg");selected:root.data.checked;
+            icon:root.data.checked ? @image-url("../../assets/icons/select.svg") : @image-url("../../assets/icons/circle.svg");selected:root.data.checked;
             label:root.data.checked ? "Deselect note" : "Select note"; clicked => { root.toggled(); }
         }
         ActionButton {

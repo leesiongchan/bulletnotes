@@ -35,7 +35,7 @@ export component PageBrowser inherits Rectangle {
     in property <bool> can-load-more:false;
     in-out property <int> selected-index:-1;
     private property <int> columns:root.cards ? max(1,floor((root.width - 32px) / 236px)) : 1;
-    private property <length> row-height:root.cards ? 236px : 112px;
+    private property <length> row-height:root.cards ? min(236px,max(160px,list.visible-height)) : 112px;
     private property <int> row-count:ceil(root.results.length / root.columns);
     out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
     callback load-more();
@@ -108,13 +108,14 @@ export component PageBrowser inherits Rectangle {
         }
     }
     changed results => {
+        pointer-surface.source-index = -1;
         root.cancel-drag();
         if (root.selected-index >= root.results.length) { root.focus-query(); }
     }
-    changed query => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
-    changed scratchpads => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
-    changed folder => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
-    changed cards => { root.cancel-drag(); root.reveal-selection(); }
+    changed query => { pointer-surface.source-index = -1; root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed scratchpads => { pointer-surface.source-index = -1; root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed folder => { pointer-surface.source-index = -1; root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed cards => { pointer-surface.source-index = -1; root.cancel-drag(); root.reveal-selection(); }
     changed height => { root.cancel-drag(); root.reveal-selection(); }
     changed width => { root.cancel-drag(); root.reveal-selection(); }
     changed visible => { if (!root.visible) { root.cancel-drag(); } }
@@ -144,7 +145,7 @@ export component PageBrowser inherits Rectangle {
             }
         }
         Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:root.theme.muted;font-size:13px;accessible-role:none; }
-        ChoiceButton { x:parent.width - 39px;y:5px;width:34px;theme:root.theme;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
+        ChoiceButton { height:28px; x:parent.width - 39px;y:5px;width:34px;theme:root.theme;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
     }
     Rectangle {
         x:24px;y:60px;width:parent.width - 48px;height:28px;border-radius:8px;background:root.theme.surface;visible:!root.scratchpads;
@@ -225,14 +226,14 @@ export component PageBrowser inherits Rectangle {
     ThemeScrollbar { x:list.x + list.width - self.width;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {
         x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
-        Text { width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"Menlo";font-size:13px;horizontal-alignment:center; }
+        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"Menlo";font-size:13px;horizontal-alignment:center; }
         if root.can-create: Rectangle {
             y:38px;width:parent.width;height:38px;border-radius:19px;background:root.theme.surface;
-            ChoiceButton { x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"↵  Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
+            ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
         }
     }
     Text { x:24px;y:toolbar.y - 29px;width:parent.width - (root.can-load-more ? 152px : 48px);height:20px;text:root.action-message != "" ? root.action-message : root.index-status;color:root.theme.muted;font-size:10px;overflow:elide; }
-    ChoiceButton { x:parent.width - 120px;y:toolbar.y - 34px;width:100px;theme:root.theme;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
+    ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;theme:root.theme;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
     toolbar := SearchToolbar {
         width:parent.width;y:parent.height - self.height;
         theme:root.theme;scratchpads:root.scratchpads;cards:root.cards;selecting:root.selecting;
@@ -253,8 +254,8 @@ export component PageBrowser inherits Rectangle {
             border-radius:14px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;
             Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:15px;font-weight:550;color:root.theme.ink; }
             Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:12px;color:root.theme.muted; }
-            ChoiceButton { x:16px;y:128px;width:92px;theme:root.theme;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
-            confirm-button := ChoiceButton { x:parent.width - 154px;y:128px;width:138px;theme:root.theme;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
+            ChoiceButton { height:28px; x:16px;y:128px;width:92px;theme:root.theme;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
+            confirm-button := ChoiceButton { height:28px; x:parent.width - 154px;y:128px;width:138px;theme:root.theme;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
         }
     }
 }
