@@ -1,0 +1,86 @@
+import { UiTheme, PageRow } from "../types.slint";
+import { ActionButton } from "action-button.slint";
+
+export component SearchResult inherits FocusScope {
+    in property <UiTheme> theme;
+    in property <PageRow> data;
+    in property <bool> selected;
+    in property <bool> selecting;
+    in property <bool> cards;
+    in property <int> columns:1;
+    in property <bool> busy;
+    private property <bool> pending-focus:false;
+    callback opened();
+    callback toggled();
+    callback promote(bool);
+    callback trash();
+    callback step(int);
+    accessible-role: button;
+    accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
+    accessible-action-default => { if (root.selecting) { root.toggled(); } else { root.opened(); } }
+    changed selected => { root.pending-focus = root.selected; if (root.selected) { root.focus(); } }
+    init => { root.pending-focus = root.selected; }
+    // Virtualized rows receive focus after the newly revealed row has a layout.
+    Timer { interval:16ms;running:root.pending-focus;triggered => { root.pending-focus = false; if (root.selected) { root.focus(); } } }
+    key-pressed(event) => {
+        if (root.busy) { return reject; }
+        if (event.text == Key.Return) {
+            if (event.modifiers.shift && root.data.can-promote) { root.promote(true); }
+            else if (!event.modifiers.shift) { root.opened(); }
+            return accept;
+        }
+        if (event.text == " " && root.selecting) { root.toggled(); return accept; }
+        if (event.text == Key.DownArrow) { root.step(root.columns); return accept; }
+        if (event.text == Key.UpArrow) { root.step(-root.columns); return accept; }
+        if (root.cards && event.text == Key.RightArrow) { root.step(1); return accept; }
+        if (root.cards && event.text == Key.LeftArrow) { root.step(-1); return accept; }
+        return reject;
+    }
+    Rectangle {
+        x:4px; y:3px; width:parent.width - 8px; height:parent.height - 6px;
+        border-radius:12px;
+        background:root.data.checked || root.selected || touch.has-hover ? root.theme.selection : (root.cards ? root.theme.surface : transparent);
+        border-width:root.has-focus ? 2px : (root.cards ? 1px : 0px);
+        border-color:root.has-focus ? root.theme.accent : root.theme.line;
+        touch := TouchArea { enabled:!root.busy; clicked => { root.focus(); if (root.selecting) { root.toggled(); } else { root.opened(); } } }
+        Text {
+            x:root.selecting ? 40px : 14px; y:12px;
+            width:parent.width - self.x - (root.cards ? 14px : 86px);
+            height:root.cards ? 150px : 48px;
+            text:root.cards ? (root.data.excerpt != "" ? root.data.excerpt : root.data.title) : (root.data.list-excerpt != "" ? root.data.list-excerpt : root.data.excerpt != "" ? root.data.excerpt : root.data.title);
+            text-decorations:root.cards ? root.data.excerpt-highlights : root.data.list-excerpt-highlights;
+            font-family:"Menlo"; font-size:root.cards ? 11px : 12px;
+            color:root.theme.ink; wrap:word-wrap; max-lines:root.cards ? 9 : 3; overflow:elide;
+        }
+        Text {
+            x:14px; y:parent.height - 38px; width:parent.width - 28px;
+            height:13px; text:root.data.path; text-decorations:root.data.path-highlights;
+            font-size:9px; color:root.theme.muted; overflow:elide;
+        }
+        Text {
+            x:14px; y:parent.height - 21px; width:parent.width - 88px; height:13px;
+            text:root.data.modified-label; font-size:10px; color:root.theme.muted; overflow:elide;
+        }
+        Text {
+            x:parent.width - 82px; y:root.cards ? 169px : 64px; width:68px; height:12px;
+            text:root.data.availability == "Cached" ? "" : root.data.availability;
+            font-size:9px; color:root.theme.muted; horizontal-alignment:right; overflow:elide;
+        }
+        ActionButton {
+            x:8px;y:10px;theme:root.theme;visible:root.selecting;enabled:!root.busy;
+            icon:@image-url("../../assets/icons/select.svg");selected:root.data.checked;
+            label:root.data.checked ? "Deselect note" : "Select note"; clicked => { root.toggled(); }
+        }
+        ActionButton {
+            x:parent.width - 76px;y:root.cards ? parent.height - 27px : 27px;
+            theme:root.theme;icon:@image-url("../../assets/icons/newest.svg");label:"Promote to front";
+            visible:root.data.can-promote;enabled:!root.busy;clicked => { root.promote(false); }
+        }
+        ActionButton {
+            x:parent.width - 42px;y:root.cards ? parent.height - 27px : 27px;
+            theme:root.theme;icon:@image-url("../../assets/icons/trash.svg");
+            label:root.data.can-trash ? "Move to Trash" : root.data.trash-disabled-reason;
+            enabled:root.data.can-trash && !root.busy;clicked => { root.trash(); }
+        }
+    }
+}

@@ -25,6 +25,12 @@ fn setup() -> AppWindow {
     ui.window()
         .dispatch_event(WindowEvent::WindowActiveChanged(true));
     ui.set_active_view("pages".into());
+    ui.window().dispatch_event(WindowEvent::internal(
+        i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+            context_id: 1,
+            status: i_slint_core::input::CompositionStatus::Idle,
+        },
+    ));
     settle();
     ui
 }
@@ -76,7 +82,7 @@ fn text_item(ui: &AppWindow, text: &str) -> i_slint_core::item_tree::ItemRc {
 fn invalid_ranges_render_plain_text() {
     let ui = setup();
     let mut rows = vec![row(0)];
-    rows[0].excerpt_highlights = ModelRc::default();
+    rows[0].list_excerpt_highlights = ModelRc::default();
     ui.set_page_results(ModelRc::from(rows.as_slice()));
     let plain = ui.window().take_snapshot().unwrap();
     let mut invalid = slint::language::TextInputDecoration::default();
@@ -84,15 +90,15 @@ fn invalid_ranges_render_plain_text() {
     invalid.end = 2;
     invalid.bold = true;
     invalid.underline = true;
-    rows[0].excerpt_highlights = ModelRc::from([invalid]);
+    rows[0].list_excerpt_highlights = ModelRc::from([invalid]);
     ui.set_page_results(ModelRc::from(rows.as_slice()));
     assert!(plain.as_bytes() == ui.window().take_snapshot().unwrap().as_bytes());
 }
 #[test]
 fn row_keyboard_geometry_uses_112_pixels() {
     let ui = setup();
-    let first = text_item(&ui, "Generated 0");
-    let second = text_item(&ui, "Generated 1");
+    let first = text_item(&ui, "generated/0.md");
+    let second = text_item(&ui, "generated/1.md");
     let y = |item: &i_slint_core::item_tree::ItemRc| item.map_to_window(item.geometry().origin).y;
     assert_eq!(y(&second) - y(&first), 112.0);
     let opened = Rc::new(RefCell::new(String::new()));
@@ -106,7 +112,7 @@ fn row_keyboard_geometry_uses_112_pixels() {
     key(&ui, Key::DownArrow);
     key(&ui, Key::Return);
     assert_eq!(&*opened.borrow(), "8");
-    let selected = text_item(&ui, "Generated 8");
+    let selected = text_item(&ui, "generated/8.md");
     assert!(y(&selected) >= 180.0 && y(&selected) + 16.0 <= 406.0);
     ui.set_page_results(ModelRc::from([row(0)]));
     settle();
@@ -114,16 +120,16 @@ fn row_keyboard_geometry_uses_112_pixels() {
     assert_eq!(&*opened.borrow(), "0");
 }
 #[test]
-fn two_line_preview_starts_with_visible_match() {
+fn compact_source_preview_starts_with_visible_match() {
     let ui = setup();
     ui.set_page_results(ModelRc::from([row(0)]));
     for width in [505.0, 400.0] {
         ui.window().set_size(slint::LogicalSize::new(width, 440.0));
         let _ = ui.window().take_snapshot().unwrap();
         let item = text_item(&ui, row(0).excerpt.as_str());
-        assert_eq!(item.geometry().height(), 30.0);
+        assert_eq!(item.geometry().height(), 48.0);
         let text = item.downcast::<i_slint_core::items::ComplexText>().unwrap();
-        assert_eq!(text.as_pin_ref().max_lines(), 2);
+        assert_eq!(text.as_pin_ref().max_lines(), 3);
         assert!(text.as_pin_ref().text().starts_with("…needle"));
         assert_eq!(row(0).excerpt_highlights.row_count(), 1);
     }
@@ -237,4 +243,35 @@ fn search_reentry_keeps_query_focused_after_result_replacement() {
     ui.window()
         .dispatch_event(WindowEvent::KeyPressed { text: "x".into() });
     assert_eq!(ui.get_search_query(), "x");
+}
+
+#[test]
+fn cards_navigate_columns_and_escape_exits_selection_before_closing() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_cards(true);
+    settle();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    key(&ui, Key::DownArrow);
+    key(&ui, Key::RightArrow);
+    key(&ui, Key::Return);
+    assert_eq!(&*opened.borrow(), "1");
+    ui.set_search_selecting(true);
+    key(&ui, Key::Escape);
+    assert!(!ui.get_search_selecting());
+    assert_eq!(ui.get_active_view(), "pages");
+}
+
+#[test]
+fn busy_search_cannot_open_a_result_with_return() {
+    let ui = setup();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    key(&ui, Key::DownArrow);
+    ui.set_search_busy(true);
+    key(&ui, Key::Return);
+    assert!(opened.borrow().is_empty());
 }

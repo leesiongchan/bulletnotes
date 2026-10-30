@@ -182,6 +182,7 @@ impl State {
         self.arm_save();
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
+        let search_ready = matches!(&event, AppEvent::SearchReady(..));
         let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
         let search_refresh = matches!(&event, AppEvent::RecoveryFinished { connection, result: Ok(outcome), .. }
             if connection == self.coordinator.borrow().connection() && (outcome.stack.is_some() || !outcome.affected.is_empty()));
@@ -229,6 +230,13 @@ impl State {
         let mut effects = self.capture_position(&mut app);
         effects.extend(app.dispatch(AppAction::Tick(self.started.elapsed())));
         effects.extend(app.receive(event));
+        if search_ready {
+            let keys = app
+                .search_results()
+                .map(|r| r.items.iter().map(|p| p.key.clone()).collect::<Vec<_>>())
+                .unwrap_or_default();
+            app.search_management.retain_loaded(&keys);
+        }
         drop(app);
         self.update_sync_selection();
         if save_failed && self.lifecycle.flushing() {

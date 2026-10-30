@@ -1,0 +1,40 @@
+import { UiTheme } from "../types.slint";
+import { ActionButton, ChoiceButton } from "action-button.slint";
+
+export component SearchToolbar inherits Rectangle {
+    in property <UiTheme> theme;
+    in property <bool> enabled:true;
+    in property <bool> scratchpads;
+    in property <bool> cards;
+    in property <bool> selecting;
+    in property <int> selected-count;
+    in property <bool> can-promote;
+    in property <bool> can-trash;
+    in property <bool> busy;
+    callback select-toggled();
+    callback scope-changed();
+    callback view-changed(bool);
+    callback promote-selected();
+    callback trash-selected();
+    height:root.selecting ? 98px : 54px;
+    background:root.theme.paper;
+    if root.selecting: Rectangle {
+        x:16px;y:0px;width:parent.width - 32px;height:38px;border-radius:10px;background:root.theme.surface;
+        Text { x:10px; width:66px;height:parent.height; text:root.selected-count + " selected";font-size:10px;color:root.theme.muted;vertical-alignment:center; }
+        ChoiceButton { x:76px;y:4px;width:100px;theme:root.theme;text:"Promote selected";visible:root.scratchpads;enabled:root.enabled && root.can-promote && !root.busy;clicked => { root.promote-selected(); } }
+        ChoiceButton { x:parent.width - 156px;y:4px;width:148px;theme:root.theme;text:"Move selected to Trash";enabled:root.enabled && root.can-trash && !root.busy;clicked => { root.trash-selected(); } }
+    }
+    Rectangle {
+        x:16px;y:root.selecting ? 44px : 0px;width:78px;height:38px;border-radius:19px;background:root.theme.surface;
+        ChoiceButton { x:4px;y:5px;width:parent.width - 8px;theme:root.theme;text:root.selecting ? "Done" : "Select";selected:root.selecting;enabled:root.enabled && !root.busy;clicked => { root.select-toggled(); } }
+    }
+    Rectangle {
+        x:102px;y:root.selecting ? 44px : 0px;width:128px;height:38px;border-radius:19px;background:root.theme.surface;
+        ChoiceButton { x:4px;y:5px;width:parent.width - 8px;theme:root.theme;text:root.scratchpads ? "Scratchpads" : "All Pages";label:"Switch between Scratchpads and All Pages";enabled:root.enabled && !root.busy;clicked => { root.scope-changed(); } }
+    }
+    Rectangle {
+        x:parent.width - 90px;y:root.selecting ? 44px : 0px;width:74px;height:38px;border-radius:19px;background:root.theme.surface;
+        ActionButton { x:6px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/list.svg");label:"List view";enabled:root.enabled;selected:!root.cards;clicked => { root.view-changed(false); } }
+        ActionButton { x:40px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/grid.svg");label:"Card view";enabled:root.enabled;selected:root.cards;clicked => { root.view-changed(true); } }
+    }
+}

@@ -18,12 +18,14 @@ pub struct AppearanceCommit {
 #[derive(Clone)]
 pub(crate) enum MetadataChange {
     Window(crate::store::settings::WindowPlacement),
+    SearchView(crate::store::settings::SearchView),
     Hotkey(crate::store::settings::HotkeySettings),
     Connection(crate::domain::connection::ConnectionId),
 }
 impl MetadataChange {
     pub(crate) fn apply(&self, settings: &mut AppSettings) {
         match self {
+            Self::SearchView(value) => settings.search_view = *value,
             Self::Window(value) => settings.window = Some(value.clone()),
             Self::Hotkey(value) => settings.hotkey = value.clone(),
             Self::Connection(value) => settings.active_connection = Some(value.clone()),
@@ -33,6 +35,7 @@ impl MetadataChange {
 impl AppearanceCommit {
     /// UI appearance tickets own palette/font/paper/imports, never native metadata.
     pub(crate) fn rebase_metadata(&mut self, current: &AppSettings) {
+        self.settings.search_view = current.search_view;
         self.settings.window = current.window.clone();
         self.settings.hotkey = current.hotkey.clone();
         self.settings.active_connection = current.active_connection.clone();
@@ -219,5 +222,26 @@ impl AppearanceController {
     pub fn cancel_preview(&mut self) {
         self.displayed = self.committed.clone();
         self.preview_id = uuid::Uuid::new_v4();
+    }
+}
+
+#[cfg(test)]
+mod search_view_tests {
+    use super::*;
+    use crate::store::settings::SearchView;
+
+    #[test]
+    fn appearance_ticket_preserves_newer_view_metadata() {
+        let mut controller =
+            AppearanceController::new(AppSettings::default(), SystemAppearance::Light).unwrap();
+        let mut candidate = controller.displayed().clone();
+        candidate.appearance.font_size = 18.0;
+        let mut ticket = controller.begin_settings_commit(candidate, true).unwrap();
+        controller.acknowledge_metadata(&MetadataChange::SearchView(SearchView::Cards));
+        ticket.rebase_metadata(controller.committed());
+        controller.complete_settings_commit(ticket, Ok(())).unwrap();
+        assert_eq!(controller.committed().search_view, SearchView::Cards);
+        assert_eq!(controller.displayed().search_view, SearchView::Cards);
+        assert_eq!(controller.committed().appearance.font_size, 18.0);
     }
 }

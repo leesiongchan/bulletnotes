@@ -19,7 +19,7 @@ export struct UiTheme {
     markdown: UiMarkdownColors,
     dark: bool
 }
-export struct PageRow { key: string, title: string, path: string, excerpt: string, availability: string, modified-label: string, title-highlights: [TextInputDecoration], path-highlights: [TextInputDecoration], excerpt-highlights: [TextInputDecoration] }
+export struct PageRow { checked: bool, can-promote: bool, can-trash: bool, trash-disabled-reason: string, list-excerpt: string, list-excerpt-highlights: [TextInputDecoration], key: string, title: string, path: string, excerpt: string, availability: string, modified-label: string, title-highlights: [TextInputDecoration], path-highlights: [TextInputDecoration], excerpt-highlights: [TextInputDecoration] }
 export struct UiThemeSwatches {
     primary: color, secondary: color, tertiary: color,
     accent2: color, accent3: color, accent4: color, accent5: color, highlight: color

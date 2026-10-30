@@ -19,6 +19,7 @@ pub(super) struct SearchState {
     pub(super) find: RefCell<NoteFind>,
     pub(super) request_id: Cell<u64>,
     pub(super) invalid_folder: Cell<bool>,
+    pub(super) connection: RefCell<Option<crate::domain::connection::ConnectionId>>,
 }
 
 impl LocalUi {
@@ -40,6 +41,66 @@ impl LocalUi {
 }
 
 impl State {
+    pub(super) fn reset_search_selection(&self) {
+        self.coordinator.borrow_mut().search_management.clear();
+        self.presentation.search.set(None);
+        if let Some(window) = self.window.upgrade() {
+            window.set_search_selecting(false);
+            window.set_page_results(Default::default());
+        }
+    }
+    pub(super) fn selected_search_keys(&self) -> Vec<crate::domain::page::PageKey> {
+        let app = self.coordinator.borrow();
+        app.search_results()
+            .map(|r| {
+                r.items
+                    .iter()
+                    .filter(|p| app.search_management.selected().contains(&p.key))
+                    .map(|p| p.key.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    pub(super) fn search_key(&self, value: &str) -> Option<crate::domain::page::PageKey> {
+        let key = serde_json::from_str::<crate::domain::page::PageKey>(value).ok()?;
+        let app = self.coordinator.borrow();
+        (key.connection == *app.connection()
+            && app
+                .search_results()
+                .is_some_and(|r| r.items.iter().any(|p| p.key == key)))
+        .then_some(key)
+    }
+    pub(super) fn promote_search(
+        self: &Rc<Self>,
+        selected: Vec<crate::domain::page::PageKey>,
+        open: bool,
+    ) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        if !window.get_search_scratchpads() || selected.is_empty() {
+            return;
+        }
+        let expected = {
+            let app = self.coordinator.borrow();
+            let Some(stack) = app.scratchpads().filter(|_| !app.scratchpads_pending()) else {
+                return;
+            };
+            stack
+                .entries()
+                .iter()
+                .map(|e| e.key.clone())
+                .collect::<Vec<_>>()
+        };
+        let before = expected.iter().find(|key| !selected.contains(key)).cloned();
+        let open_after = open.then(|| selected[0].clone());
+        self.dispatch(AppAction::MoveSearchScratchpads {
+            expected,
+            selected,
+            before,
+            open_after,
+        });
+    }
     pub(super) fn issue_search(self: &Rc<Self>) -> Option<u64> {
         self.issue_search_page(false)
     }
@@ -58,7 +119,11 @@ impl State {
             0
         };
         let window = self.window.upgrade()?;
-        let folder = window.get_search_folder();
+        let folder = if window.get_search_scratchpads() {
+            slint::SharedString::default()
+        } else {
+            window.get_search_folder()
+        };
         let folder = if folder.is_empty() {
             None
         } else {
@@ -79,7 +144,11 @@ impl State {
         self.search.invalid_folder.set(false);
         self.search.request_id.set(id);
         let query = SearchQuery {
-            scope: crate::store::search::SearchScope::AllPages,
+            scope: if window.get_search_scratchpads() {
+                crate::store::search::SearchScope::Scratchpads
+            } else {
+                crate::store::search::SearchScope::AllPages
+            },
             connection: self.coordinator.borrow().connection().clone(),
             text: window.get_search_query().to_string(),
             folder,

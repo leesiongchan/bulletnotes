@@ -2,293 +2,171 @@ import { ListView } from "std-widgets.slint";
 import { ThemeScrollbar } from "theme-scrollbar.slint";
 import { UiTheme, PageRow } from "../types.slint";
 import { ActionButton, ChoiceButton } from "action-button.slint";
-component ResultRow inherits FocusScope {
-    in property <UiTheme> theme;
-    in property <PageRow> data;
-    in property <bool> selected;
-    callback opened();
-    callback step(int);
-    in property <length> row-height;
-    height: root.row-height;
-    accessible-role: button;
-    accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
-    accessible-action-default => { root.opened(); }
-    changed selected => { if (root.selected) { root.focus(); } }
-    init => { if (root.selected) { root.focus(); } }
-    key-pressed(event) => {
-        if (event.text == Key.Return) { root.opened(); return accept; }
-        if (event.text == Key.DownArrow) { root.step(1); return accept; }
-        if (event.text == Key.UpArrow) { root.step(-1); return accept; }
-        return reject;
-    }
-    Rectangle {
-        x: 8px;
-        y: 2px;
-        width: parent.width - 16px;
-        height: parent.height - 4px;
-        border-radius: 12px;
-        background: root.selected || touch.has-hover ? root.theme.selection : transparent;
-        border-width: root.has-focus ? 1px : 0px;
-        border-color: root.theme.accent;
-        Text {
-            x: 12px;
-            y: 10px;
-            width: parent.width - 100px;
-            height: 16px;
-            text: root.data.title;
-            text-decorations: root.data.title-highlights;
-            color: root.theme.ink;
-            font-size: 13px;
-            font-weight: 550;
-            overflow: elide;
-        }
-
-        Text {
-            x: parent.width - 88px;
-            y: 11px;
-            width: 76px;
-            height: 14px;
-            text: root.data.availability;
-            color: root.theme.muted;
-            font-size: 9px;
-            horizontal-alignment: right;
-            overflow: elide;
-        }
-
-        Text {
-            x: 12px;
-            y: 31px;
-            width: parent.width - 24px;
-            height: 13px;
-            text: root.data.path;
-            text-decorations: root.data.path-highlights;
-            color: root.theme.muted;
-            font-size: 10px;
-            overflow: elide;
-        }
-
-        Text {
-            x: 12px;
-            y: 50px;
-            width: parent.width - 24px;
-            height: 30px;
-            text: root.data.excerpt;
-            text-decorations: root.data.excerpt-highlights;
-            wrap: word-wrap;
-            max-lines: 2;
-            color: root.theme.muted;
-            font-family:"Menlo";
-            font-size: 11px;
-            overflow: elide;
-        }
-
-        Text {x:12px;y:85px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:9px;overflow:elide;}
-
-        touch := TouchArea {
-            clicked => { root.focus(); root.opened(); }
-        }
-    }
-}
+import { SearchResult } from "search-result.slint";
+import { SearchToolbar } from "search-toolbar.slint";
 
 export component PageBrowser inherits Rectangle {
-    out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
-    private property <length> result-row-height:112px;
-    changed results => { if (root.selected-index >= root.results.length) { root.selected-index = -1; query-input.focus(); } }
-    changed height => { root.reveal-selection(); }
-    changed width => { root.reveal-selection(); }
     in property <UiTheme> theme;
     in property <[PageRow]> results;
     in-out property <string> query;
     in-out property <string> folder;
-    in-out property <int> selected-index:-1;
+    in-out property <bool> scratchpads;
+    in-out property <bool> cards;
+    in-out property <bool> selecting;
+    in property <int> selected-count;
+    in property <bool> busy;
+    in property <int> confirm-count;
+    in property <string> confirm-id;
+    in property <string> action-message;
+    in property <bool> can-promote;
+    in property <bool> can-trash;
+    in property <bool> can-create;
     in property <string> index-status;
     in property <bool> can-load-more:false;
+    in-out property <int> selected-index:-1;
+    private property <int> columns:root.cards ? max(1,floor((root.width - 32px) / 236px)) : 1;
+    private property <length> row-height:root.cards ? 236px : 112px;
+    private property <int> row-count:ceil(root.results.length / root.columns);
+    out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
     callback load-more();
     callback query-changed(string);
     callback folder-changed(string);
     callback open-page(string);
     callback return-to-note();
+    callback scope-changed(bool);
+    callback view-changed(bool);
+    callback select-toggled();
+    callback selection-toggled(string);
+    callback promote(string,bool);
+    callback promote-selected();
+    callback trash(string);
+    callback trash-selected();
+    callback trash-confirmed(string);
+    callback trash-cancelled();
+    callback create();
     public function focus-query() { root.selected-index = -1; query-input.focus(); }
-    background: root.theme.paper;
+    public function cancel-or-close() {
+        if (root.confirm-count > 0) { root.trash-cancelled(); query-input.focus(); }
+        else if (root.selecting) { root.selecting = false; root.select-toggled(); query-input.focus(); }
+        else { root.query = ""; root.return-to-note(); }
+    }
     function reveal-selection() {
         if (root.selected-index < 0) { return; }
-        if (root.selected-index * root.result-row-height < -list.content-y) { list.content-y = -root.selected-index * root.result-row-height; }
-        else if ((root.selected-index + 1) * root.result-row-height > -list.content-y + list.visible-height) { list.content-y = min(0px,list.visible-height - (root.selected-index + 1) * root.result-row-height); }
+        if (floor(root.selected-index / root.columns) * root.row-height < -list.content-y) {
+            list.content-y = -floor(root.selected-index / root.columns) * root.row-height;
+        } else if ((floor(root.selected-index / root.columns) + 1) * root.row-height > -list.content-y + list.visible-height) {
+            list.content-y = min(0px,list.visible-height - (floor(root.selected-index / root.columns) + 1) * root.row-height);
+        }
     }
-    function move-selection(step: int) {
+    function move-selection(step:int) {
         if (root.results.length > 0) {
-            root.selected-index = max(0,min(root.results.length - 1,root.selected-index + step));
+            root.selected-index = max(0,min(root.results.length - 1,root.selected-index < 0 ? 0 : root.selected-index + step));
             root.reveal-selection();
         }
     }
-    Text {
-        x: 24px;
-        y: 14px;
-        text: "Search all pages";
-        font-size: 17px;
-        font-weight: 550;
-        color: root.theme.ink;
+    changed results => {
+        if (root.selected-index >= root.results.length) { root.focus-query(); }
     }
-
-    ActionButton {
-        x: parent.width - 44px;
-        y: 9px;
-        theme: root.theme;
-        icon: @image-url("../../assets/icons/close.svg");
-        label: "Return to note";
-        clicked => { root.return-to-note(); }
-    }
-
+    changed query => { root.selected-index = -1; list.content-y = 0px; }
+    changed scratchpads => { root.selected-index = -1; list.content-y = 0px; }
+    changed folder => { root.selected-index = -1; list.content-y = 0px; }
+    changed cards => { root.reveal-selection(); }
+    changed height => { root.reveal-selection(); }
+    changed width => { root.reveal-selection(); }
+    changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
+    background:root.theme.paper;
     Rectangle {
-        x: 24px;
-        y: 52px;
-        width: parent.width - 48px;
-        height: 34px;
-        border-radius: 12px;
-        background: root.theme.surface;
-        border-width: query-input.has-focus ? 1px : 0px;
-        border-color: query-input.has-focus ? root.theme.accent : root.theme.line;
-        Image {
-            x: 10px;
-            y: 10px;
-            width: 14px;
-            height: 14px;
-            source: @image-url("../../assets/icons/search.svg");
-            colorize: root.theme.muted;
-        }
-
+        x:24px;y:14px;width:parent.width - 48px;height:38px;border-radius:12px;
+        background:root.theme.surface;border-width:query-input.has-focus ? 1px : 0px;border-color:root.theme.accent;
+        Image { x:12px;y:12px;width:14px;height:14px;source:@image-url("../../assets/icons/search.svg");colorize:root.theme.muted; }
         query-input := TextInput {
-            x: 33px;
-            y: 0px;
-            width: parent.width - 42px;
-            height: parent.height;
-            vertical-alignment: center;
-            text <=> root.query;
-            single-line: true;
-            color: root.theme.ink;
-            font-size: 12px;
-            selection-background-color: root.theme.cursor;
-            selection-foreground-color: root.theme.ink;
-            accessible-label: "Search every page";
-            edited => { root.selected-index = -1; root.query-changed(self.text); }
+            x:36px;width:parent.width - 78px;height:parent.height;single-line:true;vertical-alignment:center;
+            text <=> root.query;color:root.theme.ink;font-size:13px;enabled:root.confirm-count == 0;
+            selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;
+            accessible-label:"Search notes";
+            edited => { root.query-changed(self.text); }
             key-pressed(event) => {
-                if (event.text == Key.DownArrow) { root.move-selection(1); return accept; }
-                if (event.text == Key.Return && root.results.length > 0) { root.open-page(root.results[min(root.results.length - 1,max(0,root.selected-index))].key); return accept; }
+                if (!self.source-edits-allowed || root.busy) { return reject; }
+                if (event.text == Key.DownArrow && root.results.length > 0) { root.move-selection(1); return accept; }
+                if (event.text == Key.Return) {
+                    if (root.results.length > 0) {
+                        if (event.modifiers.shift && root.scratchpads) { root.promote(root.results[max(0,root.selected-index)].key,true); }
+                        else if (!event.modifiers.shift) { root.open-page(root.results[max(0,root.selected-index)].key); }
+                    } else if (root.can-create && !event.modifiers.shift) { root.create(); }
+                    return accept;
+                }
                 return reject;
             }
         }
-
-        Text {
-            x: 33px;
-            y: 0px;
-            width: parent.width - 42px;
-            height: parent.height;
-            vertical-alignment: center;
-            text: "Search pages and note text";
-            font-size: 12px;
-            color: root.theme.muted;
-            visible: root.query == "";
-            accessible-role: none;
-        }
+        Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:root.theme.muted;font-size:13px;accessible-role:none; }
+        ChoiceButton { x:parent.width - 39px;y:5px;width:34px;theme:root.theme;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
     }
-
     Rectangle {
-        x: 24px;
-        y: 94px;
-        width: parent.width - 48px;
-        height: 30px;
-        border-radius: 6px;
-        background: root.theme.surface;
-        border-width: 1px;
-        border-color: folder-input.has-focus ? root.theme.accent : root.theme.line;
-        Text {
-            x: 10px;
-            width: 48px;
-            height: parent.height;
-            text: "Folder";
-            vertical-alignment: center;
-            font-size: 11px;
-            color: root.theme.muted;
-        }
-
+        x:24px;y:60px;width:parent.width - 48px;height:28px;border-radius:8px;background:root.theme.surface;visible:!root.scratchpads;
+        border-width:folder-input.has-focus ? 1px : 0px;border-color:root.theme.accent;
+        Text { x:10px;width:44px;height:parent.height;text:"Folder";font-size:10px;color:root.theme.muted;vertical-alignment:center; }
         folder-input := TextInput {
-            x: 62px;
-            width: parent.width - 72px;
-            height: parent.height;
-            vertical-alignment: center;
-            single-line: true;
-            text <=> root.folder;
-            font-size: 11px;
-            color: root.theme.ink;
-            selection-background-color: root.theme.cursor;
-            selection-foreground-color: root.theme.ink;
-            accessible-label: "Filter by folder, empty for all folders";
-            edited => { root.selected-index = -1; root.folder-changed(self.text); }
+            x:60px;width:parent.width - 70px;height:parent.height;single-line:true;vertical-alignment:center;
+            text <=> root.folder;color:root.theme.ink;font-size:11px;enabled:root.confirm-count == 0;
+            selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;
+            accessible-label:"Filter by folder, empty for all folders";
+            edited => { root.folder-changed(self.text); }
         }
-
-        Text {
-            x: 62px;
-            width: parent.width - 72px;
-            height: parent.height;
-            vertical-alignment: center;
-            text: "All folders";
-            font-size: 11px;
-            color: root.theme.muted;
-            visible: root.folder == "";
-            accessible-role: none;
-        }
+        Text { x:60px;width:parent.width - 70px;height:parent.height;vertical-alignment:center;text:"All folders";visible:root.folder == "";font-size:11px;color:root.theme.muted;accessible-role:none; }
     }
-
     list := ListView {
-        vertical-scrollbar-policy: always-off;
-        x: 8px;
-        y: 136px;
-        width: parent.width - 16px;
-        height: parent.height - 170px;
-        for item[index] in root.results: ResultRow {
-            row-height:root.result-row-height;
-            width: parent.width;
-            theme: root.theme;
-            data: item;
-            selected: root.selected-index == index;
-            opened => { root.open-page(item.key); }
-            step(amount) => { root.move-selection(amount); }
+        x:12px;y:root.scratchpads ? 64px : 98px;width:parent.width - 24px;
+        height:max(0px,parent.height - self.y - toolbar.height - 38px);
+        vertical-scrollbar-policy:always-off;enabled:root.confirm-count == 0;
+        for row in root.row-count: Rectangle {
+            width:parent.width;height:root.row-height;
+            for col in root.columns: SearchResult {
+                x:col * parent.width / root.columns;width:parent.width / root.columns;height:root.row-height;
+                visible:row * root.columns + col < root.results.length;
+                theme:root.theme;data:root.results[row * root.columns + col];cards:root.cards;columns:root.columns;
+                selected:root.selected-index == row * root.columns + col;
+                selecting:root.selecting;busy:root.busy;
+                opened => { root.open-page(root.results[row * root.columns + col].key); }
+                toggled => { root.selection-toggled(root.results[row * root.columns + col].key); }
+                promote(open) => { root.promote(root.results[row * root.columns + col].key,open); }
+                trash => { root.trash(root.results[row * root.columns + col].key); }
+                step(amount) => { root.move-selection(amount); }
+            }
         }
     }
-
-    ThemeScrollbar {
-        x: list.x + list.width - self.width;
-        y: list.y;
-        height: list.height;
-        thumb-color: root.theme.scrollbar;
-        content-height: list.content-height;
-        visible-height: list.visible-height;
-        content-y <=> list.content-y;
+    ThemeScrollbar { x:list.x + list.width - self.width;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
+    if root.results.length == 0: Rectangle {
+        x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
+        Text { width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"Menlo";font-size:13px;horizontal-alignment:center; }
+        if root.can-create: Rectangle {
+            y:38px;width:parent.width;height:38px;border-radius:19px;background:root.theme.surface;
+            ChoiceButton { x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"↵  Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
+        }
     }
-
-    Text {
-        x: 24px;
-        y: 148px;
-        width: parent.width - 48px;
-        text: "No matching pages";
-        visible: root.results.length == 0;
-        color: root.theme.muted;
-        font-size: 12px;
+    Text { x:24px;y:toolbar.y - 29px;width:parent.width - (root.can-load-more ? 152px : 48px);height:20px;text:root.action-message != "" ? root.action-message : root.index-status;color:root.theme.muted;font-size:10px;overflow:elide; }
+    ChoiceButton { x:parent.width - 120px;y:toolbar.y - 34px;width:100px;theme:root.theme;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
+    toolbar := SearchToolbar {
+        width:parent.width;y:parent.height - self.height;
+        theme:root.theme;scratchpads:root.scratchpads;cards:root.cards;selecting:root.selecting;
+        selected-count:root.selected-count;can-promote:root.can-promote;can-trash:root.can-trash;busy:root.busy;
+        enabled:root.confirm-count == 0;
+        select-toggled => { root.selecting = !root.selecting; root.select-toggled(); }
+        scope-changed => { root.scratchpads = !root.scratchpads; root.scope-changed(root.scratchpads); }
+        view-changed(value) => { root.cards = value; root.view-changed(value); }
+        promote-selected => { root.promote-selected(); }
+        trash-selected => { root.trash-selected(); }
     }
-
-    ChoiceButton {
-        x:parent.width - 124px;y:parent.height - 35px;width:104px;height:28px;
-        theme:root.theme;text:"More pages";visible:root.can-load-more;
-        clicked => { root.load-more(); }
-    }
-    Text {
-        x: 24px;
-        y: parent.height - 25px;
-        width: parent.width - (root.can-load-more ? 156px : 48px);
-        height: 16px;
-        text: root.index-status;
-        color: root.theme.muted;
-        font-size: 10px;
-        overflow: elide;
+    Rectangle {
+        visible:root.confirm-count > 0;
+        background:root.theme.paper.with-alpha(0.85);
+        TouchArea { }
+        Rectangle {
+            x:16px;y:max(12px,(parent.height - self.height) / 2);width:parent.width - 32px;height:174px;
+            border-radius:14px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;
+            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:15px;font-weight:550;color:root.theme.ink; }
+            Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:12px;color:root.theme.muted; }
+            ChoiceButton { x:16px;y:128px;width:92px;theme:root.theme;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
+            confirm-button := ChoiceButton { x:parent.width - 154px;y:128px;width:138px;theme:root.theme;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
+        }
     }
 }
