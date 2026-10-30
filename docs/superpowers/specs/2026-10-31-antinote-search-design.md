@@ -1,6 +1,6 @@
 # AntiNote-style search and note management
 
-Status: proposed; awaiting user approval before implementation.
+Status: approved by the user on 2026-10-31; implementation planning authorized.
 
 ## Intent and agreed direction
 
@@ -30,7 +30,7 @@ No user note text or screenshots containing personal notes will be added to the 
 
 ## Proposed experience
 
-The following details are agent proposals for approval, not additional decisions already made by the user.
+The following details were proposed by the agent and accepted with approval of this document.
 
 ### Layout and display
 
@@ -96,4 +96,4 @@ Use existing tracing at operation boundaries and failures with counts, scope, an
 
 The builder review identified one missing decision: a measurable workload and latency target for substring search. The engineering target above resolves it as an agent proposal. No remaining product question was identified by that review.
 
-Approval is requested for this design, including the proposed substring matching, unchanged shortcut assignments, local manual scratchpad order, and guarded batch Trash. Implementation planning begins only after approval.
+The user approved this design, including substring matching, unchanged shortcut assignments, local manual scratchpad order, and guarded batch Trash. Proceed to implementation planning.
