@@ -6,6 +6,35 @@ use bulletnotes::{
 };
 use support::storage_fixture::{database, key};
 #[tokio::test]
+async fn substring_search_matches_inside_words_and_unicode_case() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    let page = key("sample.md");
+    store.create_draft(page.clone()).await.unwrap();
+    store
+        .save_local(
+            page.clone(),
+            "# Header\r\ncafé Σςσ 日本語 .* 50% a_b \"quoted\"".into(),
+            LocalRevision(1),
+        )
+        .await
+        .unwrap();
+    for query in ["eAdE", "CAFÉ", "σ", "本", ".*", "%", "_", "\"quoted\""] {
+        let result = store.search(search_query(query)).await.unwrap();
+        assert_eq!(result.total, 1, "query {query}");
+        let hit = &result.items[0];
+        let excerpt = hit.excerpt.as_ref().unwrap();
+        assert!(!hit.highlights.excerpt.is_empty(), "query {query}");
+        for range in &hit.highlights.excerpt {
+            assert!(excerpt.get(range.clone()).is_some());
+        }
+    }
+    for query in ["cafe", ".+", "not_there"] {
+        assert_eq!(store.search(search_query(query)).await.unwrap().total, 0);
+    }
+    store.shutdown().await.unwrap();
+}
+#[tokio::test]
 async fn search_is_literal_and_scoped() {
     let directory = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&database(&directory)).await.unwrap();
@@ -30,6 +59,7 @@ async fn search_is_literal_and_scoped() {
     for text in ["Literal OR words", "\"quotes\"", "日本語", "50% café"] {
         let results = store
             .search(SearchQuery {
+                scope: bulletnotes::store::search::SearchScope::AllPages,
                 connection: a.connection.clone(),
                 text: text.into(),
                 folder: None,
@@ -44,6 +74,7 @@ async fn search_is_literal_and_scoped() {
     }
     let all = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: a.connection.clone(),
             text: "Same".into(),
             folder: None,
@@ -57,6 +88,7 @@ async fn search_is_literal_and_scoped() {
     assert_eq!(all.catalogue_total, 2);
     let punctuation = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: a.connection.clone(),
             text: "\" : * OR - ()".into(),
             folder: None,
@@ -85,6 +117,7 @@ async fn empty_query_orders_recent_visits_then_paths_and_respects_folder() {
         .unwrap();
     let results = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: key("a.md").connection,
             text: String::new(),
             folder: None,
@@ -103,6 +136,7 @@ async fn empty_query_orders_recent_visits_then_paths_and_respects_folder() {
     );
     let results = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: key("a.md").connection,
             text: String::new(),
             folder: Some(bulletnotes::domain::page::PagePath::parse("Projects").unwrap()),
@@ -125,6 +159,7 @@ async fn punctuation_only_searches_do_not_become_fts_syntax() {
     for text in ["\"", "*", "()", ":", "-", "\"\"\""] {
         let result = store
             .search(SearchQuery {
+                scope: bulletnotes::store::search::SearchScope::AllPages,
                 connection: page.connection.clone(),
                 text: text.into(),
                 folder: None,
@@ -160,6 +195,7 @@ async fn recording_a_visit_does_not_invent_or_replace_selection() {
     );
     let results = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: page.connection.clone(),
             text: String::new(),
             folder: None,
@@ -174,6 +210,7 @@ async fn recording_a_visit_does_not_invent_or_replace_selection() {
 
 fn search_query(text: &str) -> SearchQuery {
     SearchQuery {
+        scope: bulletnotes::store::search::SearchScope::AllPages,
         connection: key("generated.md").connection,
         text: text.into(),
         folder: None,
@@ -211,7 +248,7 @@ async fn late_body_match_is_visible_in_excerpt() {
     let empty = store.search(search_query("")).await.unwrap();
     assert_eq!(
         empty.items[0].excerpt.as_ref().unwrap(),
-        &body.chars().take(160).collect::<String>()
+        &body.chars().take(320).collect::<String>()
     );
     assert_eq!(empty.items[0].highlights, Default::default());
     assert_eq!(store.load_page(&page).await.unwrap().unwrap().body, body);
@@ -301,5 +338,33 @@ async fn online_only_hit_has_no_body_excerpt() {
     assert!(item.highlights.excerpt.is_empty());
     assert!(!item.highlights.path.is_empty());
     assert!(store.load_page(&page).await.unwrap().is_none());
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn scratchpad_scope_uses_stack_order_and_ignores_all_pages_folder() {
+    use bulletnotes::store::search::SearchScope;
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    for path in ["Quick Notes/a.md", "Quick Notes/b.md", "Other/c.md"] {
+        let page = key(path);
+        store.create_draft(page.clone()).await.unwrap();
+        store
+            .save_local(page, "Header".into(), LocalRevision(1))
+            .await
+            .unwrap();
+    }
+    let mut query = search_query("eade");
+    query.scope = SearchScope::Scratchpads;
+    query.folder = Some(bulletnotes::domain::page::PagePath::parse("Other").unwrap());
+    query.limit = 1;
+    let result = store.search(query.clone()).await.unwrap();
+    assert_eq!(result.total, 2);
+    assert_eq!(result.items[0].key, key("Quick Notes/b.md"));
+    query.offset = 1;
+    let result = store.search(query).await.unwrap();
+    assert_eq!(result.items[0].key, key("Quick Notes/a.md"));
+    assert_eq!(result.items[0].local_revision, LocalRevision(1));
+    assert!(!result.items[0].conflicted);
     store.shutdown().await.unwrap();
 }

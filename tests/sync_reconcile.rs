@@ -34,6 +34,7 @@ fn local(body: &str, base: Option<RemoteFile>) -> PageSnapshot {
 }
 fn query() -> SearchQuery {
     SearchQuery {
+        scope: bulletnotes::store::search::SearchScope::AllPages,
         connection: key("one.md").connection,
         text: String::new(),
         folder: None,

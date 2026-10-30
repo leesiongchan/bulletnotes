@@ -188,6 +188,7 @@ pub struct Coordinator {
     remote_state: crate::domain::status::SyncState,
     active_conflict: Option<(PageKey, LocalRevision, uuid::Uuid)>,
     search_folder: Option<PagePath>,
+    search_scope: crate::store::search::SearchScope,
 }
 impl Coordinator {
     pub fn new(connection: ConnectionId, make_draft: impl FnMut() -> PageKey + 'static) -> Self {
@@ -225,6 +226,7 @@ impl Coordinator {
             remote_state: Default::default(),
             active_conflict: None,
             search_folder: None,
+            search_scope: Default::default(),
         }
     }
     pub fn editor(&self) -> Option<&EditorSession> {
@@ -566,7 +568,8 @@ impl Coordinator {
                     && self.latest_search.is_none_or(|id| request.id > id)
                 {
                     let same_query = self.navigation.search_query == request.query.text
-                        && self.search_folder == request.query.folder;
+                        && self.search_folder == request.query.folder
+                        && self.search_scope == request.query.scope;
                     if request.query.offset > 0
                         && (!same_query
                             || self.search_pending
@@ -585,6 +588,7 @@ impl Coordinator {
                         self.results = None;
                     }
                     self.search_folder = request.query.folder.clone();
+                    self.search_scope = request.query.scope;
                     self.navigation.search_query = request.query.text.clone();
                     effects.push(AppEffect::Search(request));
                 }

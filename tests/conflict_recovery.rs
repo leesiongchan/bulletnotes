@@ -174,6 +174,7 @@ async fn trash_survives_restart_with_source_base_and_delete_intent() {
     assert!(
         store
             .search(SearchQuery {
+                scope: bulletnotes::store::search::SearchScope::AllPages,
                 connection: key("one.md").connection,
                 text: String::new(),
                 folder: None,

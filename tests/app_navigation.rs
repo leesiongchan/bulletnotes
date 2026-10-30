@@ -319,6 +319,7 @@ mod coordination {
     fn a_late_search_cannot_replace_newer_results() {
         let mut app = app();
         let query = |text: &str| SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: key("a.md").connection,
             text: text.into(),
             folder: None,

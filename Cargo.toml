@@ -34,6 +34,7 @@ default = []
 protocol-validation = []
 
 [dependencies]
+regex = "=1.13.1"
 directories = "=6.0.0"
 pulldown-cmark = { version = "=0.13.4", default-features = false }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }

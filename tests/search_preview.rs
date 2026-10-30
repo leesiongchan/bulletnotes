@@ -148,6 +148,7 @@ fn stale_query_cannot_reuse_old_highlights() {
         AppAction::Search(SearchRequest {
             id,
             query: SearchQuery {
+                scope: bulletnotes::store::search::SearchScope::AllPages,
                 connection: connection.clone(),
                 text: text.into(),
                 folder: None,
@@ -160,6 +161,8 @@ fn stale_query_cannot_reuse_old_highlights() {
     app.dispatch(request(2, "new"));
     let result = SearchResults {
         items: vec![PageSummary {
+            local_revision: bulletnotes::domain::page::LocalRevision(0),
+            conflicted: false,
             key: bulletnotes::domain::page::PageKey {
                 connection: connection.clone(),
                 path: PagePath::parse("old.md").unwrap(),

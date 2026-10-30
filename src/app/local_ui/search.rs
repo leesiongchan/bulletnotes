@@ -79,6 +79,7 @@ impl State {
         self.search.invalid_folder.set(false);
         self.search.request_id.set(id);
         let query = SearchQuery {
+            scope: crate::store::search::SearchScope::AllPages,
             connection: self.coordinator.borrow().connection().clone(),
             text: window.get_search_query().to_string(),
             folder,
