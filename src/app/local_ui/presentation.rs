@@ -195,15 +195,11 @@ impl State {
                 && !app.scratchpads_pending()
                 && !app.search_management.busy(),
         );
-        window.set_search_can_create(
-            !self.search.invalid_folder.get()
-                && !app.search_pending()
-                && !app.search_management.busy()
-                && app.search_results().is_some_and(|r| r.total == 0)
-                && !window.get_search_query().trim().is_empty(),
-        );
+        window.set_search_can_create(self.can_create_search_note(&window));
         window.set_search_action_message(
-            if app.search_management.busy() {
+            if app.notice().is_some() {
+                ""
+            } else if app.search_management.busy() {
                 "Saving note changes…"
             } else if let Some(reason) = disabled {
                 reason

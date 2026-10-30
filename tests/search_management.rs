@@ -364,6 +364,50 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
             store.load_settings().await.unwrap().search_view,
             SearchView::Cards
         );
+        window.set_search_scratchpads(false);
+        window.invoke_search_scope_changed(false);
+        window.set_search_query("no matching notes".into());
+        window.invoke_query_changed(window.get_search_query());
+        local.search_current().await.unwrap();
+        assert!(window.get_search_can_create());
+        window.set_search_folder("../invalid".into());
+        window.invoke_folder_changed(window.get_search_folder());
+        assert!(
+            !window.get_search_can_create(),
+            "invalid folder leaves stale creation readiness"
+        );
+        window.set_search_folder("".into());
+        window.invoke_folder_changed(window.get_search_folder());
+        window.set_search_scratchpads(true);
+        window.invoke_search_scope_changed(true);
+        window.set_search_query("Header".into());
+        window.invoke_query_changed(window.get_search_query());
+        local.search_current().await.unwrap();
+        let target = window.get_page_results().row_data(0).unwrap().key;
+        window.invoke_search_trash(target);
+        until(|| window.get_search_confirm_count() == 1).await;
+        let target = key("Quick Notes/a.md");
+        let page = store.load_page(&target).await.unwrap().unwrap();
+        store
+            .save_local(
+                target.clone(),
+                "changed while confirming".into(),
+                LocalRevision(page.local_revision.0 + 1),
+            )
+            .await
+            .unwrap();
+        window.invoke_search_trash_confirmed(window.get_search_confirm_id());
+        until(|| !window.get_search_busy()).await;
+        assert!(
+            window.get_search_action_message().is_empty(),
+            "reorder hint masks failed mutation"
+        );
+        assert!(window.get_index_status().contains("could not finish"));
+        assert_eq!(
+            store.load_page(&target).await.unwrap().unwrap().body,
+            "changed while confirming"
+        );
+        assert_eq!(store.trash(&target.connection).await.unwrap().len(), 2);
         window.hide().unwrap();
         store.shutdown().await.unwrap();
         finished.set(true);

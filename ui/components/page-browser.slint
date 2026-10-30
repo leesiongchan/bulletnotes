@@ -177,7 +177,7 @@ export component PageBrowser inherits Rectangle {
                 toggled => { root.selection-toggled(root.results[row * root.columns + col].key); }
                 promote(open) => { root.promote(root.results[row * root.columns + col].key,open); }
                 trash => { root.trash(root.results[row * root.columns + col].key); }
-                step(amount) => { root.move-selection(amount); }
+                step(amount) => { root.selected-index = row * root.columns + col; root.move-selection(amount); }
             }
         }
     }
@@ -232,7 +232,7 @@ export component PageBrowser inherits Rectangle {
             ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
         }
     }
-    Text { x:24px;y:toolbar.y - 29px;width:parent.width - (root.can-load-more ? 152px : 48px);height:20px;text:root.action-message != "" ? root.action-message : root.index-status;color:root.theme.muted;font-size:10px;overflow:elide; }
+    Text { x:24px;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 48px);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:root.theme.muted;font-size:10px;wrap:word-wrap;max-lines:2;overflow:elide; }
     ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;theme:root.theme;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
     toolbar := SearchToolbar {
         width:parent.width;y:parent.height - self.height;

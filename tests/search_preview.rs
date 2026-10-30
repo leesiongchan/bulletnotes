@@ -491,3 +491,53 @@ fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
     });
     assert!(moved.borrow().is_empty());
 }
+
+#[test]
+fn tabbed_list_arrows_follow_the_focused_row() {
+    tabbed_arrows_follow_the_focused_row(false);
+}
+#[test]
+fn tabbed_card_arrows_follow_the_focused_row() {
+    tabbed_arrows_follow_the_focused_row(true);
+}
+fn tabbed_arrows_follow_the_focused_row(cards: bool) {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_cards(cards);
+    settle();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    for _ in 0..25 {
+        key(&ui, Key::Tab);
+        opened.borrow_mut().clear();
+        key(&ui, Key::Return);
+        if *opened.borrow() == "1" {
+            key(&ui, Key::DownArrow);
+            key(&ui, Key::Return);
+            assert_eq!(&*opened.borrow(), if cards { "3" } else { "2" });
+            return;
+        }
+    }
+    panic!("second result was not reachable by Tab");
+}
+#[test]
+fn reorder_hint_keeps_index_completeness_visible() {
+    let ui = setup();
+    ui.set_search_scratchpads(true);
+    ui.set_index_status("3 pages · 2 of 3 indexed · content search incomplete".into());
+    ui.set_search_action_message("Clear the search to reorder scratchpads".into());
+    let combined = format!(
+        "{} · {}",
+        ui.get_index_status(),
+        ui.get_search_action_message()
+    );
+    let item = text_item(&ui, &combined);
+    assert_eq!(
+        item.downcast::<i_slint_core::items::ComplexText>()
+            .unwrap()
+            .as_pin_ref()
+            .max_lines(),
+        2
+    );
+}

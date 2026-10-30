@@ -281,7 +281,7 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
         let state = state.clone();
         window.on_search_create(move || {
             if let Some(window) = state.window.upgrade()
-                && window.get_search_can_create()
+                && state.can_create_search_note(&window)
             {
                 state.dispatch(AppAction::NewNoteFromSearch(
                     window.get_search_query().to_string(),

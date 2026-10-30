@@ -106,6 +106,24 @@ impl State {
             open_after,
         });
     }
+    pub(super) fn can_create_search_note(&self, window: &AppWindow) -> bool {
+        let app = self.coordinator.borrow();
+        let folder = window.get_search_folder();
+        let valid_folder = window.get_search_scratchpads()
+            || folder.is_empty()
+            || PagePath::parse(folder.trim_end_matches('/')).is_ok();
+        valid_folder
+            && !self.search.invalid_folder.get()
+            && app.notice().is_none()
+            && app.search_management.confirmation().is_none()
+            && app.view() == crate::app::model::View::AllPages
+            && !app.search_pending()
+            && !app.search_management.busy()
+            && app
+                .search_results()
+                .is_some_and(|results| results.total == 0)
+            && !window.get_search_query().trim().is_empty()
+    }
     pub(super) fn issue_search(self: &Rc<Self>) -> Option<u64> {
         self.issue_search_page(false)
     }
@@ -136,6 +154,7 @@ impl State {
                 Ok(folder) => Some(folder),
                 Err(_) => {
                     self.search.invalid_folder.set(true);
+                    self.render();
                     window.set_page_results(Default::default());
                     window.set_index_status("Enter a relative folder path".into());
                     return None;
