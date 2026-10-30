@@ -29,7 +29,6 @@ fn result(first: usize, last: usize) -> SearchResults {
     SearchResults {
         items: (first..last)
             .map(|n| PageSummary {
-                local_revision: bulletnotes::domain::page::LocalRevision(0),
                 conflicted: false,
                 highlights: Default::default(),
                 key: key(n),

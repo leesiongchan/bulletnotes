@@ -1,7 +1,7 @@
 //! Source excerpts and display transforms preserve original UTF-8 match boundaries.
 use std::ops::Range;
 
-pub fn excerpt(
+pub(super) fn excerpt(
     text: &str,
     matches: &[Range<usize>],
     max_chars: usize,
@@ -31,7 +31,7 @@ pub fn excerpt(
     (excerpt, ranges)
 }
 
-pub fn condense(text: &str, matches: &[Range<usize>]) -> (String, Vec<Range<usize>>) {
+pub(crate) fn condense(text: &str, matches: &[Range<usize>]) -> (String, Vec<Range<usize>>) {
     let mut output = String::new();
     let mut offsets = vec![0; text.len() + 1];
     let mut chars = text.char_indices().peekable();

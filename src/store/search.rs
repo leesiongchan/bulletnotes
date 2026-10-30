@@ -2,10 +2,10 @@
 use crate::domain::{
     connection::ConnectionId,
     error::StoreError,
-    page::{LocalRevision, PageKey, PagePath, Permission},
+    page::{PageKey, PagePath, Permission},
 };
 use rusqlite::{Connection, params};
-pub mod highlights;
+pub(crate) mod highlights;
 mod literal;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SearchScope {
@@ -24,13 +24,11 @@ pub struct SearchQuery {
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SearchHighlights {
-    pub title: Vec<std::ops::Range<usize>>,
     pub path: Vec<std::ops::Range<usize>>,
     pub excerpt: Vec<std::ops::Range<usize>>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PageSummary {
-    pub local_revision: LocalRevision,
     pub conflicted: bool,
     pub highlights: SearchHighlights,
     pub key: PageKey,
@@ -72,7 +70,7 @@ pub(super) fn search(db: &Connection, query: SearchQuery) -> Result<SearchResult
     } else {
         "p.last_visited_ms IS NULL,p.last_visited_ms DESC,p.path COLLATE BINARY"
     };
-    let mut statement = db.prepare(&format!("SELECT p.path,p.title,p.body,p.modified_ms,p.permission,p.last_visited_ms,p.local_revision,EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p LEFT JOIN scratchpad_order s ON s.connection=p.connection AND s.path=p.path WHERE p.connection=?1 AND p.remote_deleted=0 AND p.trashed=0 AND (?2='' OR substr(p.path,1,length(?2))=?2) AND (?3=0 OR s.path IS NOT NULL) ORDER BY {order}"))?;
+    let mut statement = db.prepare(&format!("SELECT p.path,p.title,p.body,p.modified_ms,p.permission,p.last_visited_ms,EXISTS(SELECT 1 FROM conflicts c WHERE c.connection=p.connection AND c.path=p.path) FROM pages p LEFT JOIN scratchpad_order s ON s.connection=p.connection AND s.path=p.path WHERE p.connection=?1 AND p.remote_deleted=0 AND p.trashed=0 AND (?2='' OR substr(p.path,1,length(?2))=?2) AND (?3=0 OR s.path IS NOT NULL) ORDER BY {order}"))?;
     let mut rows = statement.query(params![
         query.connection.as_str(),
         folder,
@@ -103,7 +101,6 @@ pub(super) fn search(db: &Connection, query: SearchQuery) -> Result<SearchResult
         };
         let mut matches = SearchHighlights::default();
         if let Some(matcher) = &matcher {
-            matches.title = matcher.ranges(&title);
             matches.path = matcher.ranges(&path);
         }
         let excerpt = body.as_deref().map(|text| {
@@ -132,12 +129,7 @@ pub(super) fn search(db: &Connection, query: SearchQuery) -> Result<SearchResult
                 .map(u64::try_from)
                 .transpose()
                 .map_err(|_| StoreError::InvalidData)?,
-            local_revision: LocalRevision(
-                row.get::<_, String>(6)?
-                    .parse()
-                    .map_err(|_| StoreError::InvalidData)?,
-            ),
-            conflicted: row.get(7)?,
+            conflicted: row.get(6)?,
         });
     }
     Ok(SearchResults {

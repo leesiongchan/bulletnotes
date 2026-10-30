@@ -242,14 +242,6 @@ impl State {
                                 title: page.title.as_str().into(),
                                 path: page.key.path.as_str().into(),
                                 excerpt: page.excerpt.as_deref().unwrap_or("").into(),
-                                title_highlights: slint::ModelRc::from(
-                                    search_decorations(
-                                        &page.title,
-                                        &page.highlights.title,
-                                        window.get_theme().ink,
-                                    )
-                                    .as_slice(),
-                                ),
                                 path_highlights: slint::ModelRc::from(
                                     search_decorations(
                                         page.key.path.as_str(),

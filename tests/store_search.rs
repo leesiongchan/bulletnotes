@@ -276,10 +276,6 @@ async fn title_only_hit_keeps_body_beginning() {
     let item = &results.items[0];
     assert_eq!(item.title, "Title Needle");
     assert_eq!(
-        item.highlights.title,
-        std::iter::once(6..12).collect::<Vec<_>>()
-    );
-    assert_eq!(
         item.excerpt.as_deref(),
         Some("Beginning body remains literal")
     );
@@ -364,7 +360,6 @@ async fn scratchpad_scope_uses_stack_order_and_ignores_all_pages_folder() {
     query.offset = 1;
     let result = store.search(query).await.unwrap();
     assert_eq!(result.items[0].key, key("Quick Notes/a.md"));
-    assert_eq!(result.items[0].local_revision, LocalRevision(1));
     assert!(!result.items[0].conflicted);
     store.shutdown().await.unwrap();
 }
