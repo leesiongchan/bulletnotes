@@ -947,6 +947,7 @@ async fn missing_uncached_catalogue_entry_is_hidden_without_creating_source() {
         .unwrap();
     let result = store
         .search(bulletnotes::store::search::SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: key().connection,
             text: String::new(),
             folder: None,

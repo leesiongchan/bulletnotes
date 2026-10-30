@@ -96,6 +96,33 @@ export component AppWindow inherits Window {
     in property <bool> can-load-more-pages:false;
     callback load-more-pages();
     in property <[ThemePair]> theme-options;
+    in-out property <bool> search-scratchpads:false;
+    in-out property <bool> search-cards:false;
+    in-out property <bool> search-selecting:false;
+    in property <int> search-selected-count;
+    in property <bool> search-busy:false;
+    in property <int> search-confirm-count;
+    in property <string> search-confirm-id;
+    in property <string> search-action-message;
+    in property <bool> search-can-promote:false;
+    in property <bool> search-can-trash:false;
+    in property <bool> search-can-create:false;
+    callback search-scope-changed(bool);
+    callback search-view-changed(bool);
+    callback search-select-toggled();
+    callback search-selection-toggled(string);
+    callback search-promote(string, bool);
+    callback search-promote-selected();
+    callback search-trash(string);
+    callback search-trash-selected();
+    callback search-trash-confirmed(string);
+    callback search-trash-cancelled();
+    callback search-create();
+    in property <bool> search-can-reorder:false;
+    in-out property <bool> search-drag-active:false;
+    callback search-drag-started(string);
+    callback search-drag-cancelled();
+    callback search-reordered(string,bool);
     in-out property <string> search-query;
     in-out property <string> search-folder;
     in property <string> index-status;
@@ -232,7 +259,10 @@ export component AppWindow inherits Window {
             if (event.text == "]") { root.scratchpad-step(1); return accept; }
         }
         if (event.text == Key.Escape && root.active-view == "note" && root.find-visible) { root.close-find(); return accept; }
-        if (event.text == Key.Escape && root.active-view == "pages" && !pages.escape-allowed) { return reject; }
+        if (event.text == Key.Escape && root.active-view == "pages") {
+            if (!pages.escape-allowed) { return reject; }
+            pages.cancel-or-close(); return accept;
+        }
         if (event.text == Key.Escape && root.active-view != "note") {
             if (root.low-contrast-warning) { root.cancel-theme-import(); } else { root.return-to-note(); }
             return accept;
@@ -276,7 +306,7 @@ export component AppWindow inherits Window {
                     markers: root.note-markers;
                     font-size-px: root.font-size-px;
                     paper-style: root.paper-style;
-                    read-only: root.note-read-only || root.recovery-busy || root.lifecycle-pending;
+                    read-only: root.note-read-only || root.recovery-busy || root.lifecycle-pending || root.search-busy;
                     edit-markdown(source,anchor,caret,command,start,end) => { root.edit-markdown(source,anchor,caret,command,start,end) }
                     edited(text) => { root.note-edited(text); }
                     move-to-trash => { root.trash-current-note(); }
@@ -303,6 +333,33 @@ export component AppWindow inherits Window {
                 visible: root.active-view == "pages";
                 theme: root.theme;
                 results: root.page-results;
+                scratchpads <=> root.search-scratchpads;
+                cards <=> root.search-cards;
+                selecting <=> root.search-selecting;
+                selected-count: root.search-selected-count;
+                busy: root.search-busy;
+                confirm-count: root.search-confirm-count;
+                confirm-id: root.search-confirm-id;
+                action-message: root.search-action-message;
+                can-promote: root.search-can-promote;
+                can-trash: root.search-can-trash;
+                can-create: root.search-can-create;
+                can-reorder:root.search-can-reorder;
+                drag-active <=> root.search-drag-active;
+                drag-started(key) => { root.search-drag-started(key); }
+                drag-cancelled => { root.search-drag-cancelled(); }
+                reordered(key,after) => { root.search-reordered(key,after); }
+                scope-changed(value) => { root.search-scope-changed(value); }
+                view-changed(value) => { root.search-view-changed(value); }
+                select-toggled => { root.search-select-toggled(); }
+                selection-toggled(key) => { root.search-selection-toggled(key); }
+                promote(key,open) => { root.search-promote(key,open); }
+                promote-selected => { root.search-promote-selected(); }
+                trash(key) => { root.search-trash(key); }
+                trash-selected => { root.search-trash-selected(); }
+                trash-confirmed(id) => { root.search-trash-confirmed(id); }
+                trash-cancelled => { root.search-trash-cancelled(); }
+                create => { root.search-create(); }
         can-load-more:root.can-load-more-pages;
         load-more => { root.load-more-pages(); }
                 query <=> root.search-query;

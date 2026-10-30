@@ -37,6 +37,13 @@ impl Default for HotkeySettings {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchView {
+    #[default]
+    List,
+    Cards,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppSettings {
     pub schema_version: u32,
@@ -45,6 +52,8 @@ pub struct AppSettings {
     pub active_connection: Option<ConnectionId>,
     pub window: Option<WindowPlacement>,
     pub hotkey: HotkeySettings,
+    #[serde(default)]
+    pub search_view: SearchView,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -55,6 +64,7 @@ impl Default for AppSettings {
             active_connection: None,
             window: None,
             hotkey: HotkeySettings::default(),
+            search_view: SearchView::List,
         }
     }
 }

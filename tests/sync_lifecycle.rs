@@ -540,6 +540,7 @@ async fn full_catalogue_downloads_are_bounded_and_a_failed_refresh_is_not_deleti
     until(|| sync.snapshot().error.is_some()).await;
     let results = store
         .search(SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: config().id().clone(),
             text: String::new(),
             folder: None,

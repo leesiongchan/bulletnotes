@@ -1,121 +1,82 @@
-//! FTS marker transport stays separate from literal display text.
+//! Source excerpts and display transforms preserve original UTF-8 match boundaries.
 use std::ops::Range;
 
-pub(super) fn markers(title: &str, path: &str, body: Option<&str>) -> (String, String) {
-    loop {
-        let id = uuid::Uuid::new_v4();
-        let open = format!("\u{1e}bn-{id}-open\u{1f}");
-        let close = format!("\u{1e}bn-{id}-close\u{1f}");
-        if [Some(title), Some(path), body]
-            .into_iter()
-            .flatten()
-            .all(|text| !text.contains(&open) && !text.contains(&close))
-        {
-            return (open, close);
-        }
-    }
-}
-pub(super) fn decode(marked: &str, open: &str, close: &str) -> Option<(String, Vec<Range<usize>>)> {
-    if open.is_empty() || close.is_empty() || open.contains(close) || close.contains(open) {
-        return None;
-    }
-    let mut plain = String::with_capacity(marked.len());
-    let mut ranges = Vec::new();
-    let mut rest = marked;
-    loop {
-        let Some(at) = rest.find(open) else {
-            if rest.contains(close) {
-                return None;
-            }
-            plain.push_str(rest);
-            return Some((plain, ranges));
-        };
-        if rest[..at].contains(close) {
-            return None;
-        }
-        plain.push_str(&rest[..at]);
-        rest = &rest[at + open.len()..];
-        let end = rest.find(close)?;
-        if end == 0 || rest[..end].contains(open) {
-            return None;
-        }
-        let start = plain.len();
-        plain.push_str(&rest[..end]);
-        ranges.push(start..plain.len());
-        rest = &rest[end + close.len()..];
-    }
-}
-pub(super) fn visible_excerpt(
-    text: String,
-    matches: Vec<Range<usize>>,
+pub(super) fn excerpt(
+    text: &str,
+    matches: &[Range<usize>],
+    max_chars: usize,
 ) -> (String, Vec<Range<usize>>) {
-    let Some(first) = matches.first() else {
-        return (text, matches);
-    };
-    if first.start == 0 {
-        return (text, matches);
-    }
-    let start = first.start;
+    let start = matches.first().map_or(0, |range| range.start);
     let Some(tail) = text.get(start..) else {
-        return (text, Vec::new());
+        return (text.chars().take(max_chars).collect(), vec![]);
     };
-    let excerpt = format!("…{tail}");
+    let end = start
+        + tail
+            .char_indices()
+            .nth(max_chars)
+            .map_or(tail.len(), |(at, _)| at);
+    let prefix = if start > 0 { "…" } else { "" };
+    let excerpt = format!("{prefix}{}", &text[start..end]);
     let ranges = matches
-        .into_iter()
-        .map(|range| range.start - start + "…".len()..range.end - start + "…".len())
+        .iter()
+        .filter(|r| {
+            r.start >= start
+                && r.start < end
+                && r.end > r.start
+                && r.end <= text.len()
+                && text.is_char_boundary(r.end)
+        })
+        .map(|r| r.start - start + prefix.len()..r.end.min(end) - start + prefix.len())
         .collect();
     (excerpt, ranges)
+}
+
+pub(crate) fn condense(text: &str, matches: &[Range<usize>]) -> (String, Vec<Range<usize>>) {
+    let mut output = String::new();
+    let mut offsets = vec![0; text.len() + 1];
+    let mut chars = text.char_indices().peekable();
+    while let Some((at, ch)) = chars.next() {
+        offsets[at] = output.len();
+        if ch == '\r' || ch == '\n' {
+            output.push_str(" | ");
+            if ch == '\r' && chars.peek().is_some_and(|(_, ch)| *ch == '\n') {
+                let (next, _) = chars.next().unwrap_or((at, ch));
+                offsets[next] = offsets[at];
+                offsets[next + 1] = output.len();
+            }
+        } else {
+            output.push(ch);
+        }
+        offsets[at + ch.len_utf8()] = output.len();
+    }
+    let ranges = matches
+        .iter()
+        .filter(|r| {
+            r.start < r.end
+                && r.end <= text.len()
+                && text.is_char_boundary(r.start)
+                && text.is_char_boundary(r.end)
+        })
+        .map(|r| offsets[r.start]..offsets[r.end])
+        .filter(|r| r.start < r.end)
+        .collect();
+    (output, ranges)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn decode_rejects_unmatched_or_nested_markers() {
-        for bad in ["a<o>b", "<c>tail", "<o>a<o>b<c><c>", "<o><c>"] {
-            assert!(decode(bad, "<o>", "<c>").is_none(), "{bad}");
-        }
-        assert!(decode("plain", "", "x").is_none());
-        assert_eq!(
-            decode("é <o>日本語<c> 👩🏽‍💻 <o>café<c>", "<o>", "<c>"),
-            Some(("é 日本語 👩🏽‍💻 café".into(), vec![3..12, 29..34]))
-        );
-    }
-    #[test]
-    fn delimiters_are_absent_from_every_literal_field() {
-        let (open, close) = markers("title", "path", Some("body"));
-        let (next_open, next_close) = markers(&open, &close, Some(&format!("{open}{close}")));
-        for field in [&open, &close] {
-            assert!(!field.contains(&next_open));
-            assert!(!field.contains(&next_close));
-        }
-        assert_ne!(next_open, next_close);
-    }
-    #[test]
-    fn excerpt_trimming_preserves_utf8_ranges() {
-        assert_eq!(
-            visible_excerpt(
-                "context café tail".into(),
-                std::iter::once(8..13).collect::<Vec<_>>()
-            ),
-            (
-                "…café tail".into(),
-                std::iter::once(3..8).collect::<Vec<_>>()
-            )
-        );
-        assert_eq!(
-            visible_excerpt(
-                "café tail".into(),
-                std::iter::once(0..5).collect::<Vec<_>>()
-            ),
-            (
-                "café tail".into(),
-                std::iter::once(0..5).collect::<Vec<_>>()
-            )
-        );
-        assert_eq!(
-            visible_excerpt("body".into(), vec![]),
-            ("body".into(), vec![])
-        );
+    fn clipping_and_condensing_preserve_utf8_ranges() {
+        let source = "before café\r\n日本語 tail";
+        let ranges = vec![7..12, 14..23];
+        let (clipped, hits) = excerpt(source, &ranges, 320);
+        assert_eq!(clipped, "…café\r\n日本語 tail");
+        assert_eq!(&clipped[hits[0].clone()], "café");
+        let (line, hits) = condense(&clipped, &hits);
+        assert_eq!(line, "…café | 日本語 tail");
+        assert_eq!(&line[hits[0].clone()], "café");
+        assert_eq!(&line[hits[1].clone()], "日本語");
+        assert!(excerpt(source, &ranges, 5).0.chars().count() <= 6);
     }
 }

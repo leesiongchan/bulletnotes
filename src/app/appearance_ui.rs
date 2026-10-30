@@ -55,6 +55,12 @@ impl AppearanceUi {
             .map_err(|_| StoreError::Closed)?;
         receiver.await.map_err(|_| StoreError::Closed)?
     }
+    pub async fn save_search_view(
+        &self,
+        view: crate::store::settings::SearchView,
+    ) -> Result<(), StoreError> {
+        self.save_metadata(MetadataChange::SearchView(view)).await
+    }
     pub async fn save_window(
         &self,
         placement: crate::store::settings::WindowPlacement,

@@ -16,6 +16,7 @@ fn request(id: u64, offset: usize, text: &str) -> AppAction {
     AppAction::Search(SearchRequest {
         id,
         query: SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: key(0).connection,
             text: text.into(),
             folder: None,
@@ -28,6 +29,7 @@ fn result(first: usize, last: usize) -> SearchResults {
     SearchResults {
         items: (first..last)
             .map(|n| PageSummary {
+                conflicted: false,
                 highlights: Default::default(),
                 key: key(n),
                 title: format!("Generated {n}"),

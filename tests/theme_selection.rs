@@ -11,6 +11,22 @@ use slint::{
 use std::{cell::Cell, rc::Rc, time::Duration};
 
 #[test]
+fn search_view_defaults_for_old_settings_and_survives_roundtrip() {
+    use bulletnotes::store::settings::SearchView;
+    let mut old = serde_json::to_value(AppSettings::default()).unwrap();
+    old.as_object_mut().unwrap().remove("search_view");
+    let mut settings: AppSettings = serde_json::from_value(old).unwrap();
+    assert_eq!(settings.search_view, SearchView::List);
+    settings.search_view = SearchView::Cards;
+    assert_eq!(
+        serde_json::from_str::<AppSettings>(&serde_json::to_string(&settings).unwrap())
+            .unwrap()
+            .search_view,
+        SearchView::Cards
+    );
+}
+
+#[test]
 fn every_theme_card_selects_saves_and_preserves_the_editor() {
     slint::platform::set_platform(Box::new(i_slint_backend_testing::TestingBackend::new(
         i_slint_backend_testing::TestingBackendOptions {

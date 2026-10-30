@@ -4,6 +4,70 @@ use bulletnotes::{
     store::StoreHandle,
 };
 use support::storage_fixture::{database, key};
+#[tokio::test]
+async fn block_move_preserves_unloaded_entries_and_creation_dates() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = database(&dir);
+    let store = StoreHandle::open(&path).await.unwrap();
+    store
+        .record_catalogue(
+            &key("a.md").connection,
+            (0..275)
+                .map(|n| metadata(&format!("Quick Notes/{n:03}.md"), Some(1000)))
+                .collect(),
+            true,
+        )
+        .await
+        .unwrap();
+    let before = store
+        .scratchpad_stack(&key("a.md").connection)
+        .await
+        .unwrap();
+    let expected = before.iter().map(|e| e.key.clone()).collect::<Vec<_>>();
+    let after = store
+        .move_scratchpads(
+            &key("a.md").connection,
+            expected.clone(),
+            vec![expected[220].clone(), expected[210].clone()],
+            Some(expected[1].clone()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(after[1].key, expected[210]);
+    assert_eq!(after[2].key, expected[220]);
+    assert_eq!(after[3].key, expected[1]);
+    assert!(after.iter().all(|e| e.created_ms == 1000));
+    assert!(
+        store
+            .move_scratchpads(
+                &key("a.md").connection,
+                expected,
+                vec![after[0].key.clone()],
+                None
+            )
+            .await
+            .is_err()
+    );
+    store.shutdown().await.unwrap();
+    let store = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(
+        store
+            .scratchpad_stack(&key("a.md").connection)
+            .await
+            .unwrap(),
+        after
+    );
+    store.create_draft(key("Quick Notes/new.md")).await.unwrap();
+    assert_eq!(
+        store
+            .scratchpad_stack(&key("a.md").connection)
+            .await
+            .unwrap()[0]
+            .key,
+        key("Quick Notes/new.md")
+    );
+    store.shutdown().await.unwrap();
+}
 fn metadata(path: &str, modified: Option<u64>) -> RemoteMetadata {
     RemoteMetadata {
         key: key(path),
@@ -12,6 +76,41 @@ fn metadata(path: &str, modified: Option<u64>) -> RemoteMetadata {
         permission: Permission::ReadWrite,
         revision: None,
     }
+}
+#[tokio::test]
+async fn duplicate_or_cross_connection_moves_leave_order_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&dir)).await.unwrap();
+    let page = key("Quick Notes/a.md");
+    store.create_draft(page.clone()).await.unwrap();
+    let expected = vec![page.clone()];
+    assert!(
+        store
+            .move_scratchpads(
+                &page.connection,
+                expected.clone(),
+                vec![page.clone(), page.clone()],
+                None
+            )
+            .await
+            .is_err()
+    );
+    let mut other = page.clone();
+    other.connection = ConnectionConfig::parse("https://elsewhere.example")
+        .unwrap()
+        .id()
+        .clone();
+    assert!(
+        store
+            .move_scratchpads(&page.connection, expected, vec![other], None)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        store.scratchpad_stack(&page.connection).await.unwrap()[0].key,
+        page
+    );
+    store.shutdown().await.unwrap();
 }
 #[tokio::test]
 async fn membership_is_exact_and_connection_scoped() {

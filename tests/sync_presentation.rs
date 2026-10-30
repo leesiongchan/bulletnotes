@@ -193,6 +193,7 @@ fn background_search_refresh_does_not_cancel_the_selected_uncached_page() {
     app.dispatch_ready(AppAction::Search(SearchRequest {
         id: 1,
         query: SearchQuery {
+            scope: bulletnotes::store::search::SearchScope::AllPages,
             connection: selected.connection.clone(),
             text: String::new(),
             folder: None,
@@ -237,6 +238,7 @@ fn background_reindexing_keeps_the_current_page_results_visible() {
     };
     let mut app = app();
     let query = || SearchQuery {
+        scope: bulletnotes::store::search::SearchScope::AllPages,
         connection: key("https://one.example/").connection,
         text: String::new(),
         folder: None,

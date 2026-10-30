@@ -3,7 +3,7 @@ use bulletnotes::{
     theme::SystemAppearance,
 };
 use slint::{
-    ComponentHandle, Model, ModelRc,
+    ComponentHandle, ModelRc,
     platform::{Key, WindowEvent},
 };
 use std::{cell::RefCell, rc::Rc};
@@ -25,22 +25,21 @@ fn setup() -> AppWindow {
     ui.window()
         .dispatch_event(WindowEvent::WindowActiveChanged(true));
     ui.set_active_view("pages".into());
+    ui.window().dispatch_event(WindowEvent::internal(
+        i_slint_core::platform::InternalEvent::CompositionStatusChanged {
+            context_id: 1,
+            status: i_slint_core::input::CompositionStatus::Idle,
+        },
+    ));
     settle();
     ui
 }
 fn row(n: usize) -> PageRow {
-    let mut hit = slint::language::TextInputDecoration::default();
-    hit.start = 3;
-    hit.end = 9;
-    hit.bold = true;
-    hit.underline = true;
-    hit.foreground = slint::Color::from_rgb_u8(255, 0, 0);
     PageRow {
         key: n.to_string().into(),
         title: format!("Generated {n}").into(),
         path: format!("generated/{n}.md").into(),
         excerpt: "…needle <b>literal</b> **markup** 日本語 👩🏽‍💻 and more context for wrapping".into(),
-        excerpt_highlights: ModelRc::from([hit]),
         ..Default::default()
     }
 }
@@ -73,28 +72,9 @@ fn text_item(ui: &AppWindow, text: &str) -> i_slint_core::item_tree::ItemRc {
         .expect("generated literal Text not mounted")
 }
 #[test]
-fn invalid_ranges_render_plain_text() {
+fn keyboard_reveals_results_after_resize_and_replacement() {
     let ui = setup();
-    let mut rows = vec![row(0)];
-    rows[0].excerpt_highlights = ModelRc::default();
-    ui.set_page_results(ModelRc::from(rows.as_slice()));
-    let plain = ui.window().take_snapshot().unwrap();
-    let mut invalid = slint::language::TextInputDecoration::default();
-    invalid.start = 1;
-    invalid.end = 2;
-    invalid.bold = true;
-    invalid.underline = true;
-    rows[0].excerpt_highlights = ModelRc::from([invalid]);
-    ui.set_page_results(ModelRc::from(rows.as_slice()));
-    assert!(plain.as_bytes() == ui.window().take_snapshot().unwrap().as_bytes());
-}
-#[test]
-fn row_keyboard_geometry_uses_112_pixels() {
-    let ui = setup();
-    let first = text_item(&ui, "Generated 0");
-    let second = text_item(&ui, "Generated 1");
     let y = |item: &i_slint_core::item_tree::ItemRc| item.map_to_window(item.geometry().origin).y;
-    assert_eq!(y(&second) - y(&first), 112.0);
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
     ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
@@ -106,84 +86,13 @@ fn row_keyboard_geometry_uses_112_pixels() {
     key(&ui, Key::DownArrow);
     key(&ui, Key::Return);
     assert_eq!(&*opened.borrow(), "8");
-    let selected = text_item(&ui, "Generated 8");
+    let selected = text_item(&ui, "generated/8.md");
     assert!(y(&selected) >= 180.0 && y(&selected) + 16.0 <= 406.0);
     ui.set_page_results(ModelRc::from([row(0)]));
     settle();
     key(&ui, Key::Return);
     assert_eq!(&*opened.borrow(), "0");
 }
-#[test]
-fn two_line_preview_starts_with_visible_match() {
-    let ui = setup();
-    ui.set_page_results(ModelRc::from([row(0)]));
-    for width in [505.0, 400.0] {
-        ui.window().set_size(slint::LogicalSize::new(width, 440.0));
-        let _ = ui.window().take_snapshot().unwrap();
-        let item = text_item(&ui, row(0).excerpt.as_str());
-        assert_eq!(item.geometry().height(), 30.0);
-        let text = item.downcast::<i_slint_core::items::ComplexText>().unwrap();
-        assert_eq!(text.as_pin_ref().max_lines(), 2);
-        assert!(text.as_pin_ref().text().starts_with("…needle"));
-        assert_eq!(row(0).excerpt_highlights.row_count(), 1);
-    }
-}
-#[test]
-fn stale_query_cannot_reuse_old_highlights() {
-    use bulletnotes::{
-        app::coordinator::{AppAction, AppEvent, Coordinator, SearchRequest},
-        domain::{connection::ConnectionConfig, page::PagePath},
-        store::search::{PageSummary, SearchHighlights, SearchQuery, SearchResults},
-    };
-    let connection = ConnectionConfig::parse("https://search-preview.example/")
-        .unwrap()
-        .id()
-        .clone();
-    let page = bulletnotes::domain::page::PageKey {
-        connection: connection.clone(),
-        path: PagePath::parse("generated.md").unwrap(),
-    };
-    let mut app = Coordinator::new(connection.clone(), move || page.clone());
-    let request = |id, text: &str| {
-        AppAction::Search(SearchRequest {
-            id,
-            query: SearchQuery {
-                connection: connection.clone(),
-                text: text.into(),
-                folder: None,
-                offset: 0,
-                limit: 50,
-            },
-        })
-    };
-    app.dispatch(request(1, "old"));
-    app.dispatch(request(2, "new"));
-    let result = SearchResults {
-        items: vec![PageSummary {
-            key: bulletnotes::domain::page::PageKey {
-                connection: connection.clone(),
-                path: PagePath::parse("old.md").unwrap(),
-            },
-            title: "old".into(),
-            excerpt: Some("old".into()),
-            highlights: SearchHighlights {
-                title: std::iter::once(0..3).collect(),
-                ..Default::default()
-            },
-            modified_ms: None,
-            cached: true,
-            permission: bulletnotes::domain::page::Permission::ReadWrite,
-            last_visited_ms: None,
-        }],
-        total: 1,
-        indexed: 1,
-        catalogue_total: 1,
-        complete: true,
-    };
-    app.receive(AppEvent::SearchReady(1, Ok(result)));
-    assert!(app.search_results().is_none());
-}
-
 #[test]
 fn escape_returns_from_idle_query_but_preserves_composition() {
     let ui = setup();
@@ -234,4 +143,294 @@ fn search_reentry_keeps_query_focused_after_result_replacement() {
     ui.window()
         .dispatch_event(WindowEvent::KeyPressed { text: "x".into() });
     assert_eq!(ui.get_search_query(), "x");
+}
+
+#[test]
+fn cards_navigate_columns_and_escape_exits_selection_before_closing() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_cards(true);
+    settle();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    key(&ui, Key::DownArrow);
+    key(&ui, Key::RightArrow);
+    key(&ui, Key::Return);
+    assert_eq!(&*opened.borrow(), "1");
+    ui.set_search_selecting(true);
+    key(&ui, Key::Escape);
+    assert!(!ui.get_search_selecting());
+    assert_eq!(ui.get_active_view(), "pages");
+}
+
+#[test]
+fn busy_search_cannot_open_a_result_with_return() {
+    let ui = setup();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    key(&ui, Key::DownArrow);
+    ui.set_search_busy(true);
+    key(&ui, Key::Return);
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn drag_reorders_without_opening_and_filtered_drag_stays_disabled() {
+    let ui = setup();
+    for filtered in [false, true] {
+        ui.set_search_scratchpads(true);
+        ui.set_search_can_reorder(true);
+        if filtered {
+            ui.set_search_query("needle".into());
+        }
+        settle();
+        let started = Rc::new(RefCell::new(String::new()));
+        let moved = Rc::new(RefCell::new(String::new()));
+        let opened = Rc::new(RefCell::new(String::new()));
+        let observed = started.clone();
+        ui.on_search_drag_started(move |key| *observed.borrow_mut() = key.to_string());
+        let observed = moved.clone();
+        ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+        let observed = opened.clone();
+        ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+        let from = slint::LogicalPosition::new(100.0, 128.0);
+        let to = slint::LogicalPosition::new(100.0, 246.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: from,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window()
+            .dispatch_event(WindowEvent::PointerMoved { position: to });
+        settle();
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: to,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        settle();
+        if !filtered {
+            assert_eq!(&*started.borrow(), "0");
+            assert!(!moved.borrow().is_empty());
+            assert!(opened.borrow().is_empty());
+        } else {
+            assert!(started.borrow().is_empty());
+            assert!(moved.borrow().is_empty());
+        }
+    }
+}
+
+#[test]
+fn disabled_result_action_does_not_open_the_note_beneath_it() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    let point = slint::LogicalPosition::new(460.0, 186.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn row_actions_and_shift_return_do_not_open_before_promotion_finishes() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_scratchpads(true);
+    let mut item = row(0);
+    item.can_promote = true;
+    item.can_trash = true;
+    ui.set_page_results(ModelRc::from([item]));
+    settle();
+    let promoted = Rc::new(RefCell::new(String::new()));
+    let observed = promoted.clone();
+    ui.on_search_promote(move |key, open| *observed.borrow_mut() = format!("{key}:{open}"));
+    let trashed = Rc::new(RefCell::new(String::new()));
+    let observed = trashed.clone();
+    ui.on_search_trash(move |key| *observed.borrow_mut() = key.to_string());
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    for x in [427.0, 461.0] {
+        let point = slint::LogicalPosition::new(x, 152.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: point,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: point,
+            button: slint::platform::PointerEventButton::Left,
+        });
+    }
+    assert_eq!(&*promoted.borrow(), "0:false");
+    assert_eq!(&*trashed.borrow(), "0");
+    assert!(opened.borrow().is_empty());
+    key(&ui, Key::DownArrow);
+    ui.window().dispatch_event(WindowEvent::KeyPressed {
+        text: Key::Shift.into(),
+    });
+    key(&ui, Key::Return);
+    ui.window().dispatch_event(WindowEvent::KeyReleased {
+        text: Key::Shift.into(),
+    });
+    assert_eq!(&*promoted.borrow(), "0:true");
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn confirmation_buttons_fit_inside_the_dialog_at_minimum_size() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
+    ui.set_search_confirm_count(2);
+    ui.set_search_confirm_id("test".into());
+    let _ = ui.window().take_snapshot().unwrap();
+    let button = text_item(&ui, "Move to Trash");
+    let point = button.map_to_window(button.geometry().origin);
+    assert!(
+        point.y + button.geometry().height() <= 330.0,
+        "confirmation action extends beyond its dialog"
+    );
+}
+
+#[test]
+fn minimum_card_keeps_its_footer_above_the_browser_status() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
+    let mut item = row(0);
+    item.modified_label = "Edited today".into();
+    ui.set_page_results(ModelRc::from([item]));
+    ui.set_index_status("Index status".into());
+    ui.set_search_cards(true);
+    let _ = ui.window().take_snapshot().unwrap();
+    let date = text_item(&ui, "Edited today");
+    let status = text_item(&ui, "Index status");
+    assert!(
+        date.map_to_window(date.geometry().origin).y + date.geometry().height()
+            < status.map_to_window(status.geometry().origin).y - 6.0,
+        "card actions/date require scrolling under the fixed footer"
+    );
+}
+
+#[test]
+fn result_refresh_during_press_cannot_open_a_replacement_note() {
+    let ui = setup();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    let point = slint::LogicalPosition::new(100.0, 165.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.set_page_results(ModelRc::from([row(99)]));
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_scratchpads(true);
+    ui.set_search_can_reorder(true);
+    let moved = Rc::new(RefCell::new(String::new()));
+    let observed = moved.clone();
+    ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+    for cards in [false, true] {
+        ui.set_search_cards(cards);
+        ui.set_search_query("reset".into());
+        ui.set_search_query("".into());
+        settle();
+        let from = slint::LogicalPosition::new(100.0, 128.0);
+        let edge = slint::LogicalPosition::new(100.0, 450.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: from,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window()
+            .dispatch_event(WindowEvent::PointerMoved { position: edge });
+        for _ in 0..24 {
+            settle();
+        }
+        assert!(ui.get_search_drag_active());
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: edge,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        assert!(moved.borrow().parse::<usize>().unwrap() >= 4);
+        moved.borrow_mut().clear();
+    }
+    ui.set_search_query("reset".into());
+    ui.set_search_query("".into());
+    settle();
+    let from = slint::LogicalPosition::new(100.0, 128.0);
+    let to = slint::LogicalPosition::new(120.0, 180.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: from,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.window()
+        .dispatch_event(WindowEvent::PointerMoved { position: to });
+    assert!(ui.get_search_drag_active());
+    key(&ui, Key::Escape);
+    assert!(!ui.get_search_drag_active());
+    assert_eq!(ui.get_active_view(), "pages");
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: to,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(moved.borrow().is_empty());
+}
+
+#[test]
+fn tabbed_list_arrows_follow_the_focused_row() {
+    tabbed_arrows_follow_the_focused_row(false);
+}
+#[test]
+fn tabbed_card_arrows_follow_the_focused_row() {
+    tabbed_arrows_follow_the_focused_row(true);
+}
+fn tabbed_arrows_follow_the_focused_row(cards: bool) {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_cards(cards);
+    settle();
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    for _ in 0..25 {
+        key(&ui, Key::Tab);
+        opened.borrow_mut().clear();
+        key(&ui, Key::Return);
+        if *opened.borrow() == "1" {
+            key(&ui, Key::DownArrow);
+            key(&ui, Key::Return);
+            assert_eq!(&*opened.borrow(), if cards { "3" } else { "2" });
+            return;
+        }
+    }
+    panic!("second result was not reachable by Tab");
+}
+#[test]
+fn reorder_hint_keeps_index_completeness_visible() {
+    let ui = setup();
+    ui.set_search_scratchpads(true);
+    ui.set_index_status("3 pages · 2 of 3 indexed · content search incomplete".into());
+    ui.set_search_action_message("Clear the search to reorder scratchpads".into());
+    let combined = format!(
+        "{} · {}",
+        ui.get_index_status(),
+        ui.get_search_action_message()
+    );
+    text_item(&ui, &combined);
 }

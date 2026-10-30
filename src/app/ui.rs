@@ -180,6 +180,7 @@ pub fn present_settings(
     settings
         .validate()
         .map_err(|_| ThemeError::InvalidSettings)?;
+    window.set_search_cards(settings.search_view == crate::store::settings::SearchView::Cards);
     let themes = settings.themes().map_err(|_| ThemeError::InvalidSettings)?;
     let resolved = theme::resolve_theme(&settings.appearance, system, &themes)?;
     let chrome = settings_palette(

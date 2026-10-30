@@ -26,6 +26,16 @@ pub struct SearchRequest {
 pub enum AppAction {
     ResolveConflict(ConflictResolution),
     MoveToTrash(PageKey, LocalRevision),
+    PrepareSearchTrash(Vec<PageKey>),
+    ConfirmSearchTrash(u64),
+    CancelSearchTrash,
+    MoveSearchScratchpads {
+        expected: Vec<PageKey>,
+        selected: Vec<PageKey>,
+        before: Option<PageKey>,
+        open_after: Option<PageKey>,
+    },
+    NewNoteFromSearch(String),
     RestoreTrash(TrashId, Option<PagePath>),
     RestoreRecovery(uuid::Uuid, Option<PagePath>),
     EmptyTrash(Vec<TrashId>),
@@ -145,7 +155,7 @@ pub enum AppEffect {
 enum Transition {
     Recovery(RecoveryIntent),
     Open(PageKey, Option<(NavigationState, i8)>),
-    New,
+    New(Option<String>),
     Quit,
     Hide,
 }
@@ -155,6 +165,8 @@ struct PendingLoad {
     history: Option<(NavigationState, i8)>,
 }
 pub struct Coordinator {
+    pub search_management: super::search_management::SearchManagement,
+    background_view: Option<View>,
     stack: Option<super::scratchpads::ScratchpadStack>,
     stack_request: u64,
     stack_loading: bool,
@@ -188,10 +200,13 @@ pub struct Coordinator {
     remote_state: crate::domain::status::SyncState,
     active_conflict: Option<(PageKey, LocalRevision, uuid::Uuid)>,
     search_folder: Option<PagePath>,
+    search_scope: crate::store::search::SearchScope,
 }
 impl Coordinator {
     pub fn new(connection: ConnectionId, make_draft: impl FnMut() -> PageKey + 'static) -> Self {
         Self {
+            search_management: Default::default(),
+            background_view: None,
             stack: None,
             stack_request: 0,
             stack_loading: false,
@@ -225,6 +240,7 @@ impl Coordinator {
             remote_state: Default::default(),
             active_conflict: None,
             search_folder: None,
+            search_scope: Default::default(),
         }
     }
     pub fn editor(&self) -> Option<&EditorSession> {
@@ -321,6 +337,8 @@ impl Coordinator {
         {
             return false;
         }
+        self.search_management = Default::default();
+        self.background_view = None;
         self.stack = None;
         self.stack_loading = false;
         self.stack_again = false;
@@ -430,12 +448,74 @@ impl Coordinator {
             self.transition(Transition::Open(key.clone(), None), effects);
             self.stack_cursor = Some(key);
         } else if step == 0 && stack.is_empty() {
-            self.transition(Transition::New, effects);
+            self.transition(Transition::New(None), effects);
         }
     }
     pub fn dispatch(&mut self, action: AppAction) -> Vec<AppEffect> {
         let mut effects = Vec::new();
         match action {
+            AppAction::PrepareSearchTrash(keys) => {
+                if !self.search_management.busy()
+                    && self.view() == View::AllPages
+                    && !keys.is_empty()
+                    && keys.iter().all(|key| key.connection == self.connection)
+                {
+                    self.transition(
+                        Transition::Recovery(RecoveryIntent::PrepareTrash(keys)),
+                        &mut effects,
+                    );
+                    self.search_management.operation = Some(self.transition_id);
+                }
+            }
+            AppAction::ConfirmSearchTrash(id) => {
+                if !self.search_management.busy()
+                    && self.view() == View::AllPages
+                    && self
+                        .search_management
+                        .prepared
+                        .as_ref()
+                        .is_some_and(|(pin, _)| *pin == id)
+                {
+                    let (_, pages) = self
+                        .search_management
+                        .prepared
+                        .take()
+                        .expect("checked confirmation");
+                    self.transition(
+                        Transition::Recovery(RecoveryIntent::TrashMany(pages)),
+                        &mut effects,
+                    );
+                    self.search_management.operation = Some(self.transition_id);
+                }
+            }
+            AppAction::CancelSearchTrash => {
+                self.search_management.prepared = None;
+            }
+            AppAction::MoveSearchScratchpads {
+                expected,
+                selected,
+                before,
+                open_after,
+            } => {
+                if !self.search_management.busy() && self.view() == View::AllPages {
+                    self.transition(
+                        Transition::Recovery(RecoveryIntent::MoveScratchpads {
+                            expected,
+                            selected,
+                            before,
+                        }),
+                        &mut effects,
+                    );
+                    self.search_management.operation = Some(self.transition_id);
+                    self.search_management.open_after =
+                        open_after.map(|key| (self.transition_id, key));
+                }
+            }
+            AppAction::NewNoteFromSearch(text) => {
+                if !text.trim().is_empty() && !self.search_management.busy() {
+                    self.transition(Transition::New(Some(text)), &mut effects);
+                }
+            }
             AppAction::RefreshScratchpads => self.refresh_scratchpads(&mut effects),
             AppAction::StepScratchpad(step) => {
                 if step != 0 {
@@ -507,6 +587,8 @@ impl Coordinator {
                 }
             }
             AppAction::Navigate(view) => {
+                self.background_view = None;
+                self.search_management.prepared = None;
                 self.stack_intent = None;
                 self.stack_cursor = None;
                 self.barrier_waiting = false;
@@ -521,6 +603,7 @@ impl Coordinator {
                 self.flush(&mut effects);
             }
             AppAction::OpenPage(key) => {
+                self.background_view = None;
                 self.stack_intent = None;
                 self.stack_cursor = None;
                 self.selected_uncached = None;
@@ -540,10 +623,11 @@ impl Coordinator {
                 }
             }
             AppAction::NewNote => {
+                self.background_view = None;
                 self.stack_intent = None;
                 self.stack_cursor = None;
                 self.selected_uncached = None;
-                self.transition(Transition::New, &mut effects);
+                self.transition(Transition::New(None), &mut effects);
             }
             AppAction::StepHistory(step) => {
                 self.selected_uncached = None;
@@ -566,7 +650,8 @@ impl Coordinator {
                     && self.latest_search.is_none_or(|id| request.id > id)
                 {
                     let same_query = self.navigation.search_query == request.query.text
-                        && self.search_folder == request.query.folder;
+                        && self.search_folder == request.query.folder
+                        && self.search_scope == request.query.scope;
                     if request.query.offset > 0
                         && (!same_query
                             || self.search_pending
@@ -585,6 +670,7 @@ impl Coordinator {
                         self.results = None;
                     }
                     self.search_folder = request.query.folder.clone();
+                    self.search_scope = request.query.scope;
                     self.navigation.search_query = request.query.text.clone();
                     effects.push(AppEffect::Search(request));
                 }
@@ -683,7 +769,7 @@ impl Coordinator {
                             if let Some(key) = destination {
                                 self.transition(Transition::Open(key, None), &mut effects);
                             } else {
-                                self.transition(Transition::New, &mut effects);
+                                self.transition(Transition::New(None), &mut effects);
                             }
                         } else if let Some(step) = self.stack_intent.take() {
                             self.step_scratchpad(step, &mut effects);
@@ -710,8 +796,56 @@ impl Coordinator {
                 if connection != self.connection {
                     return effects;
                 }
+                let search_operation = self.search_management.operation == Some(request_id);
+                if search_operation {
+                    self.search_management.operation = None;
+                }
                 match result {
                     Ok(outcome) => {
+                        if request_id != self.transition_id {
+                            // A newer view cancels navigation follow-up, not a committed deletion.
+                            if outcome.page.is_none() && !outcome.affected.is_empty() {
+                                for key in &outcome.affected {
+                                    self.navigation.remove_unavailable(key);
+                                }
+                                if self.editor.as_ref().is_some_and(|editor| {
+                                    outcome.affected.contains(editor.key())
+                                        && !editor.dirty()
+                                        && !editor.writing()
+                                }) {
+                                    self.editor = None;
+                                    if self.pending_load.is_none()
+                                        && self.pending_transition.is_none()
+                                    {
+                                        self.finish_new_after_recovery(&mut effects);
+                                    }
+                                }
+                            }
+                            self.refresh_scratchpads(&mut effects);
+                            return effects;
+                        }
+                        if let Some(pages) = outcome.prepared_trash {
+                            self.search_management.prepared = Some((request_id, pages));
+                            return effects;
+                        }
+                        if let Some(entries) = outcome.stack {
+                            self.stack = Some(super::scratchpads::ScratchpadStack::new(entries));
+                            if let Some((_, key)) = self
+                                .search_management
+                                .open_after
+                                .take()
+                                .filter(|(id, _)| *id == request_id)
+                                && self.view() == View::AllPages
+                            {
+                                effects.extend(self.dispatch(AppAction::OpenPage(key)));
+                            }
+                            return effects;
+                        }
+                        if outcome.page.is_none() {
+                            for key in &outcome.affected {
+                                self.navigation.remove_unavailable(key);
+                            }
+                        }
                         self.active_conflict = None;
                         self.refresh_scratchpads(&mut effects);
                         if request_id != self.transition_id {
@@ -719,7 +853,7 @@ impl Coordinator {
                         }
                         if let Some(key) = outcome.restored {
                             self.transition(Transition::Open(key, None), &mut effects);
-                        } else if outcome.affected.as_ref().is_some_and(|key| {
+                        } else if outcome.affected.iter().any(|key| {
                             self.editor.as_ref().is_some_and(|editor| {
                                 editor.key() == key && !editor.dirty() && !editor.writing()
                             })
@@ -727,6 +861,10 @@ impl Coordinator {
                             match outcome.page {
                                 Some(page) => self.editor = Some(EditorSession::restore(page)),
                                 None => {
+                                    if search_operation && self.view() == View::AllPages {
+                                        self.background_view = Some(View::AllPages);
+                                    }
+                                    self.editor = None;
                                     if let Some((id, candidates)) = self
                                         .recovery_successors
                                         .take()
@@ -903,7 +1041,8 @@ impl Coordinator {
                         } else {
                             self.navigation.open(key.clone(), page.position);
                         }
-                        self.navigation.set_view(View::Note);
+                        self.navigation
+                            .set_view(self.background_view.take().unwrap_or(View::Note));
                         self.editor = Some(EditorSession::restore(restored));
                         self.notice = None;
                         self.stack_cursor = None;
@@ -981,7 +1120,8 @@ impl Coordinator {
     }
     fn finish_new_after_recovery(&mut self, effects: &mut Vec<AppEffect>) {
         let view = self.navigation.view();
-        self.pending_transition = Some(Transition::New);
+        self.background_view = Some(view);
+        self.pending_transition = Some(Transition::New(None));
         self.finish_transition(effects);
         self.navigation.set_view(view);
     }
@@ -1019,9 +1159,12 @@ impl Coordinator {
     }
     fn cancel_transition(&mut self, effects: &mut Vec<AppEffect>) {
         match self.pending_transition.take() {
-            Some(Transition::Recovery(_)) => effects.push(AppEffect::RecoveryCancelled {
-                connection: self.connection.clone(),
-            }),
+            Some(Transition::Recovery(_)) => {
+                self.search_management.operation = None;
+                effects.push(AppEffect::RecoveryCancelled {
+                    connection: self.connection.clone(),
+                });
+            }
             Some(Transition::Hide | Transition::Quit) => effects.push(AppEffect::CloseCancelled),
             _ => {}
         }
@@ -1053,7 +1196,7 @@ impl Coordinator {
             matches!(
                 t,
                 Transition::Open(..)
-                    | Transition::New
+                    | Transition::New(_)
                     | Transition::Recovery(..)
                     | Transition::Hide
                     | Transition::Quit
@@ -1074,12 +1217,25 @@ impl Coordinator {
         };
         match transition {
             Transition::Recovery(intent) => {
-                if let RecoveryIntent::Trash(key, _) = &intent
-                    && self.editor.as_ref().is_some_and(|e| e.key() == key)
+                let deleted: Vec<_> = match &intent {
+                    RecoveryIntent::Trash(key, _) => vec![key.clone()],
+                    RecoveryIntent::TrashMany(pages) => {
+                        pages.iter().map(|(key, _)| key.clone()).collect()
+                    }
+                    _ => vec![],
+                };
+                if let Some(editor) = &self.editor
+                    && deleted.contains(editor.key())
                     && let Some(stack) = &self.stack
                 {
-                    self.recovery_successors =
-                        Some((self.transition_id, stack.deletion_successors(key)));
+                    self.recovery_successors = Some((
+                        self.transition_id,
+                        stack
+                            .deletion_successors(editor.key())
+                            .into_iter()
+                            .filter(|key| !deleted.contains(key))
+                            .collect(),
+                    ));
                 }
                 effects.push(AppEffect::Recovery {
                     request_id: self.transition_id,
@@ -1102,14 +1258,22 @@ impl Coordinator {
                 });
                 effects.push(AppEffect::LoadPage { request_id, key });
             }
-            Transition::New => {
+            Transition::New(seed) => {
                 let key = (self.make_draft)();
                 if key.connection != self.connection {
                     self.notice = Some("Quick note could not be created.");
                     return;
                 }
                 self.editor = Some(EditorSession::draft(key.clone()));
+                if let Some(text) = seed
+                    && let Some(editor) = &mut self.editor
+                {
+                    let _ = editor.edit(text, self.now);
+                }
                 self.navigation.open(key, EditorPosition::default());
+                if let Some(view) = self.background_view.take() {
+                    self.navigation.set_view(view);
+                }
                 self.notice = None;
                 self.flush(effects);
             }

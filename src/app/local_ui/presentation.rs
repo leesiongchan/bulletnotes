@@ -151,6 +151,65 @@ impl State {
             window.set_note_read_only(true);
             window.set_status_text("Open or create a local note".into());
         }
+        if self.search.connection.borrow().as_ref() != Some(app.connection()) {
+            *self.search.connection.borrow_mut() = Some(app.connection().clone());
+            window.set_search_selecting(false);
+            window.set_search_drag_active(false);
+            self.search.drag.borrow_mut().take();
+        }
+        window.set_search_busy(app.search_management.busy());
+        window.set_search_can_reorder(
+            window.get_search_scratchpads()
+                && app.scratchpads().is_some()
+                && !app.scratchpads_pending()
+                && !app.search_management.busy(),
+        );
+        let (confirm_id, confirm_count) = app.search_management.confirmation().unwrap_or_default();
+        window.set_search_confirm_count(i32::try_from(confirm_count).unwrap_or(i32::MAX));
+        window.set_search_confirm_id(if confirm_count > 0 {
+            confirm_id.to_string().into()
+        } else {
+            "".into()
+        });
+        let selected = app.search_management.selected();
+        window.set_search_selected_count(i32::try_from(selected.len()).unwrap_or(i32::MAX));
+        let selected_pages = app
+            .search_results()
+            .map(|r| {
+                r.items
+                    .iter()
+                    .filter(|p| selected.contains(&p.key))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let disabled = selected_pages.iter().find_map(|p| {
+            let reason = trash_disabled_reason(p);
+            (!reason.is_empty()).then_some(reason)
+        });
+        window.set_search_can_trash(
+            !selected_pages.is_empty() && disabled.is_none() && !app.search_management.busy(),
+        );
+        window.set_search_can_promote(
+            !selected_pages.is_empty()
+                && window.get_search_scratchpads()
+                && !app.scratchpads_pending()
+                && !app.search_management.busy(),
+        );
+        window.set_search_can_create(self.can_create_search_note(&window));
+        window.set_search_action_message(
+            if app.notice().is_some() {
+                ""
+            } else if app.search_management.busy() {
+                "Saving note changes…"
+            } else if let Some(reason) = disabled {
+                reason
+            } else if window.get_search_scratchpads() && !window.get_search_query().is_empty() {
+                "Clear the search to reorder scratchpads"
+            } else {
+                ""
+            }
+            .into(),
+        );
         if self.presentation.search.get() != app.search_generation() {
             let rows = app
                 .search_results()
@@ -159,19 +218,30 @@ impl State {
                         .items
                         .iter()
                         .map(|page| {
+                            let (list_excerpt, list_ranges) =
+                                crate::store::search::highlights::condense(
+                                    page.excerpt.as_deref().unwrap_or(""),
+                                    &page.highlights.excerpt,
+                                );
+                            let disabled_reason = trash_disabled_reason(page);
                             Ok(PageRow {
-                                key: serde_json::to_string(&page.key)?.into(),
-                                title: page.title.as_str().into(),
-                                path: page.key.path.as_str().into(),
-                                excerpt: page.excerpt.as_deref().unwrap_or("").into(),
-                                title_highlights: slint::ModelRc::from(
+                                checked: selected.contains(&page.key),
+                                can_promote: window.get_search_scratchpads(),
+                                can_trash: disabled_reason.is_empty(),
+                                trash_disabled_reason: disabled_reason.into(),
+                                list_excerpt_highlights: slint::ModelRc::from(
                                     search_decorations(
-                                        &page.title,
-                                        &page.highlights.title,
+                                        &list_excerpt,
+                                        &list_ranges,
                                         window.get_theme().ink,
                                     )
                                     .as_slice(),
                                 ),
+                                list_excerpt: list_excerpt.into(),
+                                key: serde_json::to_string(&page.key)?.into(),
+                                title: page.title.as_str().into(),
+                                path: page.key.path.as_str().into(),
+                                excerpt: page.excerpt.as_deref().unwrap_or("").into(),
                                 path_highlights: slint::ModelRc::from(
                                     search_decorations(
                                         page.key.path.as_str(),
@@ -205,6 +275,8 @@ impl State {
                                     "Online only"
                                 } else if page.permission == Permission::ReadOnly {
                                     "Read only"
+                                } else if page.conflicted {
+                                    "Conflict"
                                 } else {
                                     "Cached"
                                 }
@@ -263,6 +335,18 @@ impl State {
     }
 }
 
+fn trash_disabled_reason(page: &crate::store::search::PageSummary) -> &'static str {
+    if !page.cached {
+        "Open and download this note before moving it to Trash"
+    } else if page.permission == Permission::ReadOnly {
+        "Read-only notes cannot be moved to Trash"
+    } else if page.conflicted {
+        "Resolve this note's conflict before moving it to Trash"
+    } else {
+        ""
+    }
+}
+
 fn search_decorations(
     text: &str,
     ranges: &[std::ops::Range<usize>],
@@ -289,7 +373,7 @@ fn search_decorations(
             decoration.end = range.end as i32;
             decoration.foreground = ink;
             decoration.bold = true;
-            decoration.underline = true;
+            decoration.code = true;
             decoration
         })
         .collect()
@@ -316,6 +400,6 @@ mod search_tests {
         assert_eq!(values.len(), 1);
         let value = &values[0];
         assert_eq!((value.start, value.end, value.foreground), (6, 12, ink));
-        assert!(value.bold && value.underline && !value.code && !value.italic);
+        assert!(value.bold && !value.underline && value.code && !value.italic);
     }
 }

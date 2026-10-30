@@ -13,6 +13,123 @@ use std::process::Command;
 use support::storage_fixture::{database, key};
 
 #[tokio::test]
+async fn batch_rejects_ineligible_or_duplicate_members_before_mutation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = database(&directory);
+    let store = StoreHandle::open(&path).await.unwrap();
+    let page = key("a.md");
+    store.create_draft(page.clone()).await.unwrap();
+    let connection = page.connection.clone();
+    assert!(store.prepare_trash(&connection, vec![]).await.is_err());
+    assert!(
+        store
+            .prepare_trash(&connection, vec![page.clone(), page.clone()])
+            .await
+            .is_err()
+    );
+    let mut other = page.clone();
+    other.connection =
+        bulletnotes::domain::connection::ConnectionConfig::parse("https://other.example")
+            .unwrap()
+            .id()
+            .clone();
+    assert!(store.prepare_trash(&connection, vec![other]).await.is_err());
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute("UPDATE pages SET permission=0", []).unwrap();
+    assert!(matches!(
+        store.prepare_trash(&connection, vec![page.clone()]).await,
+        Err(StoreError::ReadOnly)
+    ));
+    db.execute("UPDATE pages SET permission=1, body=NULL", [])
+        .unwrap();
+    assert!(store.prepare_trash(&connection, vec![page]).await.is_err());
+    assert!(store.trash(&connection).await.unwrap().is_empty());
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn batch_trash_is_atomic_and_restores_every_full_snapshot() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = database(&directory);
+    let store = StoreHandle::open(&path).await.unwrap();
+    let keys = vec![key("a.md"), key("b.md")];
+    for page in &keys {
+        store.create_draft(page.clone()).await.unwrap();
+        store
+            .save_local(page.clone(), "café\r\n日本語".into(), LocalRevision(1))
+            .await
+            .unwrap();
+    }
+    let pins = store
+        .prepare_trash(&keys[0].connection, keys.clone())
+        .await
+        .unwrap();
+    store
+        .save_local(keys[1].clone(), "newer".into(), LocalRevision(2))
+        .await
+        .unwrap();
+    assert!(
+        store
+            .move_many_to_trash(&keys[0].connection, pins)
+            .await
+            .is_err()
+    );
+    assert!(store.trash(&keys[0].connection).await.unwrap().is_empty());
+    let pins = store
+        .prepare_trash(&keys[0].connection, keys.clone())
+        .await
+        .unwrap();
+    let injector = rusqlite::Connection::open(&path).unwrap();
+    injector.execute_batch("CREATE TRIGGER fail_second_trash BEFORE UPDATE OF trashed ON pages WHEN new.path='b.md' BEGIN SELECT RAISE(ABORT,'injected batch failure'); END;").unwrap();
+    let pending: i64 = injector
+        .query_row("SELECT count(*) FROM outbox", [], |r| r.get(0))
+        .unwrap();
+    assert!(
+        store
+            .move_many_to_trash(&keys[0].connection, pins.clone())
+            .await
+            .is_err()
+    );
+    assert!(store.trash(&keys[0].connection).await.unwrap().is_empty());
+    assert_eq!(
+        injector
+            .query_row("SELECT count(*) FROM outbox", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        pending
+    );
+    assert_eq!(
+        injector
+            .query_row("SELECT count(*) FROM pages WHERE trashed=1", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    injector
+        .execute_batch("DROP TRIGGER fail_second_trash;")
+        .unwrap();
+    let ids = store
+        .move_many_to_trash(&keys[0].connection, pins)
+        .await
+        .unwrap();
+    assert_eq!(ids.len(), 2);
+    store.shutdown().await.unwrap();
+    let store = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(store.trash(&keys[0].connection).await.unwrap().len(), 2);
+    for id in ids {
+        store.restore_trash(id, None).await.unwrap();
+    }
+    assert_eq!(
+        store.load_page(&keys[0]).await.unwrap().unwrap().body,
+        "café\r\n日本語"
+    );
+    assert_eq!(
+        store.load_page(&keys[1]).await.unwrap().unwrap().body,
+        "newer"
+    );
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn acknowledged_text_survives_process_exit() {
     let directory = tempfile::tempdir().unwrap();
     let path = database(&directory);

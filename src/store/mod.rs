@@ -101,6 +101,22 @@ impl StoreHandle {
         })
         .await
     }
+    pub async fn move_scratchpads(
+        &self,
+        connection: &ConnectionId,
+        expected: Vec<PageKey>,
+        selected: Vec<PageKey>,
+        before: Option<PageKey>,
+    ) -> Result<Vec<scratchpads::ScratchpadEntry>, StoreError> {
+        let connection = connection.clone();
+        let result = self
+            .call(move |w| {
+                scratchpads::move_selected(&mut w.db, &connection, expected, selected, before)
+            })
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(result)
+    }
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
         self.call(move |w| pages::load(&w.db, &key)).await
@@ -351,6 +367,27 @@ impl StoreHandle {
             .await?;
         self.local_changes.send_replace(());
         Ok(result)
+    }
+    pub async fn prepare_trash(
+        &self,
+        connection: &ConnectionId,
+        keys: Vec<PageKey>,
+    ) -> Result<Vec<(PageKey, LocalRevision)>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| restoration::prepare_trash(&w.db, &connection, keys))
+            .await
+    }
+    pub async fn move_many_to_trash(
+        &self,
+        connection: &ConnectionId,
+        pages: Vec<(PageKey, LocalRevision)>,
+    ) -> Result<Vec<TrashId>, StoreError> {
+        let connection = connection.clone();
+        let ids = self
+            .call(move |w| restoration::move_many_to_trash(&mut w.db, &connection, pages))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(ids)
     }
     pub async fn move_to_trash(
         &self,

@@ -181,19 +181,30 @@ impl State {
         self.arm_save();
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
+        let search_ready = matches!(&event, AppEvent::SearchReady(..));
         let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
+        let search_refresh = matches!(&event, AppEvent::RecoveryFinished { connection, result: Ok(outcome), .. }
+            if connection == self.coordinator.borrow().connection() && (outcome.stack.is_some() || !outcome.affected.is_empty()));
         let recovery = match &event {
             AppEvent::RecoveryFinished {
-                connection, result, ..
-            } if connection == self.coordinator.borrow().connection() => Some((
-                result.is_ok(),
-                match result {
-                    Ok(_) => "Recovery action saved locally.".to_owned(),
-                    Err(error) => {
-                        format!("{error}. Review the latest version or choose another destination.")
-                    }
-                },
-            )),
+                connection,
+                result,
+                request_id,
+            } if connection == self.coordinator.borrow().connection()
+                && self.coordinator.borrow().search_management.operation != Some(*request_id) =>
+            {
+                Some((
+                    result.is_ok(),
+                    match result {
+                        Ok(_) => "Recovery action saved locally.".to_owned(),
+                        Err(error) => {
+                            format!(
+                                "{error}. Review the latest version or choose another destination."
+                            )
+                        }
+                    },
+                ))
+            }
             _ => None,
         };
         let uncached = match &event {
@@ -218,6 +229,13 @@ impl State {
         let mut effects = self.capture_position(&mut app);
         effects.extend(app.dispatch(AppAction::Tick(self.started.elapsed())));
         effects.extend(app.receive(event));
+        if search_ready {
+            let keys = app
+                .search_results()
+                .map(|r| r.items.iter().map(|p| p.key.clone()).collect::<Vec<_>>())
+                .unwrap_or_default();
+            app.search_management.retain_loaded(&keys);
+        }
         drop(app);
         self.update_sync_selection();
         if save_failed && self.lifecycle.flushing() {
@@ -227,6 +245,9 @@ impl State {
         self.execute(effects);
         self.render();
         self.arm_save();
+        if search_refresh && self.coordinator.borrow().view() == super::model::View::AllPages {
+            self.issue_search();
+        }
         if let Some((success, message)) = recovery
             && let Some(window) = self.window.upgrade()
         {

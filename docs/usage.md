@@ -40,21 +40,39 @@ On Linux, or Windows without a tray, closing saves and exits. **BN → Quit Bull
 writes and cancels network work. A failed local save retains the editable buffer;
 retry or copy the source using normal editing commands.
 
-All pages searches the local catalogue by literal phrase and optional folder.
-**More pages** loads the next result batch, including pages beyond the initial
-batch. Cached pages open offline. Online-only pages require a successful download;
-index progress indicates when full content search is incomplete. Command+K opens
-all-page search; Command+F searches exact source within the current note.
-Matching cached body text appears in a two-line excerpt around the first match,
-with theme-aware bold/underline emphasis. Preview markup and links remain literal.
-Online-only rows show availability without a fabricated body excerpt. Arrow keys
-select results, Return opens one, and Escape returns to the note when composition
-is idle. Reopening search focuses the query and clears the old row selection.
+Command+K opens search; Command+F searches exact source within the current note.
+Search matches literal text, including parts of words, without case sensitivity.
+Use the bottom scope control to switch between **All Pages** (with an optional
+folder filter) and **Scratchpads**. All Pages follows recent visits; Scratchpads
+follows stack order. The list/card buttons switch between compact source previews
+and note miniatures; the view preference survives restart. Highlights mark matching
+text while preview markup and links remain literal.
+
+**More pages** loads the next result batch. Cached pages open offline. Online-only
+pages match available metadata and require a download to open; index progress
+indicates when full content search is incomplete. Arrow keys navigate results
+(including columns in card view), and Return opens one. With no results, Return
+or **Create a note** starts a scratchpad containing the query. Escape cancels a
+drag or confirmation, exits Select mode, then closes search; it respects active
+text composition. Reopening search focuses an empty query and clears selection.
+
+Use **Select** to check individual loaded notes. Pagination preserves the
+selection; changing the query, scope, folder, or connection clears it. **Move
+selected to Trash** confirms the count and moves the entire batch atomically.
+Individual notes also have a Trash button. Trash remains recoverable and follows
+normal SilverBullet sync. Read-only, conflicting, and online-only notes cannot be
+trashed from search; resolve conflicts or open/download those notes first.
 
 Command+N creates a scratchpad that saves locally and automatically syncs under
 `Quick Notes/` once it contains text. Older/Newer (Command+[ / Command+]) traverse
-this folder's stack in durable creation order; edits, visits, and sync do not
-reorder it. Command+1 jumps to newest. The footer shows `1 of N` at newest, and a
+this folder's stack in durable order, initially based on creation. In search's
+Scratchpads scope, **Promote to front** moves a note or selection to the front;
+Shift+Return promotes and opens the focused note. Drag a result to reorder the
+stack when the query is empty; dragging a checked note moves the selected block
+together. Explicit order is local to the connection and survives restart without
+renaming notes or syncing their order. Edits, visits, and sync do not implicitly
+reorder existing notes; new scratchpads enter at the front. Command+1 jumps to
+the front. The footer shows `1 of N` there, and a
 small accent dot marks it while controls are hidden. Ordinary SilverBullet pages
 have no stack position; Jump to Newest returns to scratchpads.
 
