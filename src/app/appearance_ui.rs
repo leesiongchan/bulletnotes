@@ -219,7 +219,6 @@ pub fn bind(
     {
         let state = state.clone();
         window.on_theme_selected(move |id| {
-            tracing::debug!(theme_id = %id, "Theme selection requested");
             // Choosing an existing theme accepts its palette; only new imports need review.
             state.choose(Pending::Selection(ThemeId(id.to_string())), true);
         });
@@ -232,7 +231,7 @@ pub fn bind(
             } else {
                 SystemAppearance::Light
             };
-            tracing::debug!(theme_id = %id, ?slot, "Theme assignment requested");
+
             let candidate = state
                 .controller
                 .borrow()

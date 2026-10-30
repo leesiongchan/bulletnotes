@@ -26,9 +26,8 @@ fn page(body: &str) -> PageSnapshot {
 #[test]
 fn unknown_native_selection_is_never_fabricated_from_a_restore_target() {
     let session = EditorSession::restore(page("café"));
-    let (body, position) = session.snapshot();
-    assert_eq!(body, "café");
-    assert_eq!(position, None);
+    assert_eq!(session.body(), "café");
+    assert_eq!(session.observed_position(), None);
 }
 #[test]
 fn read_only_edit_or_invalid_position_cannot_modify_source() {
@@ -67,10 +66,9 @@ async fn edit_roundtrip_preserves_markdown_after_restart() {
         1,
     );
     editor.edit(changed.clone(), Duration::ZERO).unwrap();
-    let (body, position) = editor.snapshot();
-    assert_eq!(position, None);
+    assert_eq!(editor.observed_position(), None);
     store
-        .save_local(key(), body, editor.revision())
+        .save_local(key(), editor.body().into(), editor.revision())
         .await
         .unwrap();
     store.shutdown().await.unwrap();

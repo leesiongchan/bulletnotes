@@ -207,9 +207,6 @@ impl LocalApplication {
     pub fn window(&self) -> &AppWindow {
         &self.window
     }
-    pub fn appearance(&self) -> &AppearanceUi {
-        &self._appearance
-    }
     pub fn local(&self) -> &LocalUi {
         &self.local
     }

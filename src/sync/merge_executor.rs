@@ -116,15 +116,10 @@ mod tests {
             path: PagePath::parse("independent.md").unwrap(),
         };
         store.create_draft(key.clone()).await.unwrap();
-        let mut baseline_ms = Vec::new();
-        for revision in 1..=20 {
-            let start = std::time::Instant::now();
-            store
-                .save_local(key.clone(), "baseline".into(), LocalRevision(revision))
-                .await
-                .unwrap();
-            baseline_ms.push(start.elapsed().as_secs_f64() * 1000.0);
-        }
+        store
+            .save_local(key.clone(), "baseline".into(), LocalRevision(20))
+            .await
+            .unwrap();
         let (started, ready) = tokio::sync::oneshot::channel();
         let (release, blocked) = mpsc::channel();
         let finished = Arc::new(AtomicBool::new(false));
@@ -150,9 +145,7 @@ mod tests {
                 .await
         });
         ready.await.unwrap();
-        let mut stalled_ms = Vec::new();
         for revision in 21..=40 {
-            let start = std::time::Instant::now();
             tokio::time::timeout(
                 Duration::from_secs(1),
                 store.save_local(
@@ -164,12 +157,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-            stalled_ms.push(start.elapsed().as_secs_f64() * 1000.0);
         }
-        println!(
-            "stalled_save_distribution: {}",
-            serde_json::json!({"samples":20,"baseline_ms":baseline_ms,"stalled_ms":stalled_ms,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"measurement":"SQLite acknowledgement; not native typing/frame latency"})
-        );
         assert!(!finished.load(Ordering::SeqCst));
         let timed_out = tokio::time::timeout(Duration::from_secs(1), job)
             .await

@@ -8,8 +8,6 @@ component SourcePane inherits Rectangle {
     in-out property <string> text;
     in property <string> label;
     in property <bool> read-only:true;
-    in property <int> focus-generation;
-    changed focus-generation => { input.focus(); }
     callback edited();
     min-height:120px; preferred-height:140px;
     background:root.theme.surface;
@@ -60,8 +58,6 @@ export component RecoveryPanel inherits Rectangle {
     callback restore-item();
     callback purge-item();
     callback reload();
-    private property <int> merge-focus-generation;
-    public function focus-merge() { root.merge-focus-generation += 1; }
     public function focus-panel() { back.focus(); }
     background:root.theme.paper;
     Text { x:24px; y:14px; text:"Recovery"; font-size:21px; color:root.theme.ink; }
@@ -114,7 +110,7 @@ export component RecoveryPanel inherits Rectangle {
             if root.selected && root.section == "conflicts" && root.has-base:Text { text:"Common base"; color:root.theme.ink; font-size:12px; }
             if root.selected && root.section == "conflicts" && root.has-base:SourcePane { theme:root.theme; text:root.base-text; label:"Common base"; }
             if root.selected && root.section == "conflicts":Text { text:"Merged result"; color:root.theme.ink; font-size:12px; }
-            if root.selected && root.section == "conflicts":SourcePane { theme:root.theme; text <=> root.merge-text; label:"Merged result"; focus-generation:root.merge-focus-generation; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
+            if root.selected && root.section == "conflicts":SourcePane { theme:root.theme; text <=> root.merge-text; label:"Merged result"; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
             if root.selected && root.stale:ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Reload changes · keep merged draft"; enabled:!root.busy; clicked => { root.reload(); } }
             if root.selected && root.section == "conflicts":HorizontalLayout {
                 spacing:6px;

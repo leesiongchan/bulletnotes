@@ -25,13 +25,6 @@ impl NativeApplication {
             slint::CloseRequestResponse::KeepWindowShown
         });
     }
-    pub fn activate(&self) {
-        if let Some(window) = self.window.borrow().as_ref().and_then(slint::Weak::upgrade) {
-            window
-                .window()
-                .with_winit_window(|native| native.focus_window());
-        }
-    }
     pub fn activate_store_owner(&self, _pid: u32) -> Result<(), &'static str> {
         // The store lock remains authoritative; never activate an unverified PID.
         Err("Bulletnotes is already running; reopen it from the taskbar or tray")

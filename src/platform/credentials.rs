@@ -171,10 +171,7 @@ mod keyring {
             let mut store = self.store.lock().unwrap_or_else(|error| error.into_inner());
             let store = match store.as_ref() {
                 Some(store) => store,
-                None => {
-                    tracing::debug!("initializing secure credential storage");
-                    store.insert(native_store()?)
-                }
+                None => store.insert(native_store()?),
             };
             #[cfg(target_os = "windows")]
             let modifiers = Some(std::collections::HashMap::from([("persistence", "Local")]));

@@ -69,15 +69,6 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
             MarkdownCommand::MoveDown => SourceCommand::MoveDown,
         };
         let result = compute(&source, Selection { anchor, caret }, command);
-        tracing::debug!(
-            ?command,
-            outcome = match &result {
-                CommandResult::Native => "native",
-                CommandResult::NoChange => "unchanged",
-                CommandResult::Edit(_) => "edit",
-            },
-            "Markdown source command computed"
-        );
         match result {
             CommandResult::Native => MarkdownEdit::default(),
             CommandResult::NoChange => MarkdownEdit {
@@ -109,17 +100,12 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
             }
         }
     });
-    // The pure callback binding refreshes for every source and effective palette change.
     window.on_highlight_markdown(|source, palette, high_contrast| {
         ModelRc::from(super::markdown::decorations(&source, &palette, high_contrast).as_slice())
     });
     window.on_mark_markdown(|source, palette| {
         ModelRc::from(super::markdown::markers(&source, &palette).as_slice())
     });
-    tracing::debug!(
-        slint_version = "1.18.1",
-        "Markdown source styles and marker palette applied"
-    );
     let adjusted = window
         .get_system_high_contrast()
         .then(|| theme::accessibility::high_contrast(&resolved.palette));
@@ -290,7 +276,6 @@ pub fn present_settings(
     }
     window.set_selected_light_theme_id(settings.appearance.light_theme.0.as_str().into());
     window.set_selected_dark_theme_id(settings.appearance.dark_theme.0.as_str().into());
-    window.set_system_appearance_dark(system == SystemAppearance::Dark);
     window.set_appearance_mode(
         match settings.appearance.mode {
             AppearanceMode::Light => "light",
@@ -299,7 +284,6 @@ pub fn present_settings(
         }
         .into(),
     );
-    tracing::debug!(note_theme = %resolved.id.0, settings_dark = chrome.dark, high_contrast = window.get_system_high_contrast(), "Appearance presentation refreshed");
     window.set_settings_theme(chrome);
     apply_theme(window, &resolved);
     Ok(())

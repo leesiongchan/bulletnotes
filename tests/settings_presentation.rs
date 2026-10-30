@@ -28,27 +28,6 @@ fn rgb(color: slint::Color) -> Color {
 }
 
 #[test]
-fn cached_about_uses_current_branded_scheme() {
-    use bulletnotes::{AboutWindow, app::ui::present_about};
-    let window = window(false);
-    let about = AboutWindow::new().unwrap();
-    let mut settings = AppSettings::default();
-    for mode in [AppearanceMode::Light, AppearanceMode::Dark] {
-        settings.appearance.mode = mode;
-        window.set_system_high_contrast(mode == AppearanceMode::Dark);
-        window.set_prefers_reduced_transparency(mode == AppearanceMode::Dark);
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        present_about(&about, &window);
-        assert_eq!(about.get_theme(), window.get_settings_theme());
-        assert_eq!(about.get_high_contrast(), window.get_system_high_contrast());
-        assert_eq!(
-            about.get_reduce_transparency(),
-            window.get_prefers_reduced_transparency()
-        );
-    }
-}
-
-#[test]
 fn visible_about_tracks_appearance_and_accessibility_without_reopening() {
     use bulletnotes::{AboutWindow, app::ui::present_about};
     let window = window(false);

@@ -128,10 +128,6 @@ impl EditorSession {
     pub fn due(&self, now: Duration) -> bool {
         self.deadline.is_some_and(|deadline| now >= deadline)
     }
-    /// Position is present only after a native adapter explicitly supplies an observation.
-    pub fn snapshot(&self) -> (String, Option<EditorPosition>) {
-        (self.page.body.clone(), self.observed_position)
-    }
     pub fn observe_position(&mut self, position: EditorPosition) -> Result<(), EditorError> {
         self.observed_position = Some(position.validate(self.body())?);
         Ok(())

@@ -14,25 +14,6 @@ Open http://127.0.0.1:4173. Check desktop and mobile sizes, all 56 theme/paper c
 
 Typography uses rem units: body copy and feature descriptions 18–20px, controls/navigation 16px, and supporting text at least 14px. Verify computed text sizes at 320px, 390px, 768px, 1024px, and 1440px, and test text enlargement to 200% without clipping or horizontal overflow. Product screenshots retain the app's original typography.
 
-## Capture theme screenshots
-
-`examples/capture_product_themes.rs` uses the real `AppWindow`, appearance mapping, Markdown renderer, and bundled palettes through the existing Slint Skia testing backend. It renders a fixed sample note at the app's default 505 × 552 size, without opening the store, credentials, native application, or network. Images have no added editor controls, labels, or decorations.
-
-Generate the 56 RGBA snapshots, then convert them to PNG on macOS:
-
-```sh
-rustup run 1.99.1 cargo run --locked --example capture_product_themes -- /tmp/bulletnotes-product-captures
-python3 - <<'PY'
-from pathlib import Path
-import subprocess
-output = Path('site/assets/themes')
-output.mkdir(exist_ok=True)
-for source in Path('/tmp/bulletnotes-product-captures').glob('*.pam'):
-    subprocess.run(['sips', '-s', 'format', 'png', str(source), '--out',
-                    str(output / (source.stem + '.png'))], check=True)
-PY
-```
-
 ## Publish
 
 Publishing is automatic: a push to `main` that changes `site/` or `.github/workflows/pages.yml` runs the **Product page** GitHub Actions workflow. Merging a pull request with those changes into `main` triggers the same workflow. It uploads `site/` and deploys it to https://leesiongchan.github.io/bulletnotes/.

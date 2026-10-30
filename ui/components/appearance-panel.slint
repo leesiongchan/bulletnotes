@@ -119,7 +119,6 @@ export component AppearancePanel inherits Rectangle {
     callback export-theme();
     callback apply-low-contrast();
     callback cancel-theme-import();
-    out property <bool> controls-first:paper-heading.y < theme-heading.y && font-controls.y < theme-heading.y;
     public function focus-panel() { system-button.focus(); }
     in property <UiTheme> chrome;
     private property <length> inset:root.width >= 696px ? 48px : 20px;
@@ -158,7 +157,7 @@ export component AppearancePanel inherits Rectangle {
             padding: 0px;
             spacing: 16px;
             Text {text:"Writing";font-size:14px;font-weight:600;color:root.chrome.muted;}
-            font-controls := HorizontalBox {
+            HorizontalBox {
                 padding: 0px;
                 spacing: 8px;
                 Text {
@@ -199,7 +198,7 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
 
-            paper-heading := Text {
+            Text {
                 text: "Paper pattern";
                 font-size: 13px;
                 font-weight: 600;

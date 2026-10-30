@@ -179,7 +179,6 @@ async fn denied_unknown_readback_is_bounded_and_recovers_without_restart() {
             .unwrap();
         tokio::time::sleep(Duration::from_millis(1300)).await;
         let reads = *f.data.lock().unwrap().reads.get("one.md").unwrap() - before;
-        eprintln!("restore_refresh={refresh}: denied unknown readbacks in 1300ms={reads}");
         assert!(
             (1..=4).contains(&reads),
             "GET403 readback must be bounded: {reads}"
@@ -322,7 +321,6 @@ async fn blocked_handoffs_bound_reads_and_replay_latest_after_settlement() {
             .get(target.path.as_str())
             .unwrap_or(&0)
             - before;
-        eprintln!("fenced={fenced}, read_only={read_only}: blocked target reads in 500ms={reads}");
         assert!(
             reads <= 3,
             "blocked handoff hot-looped: {reads} reads/500ms"
@@ -354,7 +352,6 @@ async fn blocked_handoffs_bound_reads_and_replay_latest_after_settlement() {
             );
         }
         until(|| f.body("peer.md").as_deref() == Some("unrelated peer")).await;
-        eprintln!("fenced={fenced}: unrelated peer progressed");
         assert!(sync.snapshot().pending > 0);
         if let Some(head) = &recovery_head {
             assert_eq!(

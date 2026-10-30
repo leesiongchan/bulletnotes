@@ -129,7 +129,6 @@ impl State {
         {
             return Vec::new();
         }
-        tracing::debug!(target: "bulletnotes::editor", "captured editor position");
         app.dispatch(AppAction::SavePosition(position))
     }
     fn dispatch(self: &Rc<Self>, action: AppAction) {

@@ -49,7 +49,6 @@ export component AppWindow inherits Window {
     out property <float> footer-opacity:footer.opacity;
     out property <length> editor-height:editor.height;
     out property <length> editor-width:editor.width;
-    out property <bool> appearance-controls-first:appearance.controls-first;
     private property <int> pending-chrome-focus:0;
     private property <bool> header-focused:pin.has-focus || browse.has-focus || appearance-button.has-focus || new-button.has-focus;
     private property <bool> footer-focused:trash-button.has-focus || recovery-button.has-focus || newest.has-focus || back.has-focus || next.has-focus;
@@ -93,7 +92,6 @@ export component AppWindow inherits Window {
     in property <string> selected-theme-id;
     in property <string> selected-light-theme-id;
     in property <string> selected-dark-theme-id;
-    in property <bool> system-appearance-dark:false;
     in property <[PageRow]> page-results;
     in property <bool> can-load-more-pages:false;
     callback load-more-pages();
@@ -114,7 +112,6 @@ export component AppWindow inherits Window {
     in property <bool> low-contrast-warning:false;
     out property <float> editor-scroll-y:editor.scroll-y;
     out property <length> editor-line-height:editor.line-height;
-    out property <int> primary-view-count:(note-view.visible ? 1 : 0) + (pages.visible ? 1 : 0) + (appearance.visible ? 1 : 0) + (auxiliary.visible ? 1 : 0) + (connection.visible ? 1 : 0);
     in property <[PageRow]> recovery-items;
     in-out property <string> recovery-section:"conflicts";
     in property <string> recovery-selected-id;
@@ -162,7 +159,6 @@ export component AppWindow inherits Window {
     callback native-geometry-changed();
     callback native-displays-changed();
     callback toggle-activation();
-    public function focus-recovery-merge() { auxiliary.focus-merge(); }
     callback window-will-hide();
     in-out property <string> hotkey-accelerator:"Option+A";
     in property <string> native-message;

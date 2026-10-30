@@ -29,8 +29,6 @@ impl Drop for InstanceGuard {
         // A concurrently forked child can retain the lock after this descriptor closes.
         if let Err(error) = self._file.unlock() {
             tracing::warn!(%error, "Failed to release local store ownership");
-        } else {
-            tracing::debug!(pid = std::process::id(), "Local store ownership released");
         }
     }
 }
@@ -181,7 +179,6 @@ fn acquire_instance_lock(path: &Path) -> Result<InstanceGuard, StoreError> {
             let mut metadata = options.truncate(true).open(PathBuf::from(name))?;
             write!(metadata, "{}", std::process::id())?;
             metadata.sync_data()?;
-            tracing::debug!(pid = std::process::id(), "Local store ownership acquired");
             Ok(InstanceGuard { _file: file })
         }
         Err(TryLockError::WouldBlock) => Err(StoreError::AlreadyRunning),

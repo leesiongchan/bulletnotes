@@ -142,10 +142,6 @@ impl SyncHandle {
             if control.selected == key {
                 return false;
             }
-            tracing::debug!(
-                selected = key.is_some(),
-                "foreground sync selection changed"
-            );
             control.selected = key;
             true
         });
