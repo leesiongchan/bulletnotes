@@ -183,18 +183,28 @@ impl State {
     }
     fn receive(self: &Rc<Self>, event: AppEvent) {
         let save_failed = matches!(&event, AppEvent::LocalSaveFailed(..));
+        let search_refresh = matches!(&event, AppEvent::RecoveryFinished { connection, result: Ok(outcome), .. }
+            if connection == self.coordinator.borrow().connection() && (outcome.stack.is_some() || !outcome.affected.is_empty()));
         let recovery = match &event {
             AppEvent::RecoveryFinished {
-                connection, result, ..
-            } if connection == self.coordinator.borrow().connection() => Some((
-                result.is_ok(),
-                match result {
-                    Ok(_) => "Recovery action saved locally.".to_owned(),
-                    Err(error) => {
-                        format!("{error}. Review the latest version or choose another destination.")
-                    }
-                },
-            )),
+                connection,
+                result,
+                request_id,
+            } if connection == self.coordinator.borrow().connection()
+                && self.coordinator.borrow().search_management.operation != Some(*request_id) =>
+            {
+                Some((
+                    result.is_ok(),
+                    match result {
+                        Ok(_) => "Recovery action saved locally.".to_owned(),
+                        Err(error) => {
+                            format!(
+                                "{error}. Review the latest version or choose another destination."
+                            )
+                        }
+                    },
+                ))
+            }
             _ => None,
         };
         let uncached = match &event {
@@ -228,6 +238,9 @@ impl State {
         self.execute(effects);
         self.render();
         self.arm_save();
+        if search_refresh && self.coordinator.borrow().view() == super::model::View::AllPages {
+            self.issue_search();
+        }
         if let Some((success, message)) = recovery
             && let Some(window) = self.window.upgrade()
         {

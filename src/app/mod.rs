@@ -9,6 +9,7 @@ pub mod model;
 pub mod native_app;
 pub mod navigation;
 pub mod scratchpads;
+pub mod search_management;
 pub mod startup;
 pub mod theme_files;
 pub mod ui;

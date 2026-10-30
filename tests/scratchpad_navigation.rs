@@ -272,7 +272,9 @@ fn deleted(app: &mut Coordinator) -> Vec<AppEffect> {
         request_id,
         connection,
         result: Ok(bulletnotes::app::recovery::RecoveryOutcome {
-            affected: Some(key("Quick Notes/c.md")),
+            affected: vec![key("Quick Notes/c.md")],
+            prepared_trash: None,
+            stack: None,
             page: None,
             restored: None,
         }),
