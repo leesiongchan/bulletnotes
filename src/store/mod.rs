@@ -368,6 +368,27 @@ impl StoreHandle {
         self.local_changes.send_replace(());
         Ok(result)
     }
+    pub async fn prepare_trash(
+        &self,
+        connection: &ConnectionId,
+        keys: Vec<PageKey>,
+    ) -> Result<Vec<(PageKey, LocalRevision)>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| restoration::prepare_trash(&w.db, &connection, keys))
+            .await
+    }
+    pub async fn move_many_to_trash(
+        &self,
+        connection: &ConnectionId,
+        pages: Vec<(PageKey, LocalRevision)>,
+    ) -> Result<Vec<TrashId>, StoreError> {
+        let connection = connection.clone();
+        let ids = self
+            .call(move |w| restoration::move_many_to_trash(&mut w.db, &connection, pages))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(ids)
+    }
     pub async fn move_to_trash(
         &self,
         key: PageKey,

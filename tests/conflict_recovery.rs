@@ -48,6 +48,28 @@ fn resolution(record: &ConflictRecord, choice: ResolutionChoice) -> ConflictReso
     }
 }
 #[tokio::test]
+async fn batch_trash_rejects_a_conflicted_member() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("notes.sqlite"))
+        .await
+        .unwrap();
+    let _ = conflict(&store, RemoteRead::Present(file("remote", "b"))).await;
+    assert!(
+        store
+            .prepare_trash(&key("one.md").connection, vec![key("one.md")])
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .trash(&key("one.md").connection)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    store.shutdown().await.unwrap();
+}
+#[tokio::test]
 async fn resolution_races_back_to_review_and_keeps_all_three_versions() {
     let dir = tempfile::tempdir().unwrap();
     let store = StoreHandle::open(&dir.path().join("notes.sqlite"))

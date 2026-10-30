@@ -193,14 +193,72 @@ pub(super) fn resolve(
     tx.commit()?;
     Ok(result)
 }
+pub(super) fn prepare_trash(
+    db: &Connection,
+    connection: &ConnectionId,
+    keys: Vec<PageKey>,
+) -> Result<Vec<(PageKey, LocalRevision)>, StoreError> {
+    let unique: std::collections::HashSet<_> = keys.iter().collect();
+    if keys.is_empty()
+        || unique.len() != keys.len()
+        || keys.iter().any(|key| key.connection != *connection)
+    {
+        return Err(StoreError::InvalidData);
+    }
+    keys.into_iter()
+        .map(|key| {
+            let stored = pages::load_active(db, &key)?.ok_or(StoreError::PageMissing)?;
+            let restored = super::editor_rebase::restore(db, stored)?;
+            let page = restored.presented();
+            if page.permission != Permission::ReadWrite {
+                return Err(StoreError::ReadOnly);
+            }
+            if remote::read_conflict(db, &key)?.is_some() {
+                return Err(StoreError::UnknownOperation);
+            }
+            Ok((key, page.local_revision))
+        })
+        .collect()
+}
+pub(super) fn move_many_to_trash(
+    db: &mut Connection,
+    connection: &ConnectionId,
+    pages: Vec<(PageKey, LocalRevision)>,
+) -> Result<Vec<TrashId>, StoreError> {
+    let tx = db.transaction()?;
+    let current = prepare_trash(
+        &tx,
+        connection,
+        pages.iter().map(|(key, _)| key.clone()).collect(),
+    )?;
+    if current != pages {
+        return Err(StoreError::StaleRevision);
+    }
+    let ids = pages
+        .into_iter()
+        .map(|(key, revision)| trash_in_transaction(&tx, key, revision))
+        .collect::<Result<Vec<_>, _>>()?;
+    tx.commit()?;
+    tracing::debug!(count = ids.len(), "Batch moved to Trash");
+    Ok(ids)
+}
 pub(super) fn move_to_trash(
     db: &mut Connection,
     key: PageKey,
     expected: LocalRevision,
 ) -> Result<TrashId, StoreError> {
     let tx = db.transaction()?;
-    let canonical = pages::load_stored(&tx, &key)?.ok_or(StoreError::PageMissing)?;
-    let page = super::editor_rebase::restore(&tx, canonical)?
+    let id = trash_in_transaction(&tx, key, expected)?;
+    tx.commit()?;
+    Ok(id)
+}
+fn trash_in_transaction(
+    db: &Connection,
+    key: PageKey,
+    expected: LocalRevision,
+) -> Result<TrashId, StoreError> {
+    let canonical = pages::load_stored(db, &key)?.ok_or(StoreError::PageMissing)?;
+    let page = super::editor_rebase::restore(db, canonical)?
         .presented()
         .clone();
     if page.local_revision != expected {
@@ -209,22 +267,22 @@ pub(super) fn move_to_trash(
     if page.permission != Permission::ReadWrite {
         return Err(StoreError::ReadOnly);
     }
-    let page_id = pages::id(&tx, &key)?;
+    let page_id = pages::id(db, &key)?;
     let already: bool =
-        tx.query_row("SELECT trashed FROM pages WHERE id=?1", [page_id], |row| {
+        db.query_row("SELECT trashed FROM pages WHERE id=?1", [page_id], |row| {
             row.get(0)
         })?;
-    if already || remote::read_conflict(&tx, &key)?.is_some() {
+    if already || remote::read_conflict(db, &key)?.is_some() {
         return Err(StoreError::UnknownOperation);
     }
     let pending = {
         let mut query =
-            tx.prepare("SELECT operation_id FROM outbox WHERE page_id=?1 ORDER BY rowid")?;
+            db.prepare("SELECT operation_id FROM outbox WHERE page_id=?1 ORDER BY rowid")?;
         let ids = query
             .query_map([page_id], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
         ids.iter()
-            .map(|id| outbox::read_operation(&tx, id))
+            .map(|id| outbox::read_operation(db, id))
             .collect::<Result<Vec<_>, _>>()?
     };
     let record = TrashRecord {
@@ -233,7 +291,7 @@ pub(super) fn move_to_trash(
         pending,
     };
     let value = serde_json::to_string(&record).map_err(|_| StoreError::InvalidData)?;
-    tx.execute(
+    db.execute(
         "INSERT INTO trash(id,connection,path,snapshot,created_ms) VALUES(?1,?2,?3,?4,?5)",
         params![
             record.id.0.to_string(),
@@ -243,14 +301,13 @@ pub(super) fn move_to_trash(
             pages::now_ms()?
         ],
     )?;
-    super::delete_watches::supersede(&tx, &key)?;
-    tx.execute(
+    super::delete_watches::supersede(db, &key)?;
+    db.execute(
         "DELETE FROM editor_handoffs WHERE connection=?1 AND path=?2",
         [key.connection.as_str(), key.path.as_str()],
     )?;
-    tx.execute("UPDATE pages SET trashed=1 WHERE id=?1", [page_id])?;
-    outbox::queue_put(&tx, page_id, &record.page)?;
-    tx.commit()?;
+    db.execute("UPDATE pages SET trashed=1 WHERE id=?1", [page_id])?;
+    outbox::queue_put(db, page_id, &record.page)?;
     Ok(record.id)
 }
 pub(super) fn trash(
