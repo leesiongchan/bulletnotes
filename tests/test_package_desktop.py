@@ -3,11 +3,13 @@ import importlib.util
 import io
 import json
 import pathlib
+import plistlib
 import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -124,12 +126,43 @@ class DesktopPackagingTests(unittest.TestCase):
     def test_development_cannot_inherit_signing_or_notary_credentials(self):
         env = self.package.development_environment({
             'PATH': '/bin', 'APPLE_ID': 'secret', 'APPLE_API_KEY_PATH': 'secret',
-            'APPLE_SIGNING_IDENTITY': 'secret', 'TAURI_SIGNING_PRIVATE_KEY': 'secret',
+            'APPLE_SIGNING_IDENTITY': 'secret', 'CARGO_PACKAGER_SIGN_PRIVATE_KEY': 'secret',
             'BULLETNOTES_NOTARY_PROFILE': 'secret', 'CARGO_TARGET_DIR': '/other',
         })
         self.assertEqual(env['PATH'], '/bin')
-        self.assertFalse(any(key.startswith(('APPLE_', 'TAURI_SIGNING_', 'BULLETNOTES_NOTARY_')) for key in env))
+        self.assertFalse(any(key.startswith(('APPLE_', 'CARGO_PACKAGER_', 'BULLETNOTES_NOTARY_')) for key in env))
         self.assertNotIn('CARGO_TARGET_DIR', env)
+
+    def packager_config(self):
+        return tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']['metadata']['packager']
+
+    def test_packager_config_reads_committed_files_and_generated_inputs(self):
+        config = self.packager_config()
+        sources = [resource['src'] for resource in config['resources']] + config['icons'] + [
+            config['macos']['entitlements'], config['macos']['info-plist-path'], config['nsis']['installer-icon']]
+        generated = {'target/packaging/ThirdPartyNotices.html', config['deb']['depends']}
+        self.assertEqual(generated, {'target/packaging/ThirdPartyNotices.html', 'target/packaging/deb-depends.txt'})
+        for source in sources:
+            with self.subTest(source=source):
+                self.assertTrue(source in generated or (ROOT / source).is_file())
+        self.assertEqual({resource['target'] for resource in config['resources']},
+                         {'ThirdPartyNotices.html', 'Slint-License.md'})
+
+    def test_macos_icon_matches_info_plist_and_version_comes_from_cargo(self):
+        info = plistlib.loads((ROOT / self.packager_config()['macos']['info-plist-path']).read_bytes())
+        self.assertIn(info['CFBundleIconFile'], [pathlib.Path(icon).name for icon in self.packager_config()['icons']])
+        self.assertNotIn('CFBundleShortVersionString', info)
+
+    def test_linux_inputs_declare_dynamically_loaded_libraries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            inputs = pathlib.Path(temporary) / 'packaging'
+            with mock.patch.object(self.package, 'run'), \
+                    mock.patch.object(self.package, 'capture', return_value='shlibs:Depends=libc6 (>= 2.39), libgcc-s1'):
+                notices = self.package.write_packaging_inputs(inputs, 'x86_64-unknown-linux-gnu', pathlib.Path('bulletnotes'), {})
+            self.assertEqual(notices, inputs / 'ThirdPartyNotices.html')
+            depends = (inputs / 'deb-depends.txt').read_text().splitlines()
+            self.assertEqual(depends[:2], ['libc6 (>= 2.39)', 'libgcc-s1'])
+            self.assertTrue(set(self.package.LINUX_LIBRARIES.values()).issubset(depends))
 
     def test_binary_architecture_is_checked_independently_of_bundle_target(self):
         with tempfile.TemporaryDirectory() as temporary:

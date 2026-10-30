@@ -11,10 +11,11 @@ On macOS, install Xcode command-line tools. Linux package prerequisites are list
 in `.github/workflows/release.yml`; the workflow uses Ubuntu 24.04. On Windows,
 use the MSVC toolchain. On the project's Nix setup, a missing CLI can be run through
 comma. Commands use `rustup run` because an inherited `RUSTUP_TOOLCHAIN` can
-override the toolchain file. `mise.toml` pins git-cliff, cargo-about and tauri-cli
+override the toolchain file. `mise.toml` pins git-cliff, cargo-about and cargo-packager
 for CI and local use; without mise, install the same versions with
 `rustup run 1.99.1 cargo install cargo-about --version 0.9.2 --features cli --locked`
-and `rustup run 1.99.1 cargo install tauri-cli --version 2.12.4 --locked`.
+and `rustup run 1.99.1 cargo install --git https://github.com/crabnebula-dev/cargo-packager --rev 7197bff5110e33d54691d4788fd55c0edd73aa11 --locked cargo-packager`.
+That unreleased commit fixes RustSec advisories in 0.11.8's locked dependencies.
 
 ```sh
 bash scripts/check.sh
@@ -23,8 +24,9 @@ mise install
 python3 scripts/package-desktop.py --version 0.1.0 --target aarch64-apple-darwin --output target/packages/local
 ```
 
-Packaging uses Tauri's maintained bundler around the existing Slint executable.
-It does not add a Tauri runtime. Run packaging on the matching native host;
+Packaging runs cargo-packager with the `[package.metadata.packager]` config in `Cargo.toml`.
+The wrapper generates the per-target attribution and deb dependency files that config
+reads from `target/packaging`. Run packaging on the matching native host;
 substitute one of these targets:
 
 | OS | Rust targets | Downloads |
@@ -39,10 +41,9 @@ verification report recording source revision, dirty state, lockfile hash,
 packaged binary hashes, attribution, architecture, version, and launch evidence.
 The wrapper extracts/installs each package and verifies its contents. Linux ELF
 dependencies come from `dpkg-shlibdeps`; Winit/WGPU libraries loaded dynamically
-are declared explicitly in deb dependencies and included in AppImages. GPU drivers
-and a desktop session remain host requirements. Tauri AppImage packaging also
-includes GTK support libraries even though the app uses Slint. macOS
-additionally checks deployment target, required custom Info.plist metadata,
+are declared explicitly in deb dependencies; AppImages use the host's copies. GPU drivers
+and a desktop session remain host requirements. macOS
+additionally checks deployment target, required custom Info.plist metadata, the bundle icon,
 ad-hoc hardened runtime signature, empty entitlements, and the DMG's Applications
 shortcut. `--static-only` checks packaged `--version` but explicitly records UI
 launch as unobserved.

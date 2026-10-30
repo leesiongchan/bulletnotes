@@ -5,6 +5,30 @@ edition = "2024"
 rust-version = "1.92"
 publish = false
 
+# Packaging config for cargo-packager. `scripts/package-desktop.py` generates the files under target/packaging.
+[package.metadata.packager]
+product-name = "Bulletnotes"
+identifier = "lol.harflix.bulletnotes"
+description = "Bulletnotes desktop notes"
+icons = ["packaging/icons/32x32.png", "packaging/icons/128x128.png", "packaging/icons/128x128@2x.png", "packaging/icons/icon.ico", "packaging/icons/icon.icns"]
+resources = [
+  { src = "target/packaging/ThirdPartyNotices.html", target = "ThirdPartyNotices.html" },
+  { src = "packaging/Slint-License.md", target = "Slint-License.md" },
+]
+
+[package.metadata.packager.macos]
+minimum-system-version = "14.0"
+signing-identity = "-"
+entitlements = "packaging/entitlements.plist"
+info-plist-path = "packaging/Info.plist"
+
+[package.metadata.packager.nsis]
+installer-mode = "currentUser"
+installer-icon = "packaging/icons/icon.ico"
+
+[package.metadata.packager.deb]
+depends = "target/packaging/deb-depends.txt"
+
 [features]
 default = []
 protocol-validation = []
