@@ -27,7 +27,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
     let store = runtime.block_on(StoreHandle::open(&path)).unwrap();
     let mut settings = AppSettings::default();
     let mut imported = settings.themes().unwrap().remove(0).theme;
-    imported.name = "Imported low contrast".into();
+    imported.name = "A long imported theme name café".into();
     imported.ink = imported.paper;
     settings.imported_themes.push(ThemeEntry::import(imported));
     runtime
@@ -50,9 +50,15 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             .sum::<usize>(),
         themes.len()
     );
-    assert_eq!(cards.row_data(0).unwrap().left.id, "antinote-vancouver");
-    assert_eq!(cards.row_data(3).unwrap().left.id, "antinote-piccolo");
-    let tartan = cards.row_data(4).unwrap().left;
+    assert_eq!(cards.row_data(0).unwrap().left.id, "bulletnotes");
+    assert_eq!(cards.row_data(0).unwrap().right.id, "bulletnotes-dark");
+    assert_eq!(cards.row_data(1).unwrap().left.id, "antinote-vancouver");
+    assert_eq!(cards.row_data(4).unwrap().left.id, "antinote-piccolo");
+    let tartan = cards
+        .iter()
+        .flat_map(|pair| [pair.left, pair.right])
+        .find(|card| card.id == "antinote-tartan")
+        .unwrap();
     assert_eq!(tartan.id, "antinote-tartan");
     assert_eq!(
         tartan.swatches.accent2,
@@ -118,7 +124,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         window.window().dispatch_event(WindowEvent::WindowActiveChanged(true));
         let _ = window.window().take_snapshot().unwrap();
         binding.flush().await.unwrap();
-        for (index, (id, activation)) in [("antinote-vancouver", Key::Space.into()), ("antinote-tokyo-drift", Key::Space.into()), ("antinote-gundam-wing", Key::Return.into())].into_iter().enumerate() {
+        for (index, (id, activation)) in [("bulletnotes", Key::Space.into()), ("bulletnotes-dark", Key::Space.into()), ("antinote-vancouver", Key::Return.into())].into_iter().enumerate() {
             for _ in 0..if index == 0 { 0 } else { 2 } {
                 window.window().dispatch_event(WindowEvent::KeyPressed { text: Key::Tab.into() });
                 window.window().dispatch_event(WindowEvent::KeyReleased { text: Key::Tab.into() });
@@ -135,7 +141,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             window.window().dispatch_event(WindowEvent::KeyReleased { text });
         }
         binding.flush().await.unwrap();
-        assert_eq!(store.load_settings().await.unwrap().appearance.light_theme.0, "antinote-gundam-wing");
+        assert_eq!(store.load_settings().await.unwrap().appearance.light_theme.0, "antinote-vancouver");
         window.invoke_theme_assigned("antinote-tartan".into(), true);
         binding.flush().await.unwrap();
         for text in [slint::SharedString::from(Key::Tab), Key::Space.into()] {
@@ -143,7 +149,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             window.window().dispatch_event(WindowEvent::KeyReleased { text });
         }
         binding.flush().await.unwrap();
-        assert_eq!(store.load_settings().await.unwrap().appearance.dark_theme.0, "antinote-gundam-wing");
+        assert_eq!(store.load_settings().await.unwrap().appearance.dark_theme.0, "antinote-vancouver");
         let before = store.load_settings().await.unwrap();
         window.invoke_theme_assigned("antinote-tartan".into(), false);
         binding.flush().await.unwrap();

@@ -1,7 +1,9 @@
+import { PaperMaterial } from "paper-material.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, MarkdownCommand, MarkdownEdit } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
+    in property <bool> paper-material:false;
     in-out property <string> text;
     in property <[TextInputDecoration]> decorations;
     in property <[TextInputMarker]> markers;
@@ -54,6 +56,7 @@ export component NoteEditor inherits Rectangle {
     public function restore-selection(anchor: int, caret: int, y: float) { input.set-selection-offsets(anchor,caret); scroll.content-y = -max(0,y) * 1px; }
     background: root.theme.paper;
     clip: true;
+    PaperMaterial { width:parent.width; height:parent.height; active:root.paper-material; tint:root.theme.ink; strength:root.theme.dark ? 0.015 : 0.005; }
     measure-one := Text {
         visible: false;
         text: "Ag";

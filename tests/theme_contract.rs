@@ -6,6 +6,99 @@ use bulletnotes::theme::{
 };
 use serde_json::{Value, json};
 const VALID: &[u8] = include_bytes!("fixtures/themes/valid.json");
+
+#[test]
+fn fresh_defaults_use_bulletnotes_pair() {
+    let settings = AppearanceSettings::default();
+    assert_eq!(settings.mode, AppearanceMode::System);
+    assert_eq!(settings.light_theme.0, "bulletnotes");
+    assert_eq!(settings.dark_theme.0, "bulletnotes-dark");
+    assert_eq!(settings.paper, PaperStyle::Plain);
+    assert_eq!(settings.font_size, 15.0);
+    let themes = builtin_themes().unwrap();
+    assert_eq!(themes.len(), 43);
+    for (system, id) in [
+        (SystemAppearance::Light, "bulletnotes"),
+        (SystemAppearance::Dark, "bulletnotes-dark"),
+    ] {
+        assert_eq!(resolve_theme(&settings, system, &themes).unwrap().id.0, id);
+    }
+}
+
+#[test]
+fn bulletnotes_palettes_round_trip() {
+    let themes = builtin_themes().unwrap();
+    for (id, paper, accent) in [
+        ("bulletnotes", "#F7F3EB", "#C3431C"),
+        ("bulletnotes-dark", "#25272B", "#FF9A71"),
+    ] {
+        let theme = &themes
+            .iter()
+            .find(|entry| entry.id.0 == id)
+            .expect("branded palette")
+            .theme;
+        assert_eq!(theme.paper.hex(), paper);
+        assert_eq!(theme.accent.hex(), accent);
+        assert_eq!(decode_theme(&encode_theme(theme).unwrap()).unwrap(), *theme);
+        assert!(theme.swatches.is_some());
+        assert!(check_contrast(theme).passes());
+        let markdown = theme.markdown.as_ref().unwrap();
+        for role in [
+            markdown.heading1,
+            markdown.heading2,
+            markdown.heading3,
+            markdown.link,
+            markdown.syntax,
+        ] {
+            for background in [theme.paper, theme.surface] {
+                assert!(contrast::contrast_ratio(role, background) >= 4.5);
+            }
+        }
+        let original = theme.clone();
+        let adjusted = accessibility::high_contrast(theme);
+        assert!(contrast::contrast_ratio(adjusted.ink, adjusted.paper) >= 7.0);
+        assert_eq!(*theme, original);
+    }
+}
+
+#[tokio::test]
+async fn legacy_theme_choices_survive_default_change() {
+    use bulletnotes::store::{StoreHandle, settings::WindowPlacement};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(
+        store
+            .load_settings()
+            .await
+            .unwrap()
+            .appearance
+            .light_theme
+            .0,
+        "bulletnotes"
+    );
+    let mut settings = store.load_settings().await.unwrap();
+    settings.appearance.light_theme = ThemeId("paper".into());
+    settings.appearance.dark_theme = ThemeId("graphite".into());
+    settings.appearance.paper = PaperStyle::Grid;
+    settings.appearance.font_size = 21.0;
+    settings.hotkey.key = "KeyB".into();
+    settings.window = Some(WindowPlacement {
+        x: 35.0,
+        y: 48.0,
+        width: 505.0,
+        height: 552.0,
+        pinned: true,
+    });
+    let mut imported = decode_theme(VALID).unwrap();
+    imported.name = "Bulletnotes".into();
+    settings.imported_themes.push(ThemeEntry::import(imported));
+    store.save_settings(settings.clone()).await.unwrap();
+    store.shutdown().await.unwrap();
+    let reopened = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(reopened.load_settings().await.unwrap(), settings);
+    reopened.shutdown().await.unwrap();
+}
 fn modified(field: &str, value: Value) -> Vec<u8> {
     let mut theme: Value = serde_json::from_slice(VALID).unwrap();
     theme[field] = value;

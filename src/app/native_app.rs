@@ -78,6 +78,8 @@ impl LocalApplication {
                         *about = Some(window);
                     }
                     let about = about.as_ref().ok_or("About is unavailable")?;
+                    let source = weak.upgrade().ok_or("Main window is unavailable")?;
+                    super::ui::present_about(about, &source);
                     about.show()?;
                     #[cfg(target_os = "macos")]
                     native.activate();

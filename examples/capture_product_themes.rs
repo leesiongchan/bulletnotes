@@ -36,6 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window.invoke_reset_chrome();
 
     for (slug, id) in [
+        ("bulletnotes", "bulletnotes"),
+        ("bulletnotes-dark", "bulletnotes-dark"),
         ("paper", "paper"),
         ("graphite", "graphite"),
         ("matcha", "matcha"),

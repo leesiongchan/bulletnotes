@@ -1,11 +1,13 @@
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { PaperMaterial } from "paper-material.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, ThemeOption, ThemePair } from "../types.slint";
 import { ActionButton, ChoiceButton } from "action-button.slint";
 component ThemeModeButton inherits FocusScope {
     in property <bool> dark;
     in property <bool> high-contrast;
-    in property <bool> dark-paper;
+    in property <UiTheme> palette;
+    in property <UiTheme> chrome;
     in property <bool> selected;
     in property <string> name;
     callback clicked();
@@ -17,12 +19,12 @@ component ThemeModeButton inherits FocusScope {
     Rectangle {
         border-radius:7px;
         border-width:root.selected || root.has-focus ? 2px : 1px;
-        border-color:root.high-contrast ? (root.dark-paper ? white : black) : (root.has-focus ? #0091ff : (root.selected ? #0091ff80 : #80808066));
-        background:touch.has-hover ? #0091ff12 : transparent;
+        border-color:root.high-contrast ? root.chrome.ink : (root.has-focus || root.selected ? root.palette.ink : root.palette.line.with-alpha(0.6));
+        background:root.high-contrast ? (root.selected || touch.has-hover ? root.chrome.selection : root.chrome.paper) : (root.selected || touch.has-hover ? root.palette.selection : root.palette.paper);
         Image {
             source:root.dark ? @image-url("../../assets/icons/moon.svg") : @image-url("../../assets/icons/sun.svg");
-            colorize:root.high-contrast ? (root.dark-paper ? white : black) : (root.dark ? #007aff : #ffd600);
-            opacity:root.selected || root.high-contrast ? 1 : 0.2;
+            colorize:root.high-contrast ? root.chrome.ink : (root.selected ? root.palette.ink : root.palette.muted);
+            opacity:root.selected || root.high-contrast ? 1 : 0.65;
             x:8px; y:8px; width:16px; height:16px;
         }
         touch := TouchArea { clicked => { root.focus(); root.clicked(); } }
@@ -30,6 +32,7 @@ component ThemeModeButton inherits FocusScope {
 }
 component ThemeCard inherits FocusScope {
     in property <ThemeOption> option;
+    in property <UiTheme> chrome;
     in property <bool> high-contrast;
     in property <bool> light-selected;
     in property <bool> dark-selected;
@@ -41,7 +44,7 @@ component ThemeCard inherits FocusScope {
     accessible-action-default => { root.clicked(); }
     key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
     Rectangle {
-        border-radius:4px;
+        border-radius:9px;
         clip:true;
         background:root.option.palette.paper;
         for row in 5: Rectangle {
@@ -58,11 +61,11 @@ component ThemeCard inherits FocusScope {
         }
         TouchArea { clicked => { root.focus(); root.clicked(); } }
         Text {
-            x:16px; y:14px; width:139px; height:24px;
+            x:14px; y:10px; width:139px; height:40px;
             text:root.option.name;
-            font-family:"Menlo"; font-size:15px;
+            font-family:"Menlo"; font-size:13px;
             color:root.option.palette.ink;
-            overflow:elide;
+            wrap:word-wrap; max-lines:2; overflow:elide;
         }
         for shade[index] in [root.option.swatches.primary, root.option.swatches.secondary, root.option.swatches.tertiary, root.option.swatches.accent2, root.option.swatches.accent3, root.option.swatches.accent4, root.option.swatches.accent5, root.option.swatches.highlight]: Rectangle {
             x:15px + index * 28px; y:60px;
@@ -71,21 +74,21 @@ component ThemeCard inherits FocusScope {
             accessible-role:none;
         }
         Rectangle {
-            border-radius:4px;
+            border-radius:9px;
             border-width:root.light-selected || root.dark-selected || root.has-focus ? 2px : 0px;
-            border-color:root.high-contrast ? (root.option.palette.dark ? white : black) : #0091ff;
+            border-color:root.high-contrast || root.has-focus ? (root.option.palette.dark ? white : black) : root.chrome.accent;
             background:transparent;
             accessible-role:none;
         }
         ThemeModeButton {
             x:165px; y:7px;
-            high-contrast:root.high-contrast; dark-paper:root.option.palette.dark;
+            high-contrast:root.high-contrast; palette:root.option.palette; chrome:root.chrome;
             name:root.option.name; dark:false; selected:root.light-selected;
             clicked => { root.assigned(false); }
         }
         ThemeModeButton {
             x:202px; y:7px;
-            high-contrast:root.high-contrast; dark-paper:root.option.palette.dark;
+            high-contrast:root.high-contrast; palette:root.option.palette; chrome:root.chrome;
             name:root.option.name; dark:true; selected:root.dark-selected;
             clicked => { root.assigned(true); }
         }
@@ -93,7 +96,7 @@ component ThemeCard inherits FocusScope {
 }
 
 export component AppearancePanel inherits Rectangle {
-    in property <bool> system-dark:false;
+    in property <bool> material-effects:true;
     in property <bool> high-contrast:false;
     in property <string> light-theme;
     in property <string> dark-theme;
@@ -118,31 +121,21 @@ export component AppearancePanel inherits Rectangle {
     callback cancel-theme-import();
     out property <bool> controls-first:paper-heading.y < theme-heading.y && font-controls.y < theme-heading.y;
     public function focus-panel() { system-button.focus(); }
-    private property <UiTheme> chrome: {
-        paper:root.high-contrast ? (root.system-dark ? black : white) : (root.system-dark ? #1e1f21 : #f4f4f4),
-        surface:root.high-contrast ? (root.system-dark ? black : white) : (root.system-dark ? #252628 : #ffffff),
-        ink:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #dedede : #242424),
-        muted:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #999999 : #686868),
-        accent:root.high-contrast ? (root.system-dark ? white : black) : #0091ff,
-        line:root.high-contrast ? (root.system-dark ? white : black) : (root.system-dark ? #48484a : #c9c9c9),
-        selection:root.system-dark ? #3b3b3d : #e3e3e6,
-        cursor:#0091ff, scrollbar:root.system-dark ? #666666 : #aaaaaa,
-        pattern:transparent, dark:root.system-dark,
-        markdown:{heading1:transparent,heading2:transparent,heading3:transparent,link:transparent,syntax:transparent}
-    };
+    in property <UiTheme> chrome;
     private property <length> inset:root.width >= 696px ? 48px : 20px;
     public function reveal-themes() { scroll.content-y = -max(0px,theme-heading.y - 12px); }
     background:root.chrome.paper;
+    PaperMaterial { width:parent.width; height:parent.height; active:root.material-effects && !root.high-contrast; tint:root.chrome.ink; strength:root.chrome.dark ? 0.015 : 0.005; }
     Text {
         x: root.inset;
         y: 14px;
-        text: "Appearance";
-        font-size: 17px;
-        font-weight: 550;
+        text: "Settings";
+        font-size: 21px;
+        font-weight: 600;
         color: root.chrome.ink;
     }
 
-    ActionButton {
+    ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
         x: parent.width - 44px;
         y: 9px;
         theme: root.chrome;
@@ -156,26 +149,27 @@ export component AppearancePanel inherits Rectangle {
         x: root.inset;
         y: 53px;
         width: parent.width - 2 * root.inset;
-        height: parent.height - 101px;
+        height: parent.height - 74px;
         content-width: self.visible-width;
         content-height: content.preferred-height;
         content := VerticalBox {
-            width: scroll.visible-width;
+            x:0px;
+            width: max(1px,scroll.visible-width - 12px);
             padding: 0px;
-            spacing: 12px;
-            Text {text:"TEXT AND PAPER";font-size:10px;font-weight:600;color:root.chrome.muted;}
+            spacing: 16px;
+            Text {text:"Writing";font-size:14px;font-weight:600;color:root.chrome.muted;}
             font-controls := HorizontalBox {
                 padding: 0px;
                 spacing: 8px;
                 Text {
                     text: "Text size";
-                    font-size: 11px;
+                    font-size: 13px;
                     color: root.chrome.ink;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
 
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "−";
                     label: "Decrease text size";
                     theme: root.chrome;
@@ -187,14 +181,14 @@ export component AppearancePanel inherits Rectangle {
 
                 Text {
                     text: root.font-size-px + " px";
-                    font-size: 11px;
+                    font-size: 13px;
                     color: root.chrome.muted;
                     width: 38px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
 
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "+";
                     label: "Increase text size";
                     theme: root.chrome;
@@ -206,8 +200,8 @@ export component AppearancePanel inherits Rectangle {
             }
 
             paper-heading := Text {
-                text: "PAPER";
-                font-size: 10px;
+                text: "Paper pattern";
+                font-size: 13px;
                 font-weight: 600;
                 color: root.chrome.muted;
             }
@@ -215,28 +209,28 @@ export component AppearancePanel inherits Rectangle {
             HorizontalBox {
                 padding: 0px;
                 spacing: 4px;
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "Plain";
                     theme: root.chrome;
                     selected: root.paper-style == "plain";
                     clicked => { root.paper-style = "plain"; root.changed(); }
                 }
 
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "Dots";
                     theme: root.chrome;
                     selected: root.paper-style == "dots";
                     clicked => { root.paper-style = "dots"; root.changed(); }
                 }
 
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "Ruled";
                     theme: root.chrome;
                     selected: root.paper-style == "ruled";
                     clicked => { root.paper-style = "ruled"; root.changed(); }
                 }
 
-                ChoiceButton {
+                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                     text: "Grid";
                     theme: root.chrome;
                     selected: root.paper-style == "grid";
@@ -244,7 +238,7 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
 
-            Text {text:"APPEARANCE";font-size:10px;font-weight:600;color:root.chrome.muted;}
+            Text {text:"Appearance";font-size:14px;font-weight:600;color:root.chrome.muted;}
             Rectangle {
                 height: 34px;
                 background: root.chrome.surface;
@@ -254,21 +248,21 @@ export component AppearancePanel inherits Rectangle {
                 HorizontalBox {
                     padding: 3px;
                     spacing: 3px;
-                    ChoiceButton {
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         text: "Light";
                         theme: root.chrome;
                         selected: root.mode == "light";
                         clicked => { root.mode = "light"; root.changed(); }
                     }
 
-                    ChoiceButton {
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         text: "Dark";
                         theme: root.chrome;
                         selected: root.mode == "dark";
                         clicked => { root.mode = "dark"; root.changed(); }
                     }
 
-                    system-button := ChoiceButton {
+                    system-button := ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         text: "System";
                         theme: root.chrome;
                         selected: root.mode == "system";
@@ -279,7 +273,7 @@ export component AppearancePanel inherits Rectangle {
 
             Text {
                 text: root.mode == "system" ? "Follows macOS · light and dark choices are saved separately" : "Your light and dark choices are saved separately";
-                font-size: 10px;
+                font-size: 13px;
                 color: root.chrome.muted;
                 wrap: word-wrap;
             }
@@ -304,6 +298,7 @@ export component AppearancePanel inherits Rectangle {
                             x:parent.two-columns ? (parent.width - 600px) / 2 : (parent.width - 250px) / 2;
                             y:0px;
                             high-contrast:root.high-contrast;
+                            chrome:root.chrome;
                             option:pair.left;
                             light-selected:root.light-theme == pair.left.id;
                             dark-selected:root.dark-theme == pair.left.id;
@@ -314,6 +309,7 @@ export component AppearancePanel inherits Rectangle {
                             x:parent.two-columns ? (parent.width - 600px) / 2 + 350px : (parent.width - 250px) / 2;
                             y:parent.two-columns ? 0px : 116px;
                             high-contrast:root.high-contrast;
+                            chrome:root.chrome;
                             option:pair.right;
                             visible:pair.has-right;
                             light-selected:root.light-theme == pair.right.id;
@@ -327,26 +323,26 @@ export component AppearancePanel inherits Rectangle {
             Rectangle {
                 height:68px; background:root.chrome.surface; border-radius:10px;
                 Text {x:10px;y:10px;text:"Custom themes";font-size:13px;color:root.chrome.ink;}
-                Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:11px;color:root.chrome.muted;wrap:word-wrap;}
+                Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:13px;color:root.chrome.muted;wrap:word-wrap;}
                 HorizontalBox {
                     x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:8px;
-                    ChoiceButton {text:"Import…";label:"Import theme";theme:root.chrome;clicked => {root.import-theme();}}
-                    ChoiceButton {text:"Export…";label:"Export theme";theme:root.chrome;clicked => {root.export-theme();}}
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;text:"Import…";label:"Import theme";theme:root.chrome;clicked => {root.import-theme();}}
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;text:"Export…";label:"Export theme";theme:root.chrome;clicked => {root.export-theme();}}
                 }
             }
-            Text { text:"GLOBAL SHORTCUT";font-size:10px;font-weight:600;color:root.chrome.muted; }
+            Text { text:"Desktop shortcut";font-size:14px;font-weight:600;color:root.chrome.muted; }
             Rectangle {
                 height:34px;background:root.chrome.surface;border-width:1px;border-color:root.chrome.line;border-radius:5px;
                 TextInput {x:8px;width:parent.width - 16px;height:parent.height;text <=> root.hotkey-accelerator;single-line:true;vertical-alignment:center;color:root.chrome.ink;font-size:12px;selection-background-color:root.chrome.cursor;selection-foreground-color:root.chrome.ink;read-only:root.hotkey-busy;accessible-label:"Global show and hide shortcut";}
             }
-            Text {text:"For example, Option+A or Control+Shift+Space.";font-size:10px;color:root.chrome.muted;wrap:word-wrap;}
-            ChoiceButton {theme:root.chrome;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}
-            Text {text:root.native-message;font-size:11px;color:root.chrome.muted;wrap:word-wrap;}
+            Text {text:"For example, Option+A or Control+Shift+Space.";font-size:13px;color:root.chrome.muted;wrap:word-wrap;}
+            ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;theme:root.chrome;text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut";enabled:!root.hotkey-busy;clicked => {root.apply-hotkey();}}
+            Text {text:root.native-message;font-size:13px;color:root.chrome.muted;wrap:word-wrap;}
             Text {
                 visible: root.message != "";
                 text: root.message;
                 color: root.chrome.ink;
-                font-size: 11px;
+                font-size: 13px;
                 wrap: word-wrap;
             }
 
@@ -356,46 +352,32 @@ export component AppearancePanel inherits Rectangle {
                 Text {
                     text: "This theme has low contrast. Text or controls may be difficult to see.";
                     color: root.chrome.ink;
-                    font-size: 11px;
+                    font-size: 13px;
                     wrap: word-wrap;
                 }
 
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
-                    ChoiceButton {
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         text: "Cancel";
                         theme: root.chrome;
                         clicked => { root.cancel-theme-import(); }
                     }
 
-                    ChoiceButton {
+                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         text: "Apply anyway";
                         theme: root.chrome;
                         clicked => { root.apply-low-contrast(); }
                     }
                 }
             }
+            Text { text:"Connection"; font-size:14px; font-weight:600; color:root.chrome.muted; }
+            ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+                text:"Connection…"; theme:root.chrome;
+                clicked => { root.show-connection(); }
+            }
         }
     }
 
-    HorizontalBox {
-        x: root.inset;
-        y: parent.height - 39px;
-        width: parent.width - 2 * root.inset;
-        height: 29px;
-        padding: 0px;
-        spacing: 8px;
-        Text {
-            text:root.message;
-            font-size:11px; color:root.chrome.muted;
-            vertical-alignment:center; overflow:elide;
-            horizontal-stretch:1;
-        }
-        ChoiceButton {
-            text: "Connection…";
-            theme: root.chrome;
-            clicked => { root.show-connection(); }
-        }
-    }
 }

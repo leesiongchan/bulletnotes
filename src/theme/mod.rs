@@ -138,8 +138,8 @@ impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             mode: AppearanceMode::System,
-            light_theme: ThemeId("paper".into()),
-            dark_theme: ThemeId("graphite".into()),
+            light_theme: ThemeId("bulletnotes".into()),
+            dark_theme: ThemeId("bulletnotes-dark".into()),
             paper: PaperStyle::Plain,
             font_size: 15.0,
         }

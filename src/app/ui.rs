@@ -1,11 +1,14 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
 use crate::{
-    AppWindow, MarkdownCommand, MarkdownEdit, ThemeOption, ThemePair, UiMarkdownColors, UiTheme,
-    UiThemeSwatches,
+    AboutWindow, AppWindow, MarkdownCommand, MarkdownEdit, ThemeOption, ThemePair,
+    UiMarkdownColors, UiTheme, UiThemeSwatches,
     store::settings::AppSettings,
-    theme::{self, AppearanceMode, PaperStyle, ResolvedTheme, SystemAppearance, Theme, ThemeError},
+    theme::{
+        self, AppearanceMode, AppearanceSettings, PaperStyle, ResolvedTheme, SystemAppearance,
+        Theme, ThemeError, palette::ThemeEntry,
+    },
 };
-use slint::{Model, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 fn color(value: theme::Color) -> slint::Color {
     slint::Color::from_rgb_u8(value.r, value.g, value.b)
@@ -136,6 +139,52 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
     );
     window.set_selected_theme_id(resolved.id.0.as_str().into());
 }
+fn settings_palette(
+    settings: &AppearanceSettings,
+    system: SystemAppearance,
+    themes: &[ThemeEntry],
+    high_contrast: bool,
+) -> Result<UiTheme, ThemeError> {
+    let dark = match settings.mode {
+        AppearanceMode::Light => false,
+        AppearanceMode::Dark => true,
+        AppearanceMode::System => system == SystemAppearance::Dark,
+    };
+    let id = if dark {
+        "bulletnotes-dark"
+    } else {
+        "bulletnotes"
+    };
+    let theme = &themes
+        .iter()
+        .find(|entry| entry.id.0 == id)
+        .ok_or(ThemeError::InvalidSettings)?
+        .theme;
+    let adjusted = high_contrast.then(|| theme::accessibility::high_contrast(theme));
+    Ok(palette(
+        adjusted.as_ref().unwrap_or(theme),
+        theme.grid.unwrap_or(theme.line),
+    ))
+}
+
+fn apply_about_presentation(window: &AboutWindow, source: &AppWindow) {
+    window.set_theme(source.get_settings_theme());
+    window.set_high_contrast(source.get_system_high_contrast());
+    window.set_reduce_transparency(source.get_prefers_reduced_transparency());
+}
+
+/// Refresh cached About windows and keep visible windows in sync with native preferences.
+pub fn present_about(window: &AboutWindow, source: &AppWindow) {
+    apply_about_presentation(window, source);
+    let about = window.as_weak();
+    let weak = source.as_weak();
+    source.on_about_presentation_changed(move || {
+        if let (Some(about), Some(source)) = (about.upgrade(), weak.upgrade()) {
+            apply_about_presentation(&about, &source);
+        }
+    });
+}
+
 /// Validate before changing any presentation properties.
 pub fn present_settings(
     window: &AppWindow,
@@ -147,7 +196,15 @@ pub fn present_settings(
         .map_err(|_| ThemeError::InvalidSettings)?;
     let themes = settings.themes().map_err(|_| ThemeError::InvalidSettings)?;
     let resolved = theme::resolve_theme(&settings.appearance, system, &themes)?;
+    let chrome = settings_palette(
+        &settings.appearance,
+        system,
+        &themes,
+        window.get_system_high_contrast(),
+    )?;
     let native_order = [
+        "bulletnotes",
+        "bulletnotes-dark",
         "antinote-vancouver",
         "antinote-tokyo-drift",
         "antinote-gundam-wing",
@@ -242,6 +299,8 @@ pub fn present_settings(
         }
         .into(),
     );
+    tracing::debug!(note_theme = %resolved.id.0, settings_dark = chrome.dark, high_contrast = window.get_system_high_contrast(), "Appearance presentation refreshed");
+    window.set_settings_theme(chrome);
     apply_theme(window, &resolved);
     Ok(())
 }

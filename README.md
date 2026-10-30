@@ -1,4 +1,4 @@
-<img src="assets/bulletnotes-logo.png" alt="Bulletnotes logo" width="120">
+<img src="assets/bulletnotes-logo.png" alt="Bulletnotes — orange handwritten b with a brushed-silver fold on eggshell paper" width="120" height="120">
 
 # Bulletnotes
 
@@ -7,8 +7,8 @@ A small desktop notebook for [SilverBullet](https://silverbullet.md/). Capture t
 [Explore Bulletnotes](https://leesiongchan.github.io/bulletnotes/) · [Product page development](site/README.md)
 
 <p align="center">
-  <img src="docs/screenshots/light.png" alt="Bulletnotes note editor in a light theme" width="45%">
-  <img src="docs/screenshots/dark.png" alt="Bulletnotes note editor in a dark theme" width="45%">
+  <img src="docs/screenshots/light.png" alt="Bulletnotes note editor in the Bulletnotes light theme" width="45%">
+  <img src="docs/screenshots/dark.png" alt="Bulletnotes note editor in the Bulletnotes Dark theme" width="45%">
 </p>
 
 ## What it does

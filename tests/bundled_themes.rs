@@ -302,7 +302,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
         ),
     ];
     let themes = builtin_themes().unwrap();
-    assert_eq!(themes.len(), 41);
+    assert_eq!(themes.len(), 43);
     let mut ids = std::collections::HashSet::new();
     for entry in &themes {
         assert!(ids.insert(&entry.id));
@@ -335,7 +335,10 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             decode_theme(&encode_theme(&resolved.palette).unwrap()).unwrap(),
             resolved.palette
         );
-        assert_eq!(restored.appearance.dark_theme, ThemeId("graphite".into()));
+        assert_eq!(
+            restored.appearance.dark_theme,
+            ThemeId("bulletnotes-dark".into())
+        );
         let mut dark_settings = restored.appearance.clone();
         dark_settings.mode = AppearanceMode::Dark;
         dark_settings.dark_theme = ThemeId(id.into());

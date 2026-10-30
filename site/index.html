@@ -3,12 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101411" />
+    <meta name="theme-color" content="#f7f3eb" />
     <meta
       name="description"
       content="A native Markdown scratchpad for the notes you need right now. Capture ideas, save locally, work offline, and connect to SilverBullet."
     />
-    <meta property="og:title" content="Bulletnotes — Write it. Keep going." />
+    <meta
+      property="og:title"
+      content="Bulletnotes — A little space for your next thought."
+    />
     <meta
       property="og:description"
       content="Quick scratchpads, Markdown editing, and offline saving. A simple native app that connects to your SilverBullet space."
@@ -20,10 +23,18 @@
     />
     <meta
       property="og:image"
-      content="https://leesiongchan.github.io/bulletnotes/assets/bulletnotes-logo.png"
+      content="https://leesiongchan.github.io/bulletnotes/assets/bulletnotes-logo.png?v=paper-1"
     />
     <link rel="canonical" href="https://leesiongchan.github.io/bulletnotes/" />
-    <link rel="icon" type="image/png" href="assets/bulletnotes-logo.png" />
+    <link rel="icon" type="image/png" href="assets/favicon-32.png?v=paper-1" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=paper-1" />
+    <link
+      rel="preload"
+      href="assets/fonts/instrument-serif.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
     <link
       rel="preload"
       href="assets/fonts/dm-sans.ttf"
@@ -31,16 +42,16 @@
       type="font/ttf"
       crossorigin
     />
-    <link rel="stylesheet" href="styles.css?v=cinematic-1" />
-    <script src="script.js?v=cinematic-1" defer></script>
-    <title>Bulletnotes — Write it. Keep going.</title>
+    <link rel="stylesheet" href="styles.css?v=paper-1" />
+    <script src="script.js?v=paper-2" defer></script>
+    <title>Bulletnotes — A little space for your next thought.</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header wrap">
       <a class="wordmark" href="#" aria-label="Bulletnotes home"
         ><img
-          src="assets/bulletnotes-logo.png"
+          src="assets/bulletnotes-logo.png?v=paper-1"
           alt=""
           width="44"
           height="44"
@@ -56,60 +67,90 @@
     </header>
     <main id="main">
       <section class="hero wrap" aria-labelledby="hero-title">
-        <div class="hero-kicker">
-          <p class="eyebrow">
-            <span class="status-dot" aria-hidden="true"></span>Native Markdown
-            scratchpad
-          </p>
-          <span class="development-badge">In development</span>
-        </div>
-        <h1 id="hero-title">Write it<span>.</span></h1>
-        <div class="hero-intro">
-          <p>
-            A task. A thought. A rough first draft.<br />A small scratchpad to
-            get it down and keep going.
-          </p>
-          <div class="hero-actions">
-            <a class="button" href="#get"
-              >Get Bulletnotes <span aria-hidden="true">↗</span></a
-            ><a class="text-link" href="#appearance"
-              >Explore the themes <span aria-hidden="true">↓</span></a
-            >
+        <div class="hero-layout">
+          <div class="hero-copy">
+            <div class="hero-kicker">
+              <img
+                class="hero-icon"
+                src="assets/bulletnotes-logo.png?v=paper-1"
+                alt=""
+                width="80"
+                height="80"
+              />
+              <div>
+                <p class="eyebrow">A notebook for the in-between.</p>
+                <span class="development-badge"
+                  ><span class="status-dot" aria-hidden="true"></span>Native ·
+                  Offline · Yours</span
+                >
+              </div>
+            </div>
+            <h1 id="hero-title">
+              A little space<br />for your<br /><em>next thought.</em>
+            </h1>
+            <p class="hero-description">
+              A task. A thought. A rough first draft. A small desktop notebook
+              to get it down, keep it close, and carry on.
+            </p>
+            <div class="hero-actions">
+              <a class="button" href="#get"
+                >Get Bulletnotes <span aria-hidden="true">↗</span></a
+              >
+              <a class="text-link" href="#appearance"
+                >Make it yours <span aria-hidden="true">↓</span></a
+              >
+            </div>
+            <p class="hero-platforms">
+              For macOS, Windows &amp; Linux
+              <span aria-hidden="true">·</span> In development
+            </p>
           </div>
-        </div>
-        <div
-          class="hero-stage"
-          role="img"
-          aria-label="Actual Bulletnotes editor captures in Paper, Graphite, and Dot Matrix themes"
-        >
-          <div class="stage-orbit" aria-hidden="true"></div>
-          <div class="note-ensemble">
-            <img
-              class="hero-note note-left"
-              src="assets/themes/paper-plain.png"
-              alt=""
-              width="505"
-              height="552"
-            /><img
-              class="hero-note note-right"
-              src="assets/themes/dot-matrix-plain.png"
-              alt=""
-              width="505"
-              height="552"
-            /><img
-              class="hero-note note-center"
-              src="assets/themes/graphite-plain.png"
-              alt=""
-              width="505"
-              height="552"
-              fetchpriority="high"
-            />
+          <div class="hero-visual">
+            <div
+              class="hero-stage"
+              role="img"
+              aria-label="Actual Bulletnotes editor captures in Bulletnotes, Bulletnotes Dark, and Rose themes"
+            >
+              <div class="note-ensemble">
+                <img
+                  class="hero-note note-left"
+                  src="assets/themes/bulletnotes-dark-plain.png"
+                  alt=""
+                  width="505"
+                  height="552"
+                />
+                <img
+                  class="hero-note note-right"
+                  src="assets/themes/rose-plain.png"
+                  alt=""
+                  width="505"
+                  height="552"
+                />
+                <img
+                  class="hero-note note-center"
+                  src="assets/themes/bulletnotes-plain.png"
+                  alt=""
+                  width="505"
+                  height="552"
+                  fetchpriority="high"
+                />
+              </div>
+            </div>
+            <p class="stage-caption">
+              <span class="caption-rule" aria-hidden="true"></span>A familiar
+              feeling. A space of your own.
+            </p>
           </div>
         </div>
         <div class="hero-foot">
-          <span>macOS · Windows · Linux</span
-          ><a href="#details"
-            >Less setup. More scratchpad. <span aria-hidden="true">↓</span></a
+          <span
+            >A native Markdown notebook for
+            <a href="https://silverbullet.md/"
+              >SilverBullet <span aria-hidden="true">↗</span></a
+            ></span
+          >
+          <a href="#details"
+            >Small by design. <span aria-hidden="true">↓</span></a
           >
         </div>
       </section>
@@ -120,7 +161,7 @@
         aria-labelledby="details-title"
       >
         <div class="details-statement">
-          <p class="eyebrow">01 / A small tool. A clear purpose.</p>
+          <p class="eyebrow">01 / Room for what matters.</p>
           <h2 id="details-title">
             Open.<br />Write.<br /><span>Carry on.</span>
           </h2>
@@ -176,8 +217,10 @@
       >
         <div class="wrap">
           <div class="theme-heading">
-            <p class="eyebrow">02 / Same scratchpad. Different energy.</p>
-            <h2 id="appearance-title">Change the<br /><span>mood.</span></h2>
+            <p class="eyebrow">02 / Your notebook, your way.</p>
+            <h2 id="appearance-title">
+              Make it feel<br /><span>like you.</span>
+            </h2>
             <p>
               Pick a palette. Choose your paper.<br />Make yourself at home.
             </p>
@@ -188,16 +231,16 @@
           <img
             id="theme-neighbor-left"
             class="neighbor neighbor-left"
-            src="assets/themes/dracula-plain.png"
-            alt="Bulletnotes in the Dracula theme."
+            src="assets/themes/mononoke-plain.png"
+            alt="Bulletnotes in the Mononoke theme."
             width="505"
             height="552"
             loading="lazy"
           /><img
             id="theme-neighbor-right"
             class="neighbor neighbor-right"
-            src="assets/themes/tokyo-drift-plain.png"
-            alt="Bulletnotes in the Tokyo Drift theme."
+            src="assets/themes/bulletnotes-dark-plain.png"
+            alt="Bulletnotes in the Bulletnotes Dark theme."
             width="505"
             height="552"
             loading="lazy"
@@ -205,27 +248,61 @@
           <figure class="theme-preview">
             <img
               id="theme-screenshot"
-              src="assets/themes/paper-plain.png"
-              alt="Bulletnotes editor in the Paper theme with Plain paper, showing the sample Scratchpad note."
+              src="assets/themes/bulletnotes-plain.png"
+              alt="Bulletnotes editor in the Bulletnotes theme with Plain paper, showing the sample Scratchpad note."
               width="505"
               height="552"
               loading="lazy"
             />
             <figcaption id="theme-caption" aria-live="polite">
-              <span>Paper · Plain</span><small>Actual editor preview</small>
+              <span>Bulletnotes · Plain</span
+              ><small>Actual editor preview</small>
             </figcaption>
           </figure>
         </div>
         <div class="wrap theme-bottom">
           <div class="theme-controls" hidden>
             <fieldset>
-              <legend>Explore 12 included themes</legend>
+              <legend>Explore 14 included themes</legend>
               <div class="theme-options">
                 <button
                   class="theme-option active"
                   type="button"
-                  data-theme="paper"
+                  data-theme="bulletnotes"
                   aria-pressed="true"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #f7f3eb;
+                      --chip-ink: #332e29;
+                      --chip-accent: #c3431c;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Bulletnotes</span></button
+                ><button
+                  class="theme-option"
+                  type="button"
+                  data-theme="bulletnotes-dark"
+                  aria-pressed="false"
+                >
+                  <span
+                    class="theme-chip"
+                    style="
+                      --chip-paper: #25272b;
+                      --chip-ink: #f4eee5;
+                      --chip-accent: #ff9a71;
+                    "
+                    aria-hidden="true"
+                    ><span></span><i></i></span
+                  ><span>Bulletnotes Dark</span>
+                </button>
+                <button
+                  class="theme-option"
+                  type="button"
+                  data-theme="paper"
+                  aria-pressed="false"
                 >
                   <span
                     class="theme-chip"
@@ -438,7 +515,7 @@
           </div>
           <noscript
             ><p>
-              Enable JavaScript to compare all twelve themes and four paper
+              Enable JavaScript to compare all fourteen themes and four paper
               styles. The editor previews above remain available without it.
             </p></noscript
           ><a
@@ -455,7 +532,7 @@
         aria-labelledby="connection-title"
       >
         <div class="connection-heading">
-          <p class="eyebrow">03 / A place in your bigger picture.</p>
+          <p class="eyebrow">03 / Part of your bigger picture.</p>
           <h2 id="connection-title">
             Local first.<br /><span>Connected<br />when you want.</span>
           </h2>
@@ -546,7 +623,14 @@
       </section>
     </main>
     <footer class="site-footer wrap">
-      <a class="wordmark" href="#">bulletnotes<span>.</span></a>
+      <a class="wordmark" href="#" aria-label="Bulletnotes home"
+        ><img
+          src="assets/bulletnotes-logo.png?v=paper-1"
+          alt=""
+          width="44"
+          height="44"
+        />bulletnotes<span>.</span></a
+      >
       <p>Small app. Space to think.</p>
       <nav aria-label="Footer navigation">
         <a href="https://github.com/leesiongchan/bulletnotes"

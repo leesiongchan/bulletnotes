@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "Bulletnotes",
+  "dark": false,
+  "paper": "#F7F3EB",
+  "surface": "#FFFCF7",
+  "ink": "#332E29",
+  "muted": "#6E675F",
+  "accent": "#C3431C",
+  "line": "#95877A",
+  "selection": "#F3C8B4",
+  "grid": "#DAD1C3",
+  "cursor": "#C3431C",
+  "scrollbar": "#95877A",
+  "markdown": {
+    "heading1": "#C3431C",
+    "heading2": "#332E29",
+    "heading3": "#332E29",
+    "link": "#C3431C",
+    "syntax": "#6E675F"
+  },
+  "swatches": [
+    "#EE5928",
+    "#C3431C",
+    "#D0D2D6",
+    "#332E29",
+    "#6E675F",
+    "#95877A",
+    "#F7F3EB",
+    "#F3C8B4"
+  ]
+}

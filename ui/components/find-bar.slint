@@ -1,6 +1,8 @@
 import { UiTheme } from "../types.slint";
 import { ActionButton } from "action-button.slint";
 export component FindBar inherits Rectangle {
+    in property <bool> material-effects:true;
+    in property <bool> high-contrast:false;
     in property <UiTheme> theme;
     in-out property <string> query;
     in property <string> status;
@@ -14,7 +16,7 @@ export component FindBar inherits Rectangle {
         padding-top: 3px; padding-bottom: 3px; spacing: 4px;
         Rectangle {
             horizontal-stretch: 1;
-            border-radius: 5px;
+            border-radius: 8px;
             background: root.theme.surface;
             border-width: 1px;
             border-color: query-input.has-focus ? root.theme.accent : root.theme.line;
@@ -37,13 +39,13 @@ export component FindBar inherits Rectangle {
             Text {
                 x: 8px; width: parent.width - 16px; height: parent.height;
                 text: "Find · match case"; visible: root.query == "";
-                vertical-alignment: center; font-size: 11px; color: root.theme.muted;
+                vertical-alignment: center; font-size: 12px; color: root.theme.muted;
                 accessible-role: none;
             }
         }
-        Text { width: 66px; text: root.status; color: root.theme.muted; font-size: 9px; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
-        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/left.svg"); label: "Previous match, Shift Enter"; clicked => { root.step(-1); } }
-        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/right.svg"); label: "Next match, Enter"; clicked => { root.step(1); } }
-        ActionButton { theme: root.theme; icon: @image-url("../../assets/icons/close.svg"); label: "Close find, Escape"; clicked => { root.close(); } }
+        Text { width: 66px; text: root.status; color: root.theme.muted; font-size: 11px; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
+        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme: root.theme; icon: @image-url("../../assets/icons/left.svg"); label: "Previous match, Shift Enter"; clicked => { root.step(-1); } }
+        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme: root.theme; icon: @image-url("../../assets/icons/right.svg"); label: "Next match, Enter"; clicked => { root.step(1); } }
+        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme: root.theme; icon: @image-url("../../assets/icons/close.svg"); label: "Close find, Escape"; clicked => { root.close(); } }
     }
 }

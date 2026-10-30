@@ -14,7 +14,9 @@ fn setup(source: &str) -> AppWindow {
     )))
     .unwrap();
     let window = AppWindow::new().unwrap();
-    present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
+    let mut settings = AppSettings::default();
+    settings.appearance.light_theme = bulletnotes::theme::ThemeId("paper".into());
+    present_settings(&window, &settings, SystemAppearance::Light).unwrap();
     let mut theme = window.get_theme();
     theme.accent = slint::Color::from_rgb_u8(180, 0, 0);
     window.set_theme(theme);
@@ -24,6 +26,7 @@ fn setup(source: &str) -> AppWindow {
         .window()
         .dispatch_event(WindowEvent::WindowActiveChanged(true));
     window.invoke_focus_editor();
+    window.invoke_reset_chrome();
     window
 }
 

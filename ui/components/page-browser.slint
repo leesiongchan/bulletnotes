@@ -50,7 +50,7 @@ component ResultRow inherits FocusScope {
             height: 14px;
             text: root.data.availability;
             color: root.theme.muted;
-            font-size: 9px;
+            font-size: 11px;
             horizontal-alignment: right;
             overflow: elide;
         }
@@ -63,7 +63,7 @@ component ResultRow inherits FocusScope {
             text: root.data.path;
             text-decorations: root.data.path-highlights;
             color: root.theme.muted;
-            font-size: 10px;
+            font-size: 12px;
             overflow: elide;
         }
 
@@ -78,11 +78,11 @@ component ResultRow inherits FocusScope {
             max-lines: 2;
             color: root.theme.muted;
             font-family:"Menlo";
-            font-size: 11px;
+            font-size: 13px;
             overflow: elide;
         }
 
-        Text {x:12px;y:85px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:9px;overflow:elide;}
+        Text {x:12px;y:85px;width:parent.width - 24px;height:13px;text:root.data.modified-label;color:root.theme.muted;font-size:11px;overflow:elide;}
 
         touch := TouchArea {
             clicked => { root.focus(); root.opened(); }
@@ -91,6 +91,8 @@ component ResultRow inherits FocusScope {
 }
 
 export component PageBrowser inherits Rectangle {
+    in property <bool> material-effects:true;
+    in property <bool> high-contrast:false;
     out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
     private property <length> result-row-height:112px;
     changed results => { if (root.selected-index >= root.results.length) { root.selected-index = -1; query-input.focus(); } }
@@ -125,12 +127,12 @@ export component PageBrowser inherits Rectangle {
         x: 24px;
         y: 14px;
         text: "Search all pages";
-        font-size: 17px;
+        font-size: 21px;
         font-weight: 550;
         color: root.theme.ink;
     }
 
-    ActionButton {
+    ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
         x: parent.width - 44px;
         y: 9px;
         theme: root.theme;
@@ -197,7 +199,7 @@ export component PageBrowser inherits Rectangle {
         y: 94px;
         width: parent.width - 48px;
         height: 30px;
-        border-radius: 6px;
+        border-radius: 8px;
         background: root.theme.surface;
         border-width: 1px;
         border-color: folder-input.has-focus ? root.theme.accent : root.theme.line;
@@ -207,7 +209,7 @@ export component PageBrowser inherits Rectangle {
             height: parent.height;
             text: "Folder";
             vertical-alignment: center;
-            font-size: 11px;
+            font-size: 13px;
             color: root.theme.muted;
         }
 
@@ -218,7 +220,7 @@ export component PageBrowser inherits Rectangle {
             vertical-alignment: center;
             single-line: true;
             text <=> root.folder;
-            font-size: 11px;
+            font-size: 13px;
             color: root.theme.ink;
             selection-background-color: root.theme.cursor;
             selection-foreground-color: root.theme.ink;
@@ -232,7 +234,7 @@ export component PageBrowser inherits Rectangle {
             height: parent.height;
             vertical-alignment: center;
             text: "All folders";
-            font-size: 11px;
+            font-size: 13px;
             color: root.theme.muted;
             visible: root.folder == "";
             accessible-role: none;
@@ -276,7 +278,7 @@ export component PageBrowser inherits Rectangle {
         font-size: 12px;
     }
 
-    ChoiceButton {
+    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
         x:parent.width - 124px;y:parent.height - 35px;width:104px;height:28px;
         theme:root.theme;text:"More pages";visible:root.can-load-more;
         clicked => { root.load-more(); }
@@ -288,7 +290,7 @@ export component PageBrowser inherits Rectangle {
         height: 16px;
         text: root.index-status;
         color: root.theme.muted;
-        font-size: 10px;
+        font-size: 12px;
         overflow: elide;
     }
 }

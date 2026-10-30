@@ -31,7 +31,10 @@ fn same_named_import_preserves_builtin_and_waits_for_commit() {
     assert_eq!(candidate.imported_themes[0].theme.name, "Paper");
     assert_ne!(candidate.appearance.light_theme, ThemeId("paper".into()));
     assert_eq!(appearance.committed(), &AppSettings::default());
-    assert_eq!(appearance.resolved().unwrap().id, ThemeId("paper".into()));
+    assert_eq!(
+        appearance.resolved().unwrap().id,
+        ThemeId("bulletnotes".into())
+    );
     appearance.preview_candidate(&candidate, false).unwrap();
     assert_eq!(
         appearance.resolved().unwrap().id,
@@ -75,7 +78,10 @@ async fn failed_settings_commit_restores_last_durable_palette() {
     let result = store.save_settings(ticket.settings().clone()).await;
     assert!(appearance.complete_settings_commit(ticket, result).is_err());
     assert_eq!(appearance.committed(), &previous);
-    assert_eq!(appearance.resolved().unwrap().id, ThemeId("paper".into()));
+    assert_eq!(
+        appearance.resolved().unwrap().id,
+        ThemeId("bulletnotes".into())
+    );
     assert_eq!(store.load_settings().await.unwrap(), previous);
     store.shutdown().await.unwrap();
 }
@@ -173,20 +179,20 @@ fn chrome_pixel(ui: &bulletnotes::AppWindow, x: usize, y: usize) -> [u8; 3] {
 #[test]
 fn header_uses_paper_and_footer_keeps_surface() {
     let ui = chrome_window();
-    assert_eq!(chrome_pixel(&ui, 250, 10), [252, 250, 244]);
-    assert_eq!(chrome_pixel(&ui, 250, 504), [243, 240, 231]);
+    assert_eq!(chrome_pixel(&ui, 250, 10), [247, 243, 235]);
+    assert_eq!(chrome_pixel(&ui, 250, 504), [255, 252, 247]);
 }
 #[test]
 fn circular_idle_focus_and_contrast_are_distinct() {
     use slint::ComponentHandle;
     let ui = chrome_window();
     let idle = ui.window().take_snapshot().unwrap();
-    // Left edge of the pin circle is paper until accessibility contrast adds its outline.
-    assert_eq!(chrome_pixel(&ui, 463, 22), [252, 250, 244]);
+    // The normal fine edge must strengthen when accessibility contrast is enabled.
+    let idle_edge = chrome_pixel(&ui, 463, 22);
     ui.set_system_high_contrast(true);
     let contrast = ui.window().take_snapshot().unwrap();
     assert!(idle.as_bytes() != contrast.as_bytes());
-    assert_ne!(chrome_pixel(&ui, 463, 22), [252, 250, 244]);
+    assert_ne!(chrome_pixel(&ui, 463, 22), idle_edge);
     ui.window()
         .dispatch_event(slint::platform::WindowEvent::KeyPressed {
             text: slint::platform::Key::F6.into(),
@@ -231,6 +237,6 @@ fn hidden_chrome_keeps_attention_visible() {
     ui.set_status_attention(true);
     ui.set_status_text("Local save failed. Retry.".into());
     assert!(!ui.get_header_revealed() && !ui.get_footer_revealed());
-    assert_eq!(chrome_pixel(&ui, 25, 460), [243, 240, 231]);
+    assert_eq!(chrome_pixel(&ui, 25, 460), [255, 252, 247]);
     assert!(ui.get_status_text().contains("Retry"));
 }

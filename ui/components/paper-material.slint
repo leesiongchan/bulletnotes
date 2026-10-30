@@ -1,0 +1,19 @@
+export component PaperMaterial inherits Rectangle {
+    in property <bool> active:false;
+    in property <color> tint;
+    in property <float> strength;
+    clip:true;
+    accessible-role:none;
+    if root.active: Image {
+        width:parent.width; height:parent.height;
+        source:@image-url("../../assets/paper/eggshell.png");
+        image-fit:preserve;
+        horizontal-tiling:repeat;
+        vertical-tiling:repeat;
+        horizontal-alignment:left;
+        vertical-alignment:top;
+        colorize:root.tint;
+        opacity:root.strength;
+        accessible-role:none;
+    }
+}

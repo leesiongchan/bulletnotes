@@ -15,6 +15,14 @@ impl ThemeEntry {
     }
 }
 pub(super) const BUILTIN_THEME_FILES: &[(&str, &[u8])] = &[
+    (
+        "bulletnotes",
+        include_bytes!("../../assets/themes/bulletnotes.json"),
+    ),
+    (
+        "bulletnotes-dark",
+        include_bytes!("../../assets/themes/bulletnotes-dark.json"),
+    ),
     ("paper", include_bytes!("../../assets/themes/paper.json")),
     (
         "graphite",

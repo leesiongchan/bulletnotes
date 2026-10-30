@@ -18,7 +18,7 @@ fn original_builtins_meet_contrast() {
         .into_iter()
         .filter(|entry| !entry.id.0.starts_with("antinote-"))
         .collect();
-    assert_eq!(themes.len(), 4);
+    assert_eq!(themes.len(), 6);
     for entry in themes {
         let report = check_contrast(&entry.theme);
         for pair in &report.pairs {

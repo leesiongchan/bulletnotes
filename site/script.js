@@ -5,7 +5,7 @@ const leftNeighbor = document.querySelector("#theme-neighbor-left");
 const rightNeighbor = document.querySelector("#theme-neighbor-right");
 const themeButtons = [...document.querySelectorAll("button[data-theme]")];
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-let theme = "paper";
+let theme = "bulletnotes";
 let paper = "plain";
 
 document.querySelector(".theme-controls").hidden = false;

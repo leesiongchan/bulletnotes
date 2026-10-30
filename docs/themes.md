@@ -1,6 +1,8 @@
 # Bulletnotes themes
 
-Themes are UTF-8 JSON palette files, at most 32,768 bytes. Version 1 requires `schemaVersion: 1`, a `name` of 1–32 Unicode scalars after trimming, `dark` as a boolean, and seven opaque `#RRGGBB` colors: `paper`, `surface`, `ink`, `muted`, `accent`, `line`, and `selection`. See [Paper](../assets/themes/paper.json) for a complete example.
+New installations default to System appearance, **Bulletnotes** for light, **Bulletnotes Dark** for dark, Plain paper, and 15 px text. Existing saved choices and imported theme IDs are preserved. The catalog contains 43 built-in themes. Settings, Connection, and About follow the branded light/dark appearance independently of the selected note palette.
+
+Themes are UTF-8 JSON palette files, at most 32,768 bytes. Version 1 requires `schemaVersion: 1`, a `name` of 1–32 Unicode scalars after trimming, `dark` as a boolean, and seven opaque `#RRGGBB` colors: `paper`, `surface`, `ink`, `muted`, `accent`, `line`, and `selection`. See [Bulletnotes](../assets/themes/bulletnotes.json) for a complete example.
 
 Optional `cursor` and `scrollbar` colors use the same `#RRGGBB` format and survive import, export, and saved settings. Older files keep their existing caret color and use `muted` for the scrollbar. On macOS, Slint renders the caret using the selection brush at full opacity; an explicit `cursor` supplies its RGB and a 20% matching selection tint, preserving native blinking, selection, and IME behavior.
 
@@ -20,9 +22,9 @@ palette and Markdown colors.
 
 Unknown fields are ignored on import and omitted on export. Duplicate keys are rejected recursively, including inside unknown fields. Invalid JSON, missing fields, unsupported versions, and invalid values reject the entire import. Files are data only; they cannot execute code or load remote resources.
 
-Every import receives a new local ID, even when its display name matches a built-in theme. Light and dark assignments, paper pattern, and text size remain separate preferences. The first release uses solid paper; native blur remains deferred.
+Every import receives a new local ID, even when its display name matches a built-in theme. Light and dark assignments, paper pattern, and text size remain separate preferences. The two built-in Bulletnotes themes add a faint static eggshell paper tooth. Imported palettes, including exported copies of Bulletnotes, use flat paper; materials are not part of schema 1. Increase Contrast and Reduce Transparency remove grain and decorative depth; Reduce Motion disables transitions. Native blur remains deferred.
 
-The built-in Paper, Graphite, Matcha, and Rose palettes check normal text against paper/surface at 4.5:1, control boundaries at 3:1, and selected text at 4.5:1. Ratios are evaluated without rounding using the [W3C contrast calculation](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). New low-contrast file imports require confirmation before they enter the picker.
+The built-in Bulletnotes, Bulletnotes Dark, Paper, Graphite, Matcha, and Rose palettes check normal text against paper/surface at 4.5:1, control boundaries at 3:1, and selected text at 4.5:1. Ratios are evaluated without rounding using the [W3C contrast calculation](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). New low-contrast file imports require confirmation before they enter the picker.
 Every theme already in the picker applies immediately when selected, including
 low-contrast palettes. Invalid theme data is still rejected.
 
@@ -30,7 +32,7 @@ The theme picker also bundles 14 featured palettes and 23 community palettes. Th
 palettes. Every bundled palette can be selected directly. Both light and dark assignments can use any palette. These are bundled snapshots and require no network access.
 
 The featured palettes are Vancouver, Tokyo Drift, Gundam Wing, Vendetta, Totoro, Mononoke, Piccolo, A24, Tartan, Agrabah, Muad'Dib, Knight, Sanrio, and Shadow Moses.
-The picker presents those themes first in a two-column layout. Each card's
+The picker presents Bulletnotes and Bulletnotes Dark first, then those featured themes. Cards use a compact single column or two columns in wider windows. Each card's
 sun and moon assign its palette to Light and Dark independently, preserving the
 current appearance mode. Clicking the card assigns the currently effective slot.
 A native capture of the open Tartan note verified its displayed paper, text,

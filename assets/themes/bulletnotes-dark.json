@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "Bulletnotes Dark",
+  "dark": true,
+  "paper": "#25272B",
+  "surface": "#303238",
+  "ink": "#F4EEE5",
+  "muted": "#B9B0A5",
+  "accent": "#FF9A71",
+  "line": "#8E8C88",
+  "selection": "#633E30",
+  "grid": "#44464B",
+  "cursor": "#FF9A71",
+  "scrollbar": "#8E8C88",
+  "markdown": {
+    "heading1": "#FF9A71",
+    "heading2": "#F4EEE5",
+    "heading3": "#F4EEE5",
+    "link": "#FF9A71",
+    "syntax": "#B9B0A5"
+  },
+  "swatches": [
+    "#EE5928",
+    "#FF9A71",
+    "#D0D2D6",
+    "#F4EEE5",
+    "#B9B0A5",
+    "#8E8C88",
+    "#25272B",
+    "#633E30"
+  ]
+}

@@ -6,6 +6,7 @@ export component ActionButton inherits FocusScope {
     in property <bool> selected:false;
     in property <bool> circular:false;
     in property <bool> high-contrast:false;
+    in property <bool> material-effects:true;
     out property <bool> pressed:touch.pressed;
     callback clicked();
     width: root.circular ? 32px : 28px;
@@ -19,10 +20,13 @@ export component ActionButton inherits FocusScope {
         return reject;
     }
     Rectangle {
-        border-radius: root.circular ? self.height / 2 : 5px;
-        background: root.selected || touch.has-hover ? root.theme.selection : (root.circular ? root.theme.paper : transparent);
-        border-width: root.has-focus || (root.circular && root.high-contrast) ? 1px : 0px;
-        border-color: root.has-focus ? root.theme.accent : root.theme.ink;
+        border-radius: root.circular ? self.height / 2 : 7px;
+        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : (root.circular ? (root.material-effects && !root.high-contrast ? @linear-gradient(180deg, root.theme.surface, root.theme.paper) : root.theme.paper) : transparent);
+        border-width: root.has-focus ? 2px : (root.circular ? 1px : 0px);
+        border-color: root.has-focus ? root.theme.accent : (root.high-contrast ? root.theme.ink : root.theme.line.with-alpha(0.3));
+        drop-shadow-offset-y: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? 1px : 0px;
+        drop-shadow-blur: 0px;
+        drop-shadow-color: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? root.theme.ink.with-alpha(0.06) : transparent;
         Image {
             source: root.icon;
             colorize: root.enabled ? root.theme.ink : root.theme.muted;
@@ -45,6 +49,8 @@ export component ChoiceButton inherits FocusScope {
     in property <string> text;
     in property <string> label: root.text;
     in property <bool> selected:false;
+    in property <bool> high-contrast:false;
+    in property <bool> material-effects:true;
     callback clicked();
     min-height: 28px;
     preferred-height: 28px;
@@ -53,17 +59,19 @@ export component ChoiceButton inherits FocusScope {
     accessible-label: root.label;
     accessible-enabled: root.enabled;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
-    key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
+    key-pressed(event) => { if (root.enabled && (event.text == Key.Return || event.text == " ")) { root.clicked(); return accept; } return reject; }
     Rectangle {
-        border-radius: 5px;
-        background: root.selected ? root.theme.selection : (touch.has-hover ? root.theme.selection : transparent);
-        border-width: root.has-focus ? 1px : 0px;
-        border-color: root.theme.accent;
+        border-radius: 7px;
+        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : (root.material-effects && !root.high-contrast ? @linear-gradient(180deg, root.theme.surface, root.theme.paper) : root.theme.paper);
+        border-width: root.has-focus ? 2px : 1px;
+        border-color: root.has-focus || root.selected ? root.theme.accent : (root.high-contrast ? root.theme.ink : root.theme.line.with-alpha(0.4));
         Text {
             text: root.text;
             overflow: elide;
             color: root.selected ? root.theme.ink : root.theme.muted;
-            font-size: 11px;
+            font-size: 13px;
+            font-weight: root.selected ? 550 : 400;
+            opacity: root.enabled ? 1 : 0.5;
             vertical-alignment: center;
             horizontal-alignment: center;
         }
