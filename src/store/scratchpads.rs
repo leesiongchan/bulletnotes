@@ -1,4 +1,4 @@
-//! Immutable, connection-scoped scratchpad order survives page-row replacement.
+//! Connection-scoped scratchpad order survives page-row replacement.
 use crate::domain::{
     connection::ConnectionId,
     error::StoreError,
@@ -6,6 +6,61 @@ use crate::domain::{
 };
 use jiff::tz::TimeZone;
 use rusqlite::{Connection, params};
+
+pub(super) fn move_selected(
+    db: &mut Connection,
+    connection: &ConnectionId,
+    expected: Vec<PageKey>,
+    selected: Vec<PageKey>,
+    before: Option<PageKey>,
+) -> Result<Vec<ScratchpadEntry>, StoreError> {
+    use std::collections::HashSet;
+    let tx = db.transaction()?;
+    let entries = list(&tx, connection)?;
+    let current: Vec<_> = entries.iter().map(|e| e.key.clone()).collect();
+    let selection_len = selected.len();
+    let selected: HashSet<_> = selected.iter().collect();
+    if current != expected {
+        return Err(StoreError::StaleRevision);
+    }
+    if selected.len() != selection_len
+        || selected.is_empty()
+        || selected
+            .iter()
+            .any(|key| key.connection != *connection || !current.contains(key))
+        || before
+            .as_ref()
+            .is_some_and(|key| selected.contains(key) || !current.contains(key))
+    {
+        return Err(StoreError::InvalidData);
+    }
+    let mut rest: Vec<_> = entries
+        .iter()
+        .filter(|e| !selected.contains(&e.key))
+        .cloned()
+        .collect();
+    let target = before
+        .as_ref()
+        .and_then(|key| rest.iter().position(|e| &e.key == key))
+        .unwrap_or(rest.len());
+    rest.splice(
+        target..target,
+        entries
+            .iter()
+            .filter(|e| selected.contains(&e.key))
+            .cloned(),
+    );
+    for (index, entry) in rest.iter().enumerate() {
+        let rank = i64::try_from(rest.len() - index).map_err(|_| StoreError::InvalidData)?;
+        tx.execute(
+            "UPDATE scratchpad_order SET order_ms=?1 WHERE connection=?2 AND path=?3",
+            params![rank, connection.as_str(), entry.key.path.as_str()],
+        )?;
+    }
+    tx.commit()?;
+    tracing::debug!(count = selected.len(), "Scratchpad order saved");
+    Ok(rest)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScratchpadEntry {

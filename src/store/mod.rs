@@ -101,6 +101,22 @@ impl StoreHandle {
         })
         .await
     }
+    pub async fn move_scratchpads(
+        &self,
+        connection: &ConnectionId,
+        expected: Vec<PageKey>,
+        selected: Vec<PageKey>,
+        before: Option<PageKey>,
+    ) -> Result<Vec<scratchpads::ScratchpadEntry>, StoreError> {
+        let connection = connection.clone();
+        let result = self
+            .call(move |w| {
+                scratchpads::move_selected(&mut w.db, &connection, expected, selected, before)
+            })
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(result)
+    }
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
         self.call(move |w| pages::load(&w.db, &key)).await
