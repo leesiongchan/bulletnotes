@@ -154,8 +154,16 @@ impl State {
         if self.search.connection.borrow().as_ref() != Some(app.connection()) {
             *self.search.connection.borrow_mut() = Some(app.connection().clone());
             window.set_search_selecting(false);
+            window.set_search_drag_active(false);
+            self.search.drag.borrow_mut().take();
         }
         window.set_search_busy(app.search_management.busy());
+        window.set_search_can_reorder(
+            window.get_search_scratchpads()
+                && app.scratchpads().is_some()
+                && !app.scratchpads_pending()
+                && !app.search_management.busy(),
+        );
         let (confirm_id, confirm_count) = app.search_management.confirmation().unwrap_or_default();
         window.set_search_confirm_count(i32::try_from(confirm_count).unwrap_or(i32::MAX));
         window.set_search_confirm_id(if confirm_count > 0 {

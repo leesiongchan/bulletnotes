@@ -275,3 +275,121 @@ fn busy_search_cannot_open_a_result_with_return() {
     key(&ui, Key::Return);
     assert!(opened.borrow().is_empty());
 }
+
+#[test]
+fn drag_reorders_without_opening_and_filtered_drag_stays_disabled() {
+    let ui = setup();
+    for filtered in [false, true] {
+        ui.set_search_scratchpads(true);
+        ui.set_search_can_reorder(true);
+        if filtered {
+            ui.set_search_query("needle".into());
+        }
+        settle();
+        let started = Rc::new(RefCell::new(String::new()));
+        let moved = Rc::new(RefCell::new(String::new()));
+        let opened = Rc::new(RefCell::new(String::new()));
+        let observed = started.clone();
+        ui.on_search_drag_started(move |key| *observed.borrow_mut() = key.to_string());
+        let observed = moved.clone();
+        ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+        let observed = opened.clone();
+        ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+        let from = slint::LogicalPosition::new(100.0, 128.0);
+        let to = slint::LogicalPosition::new(100.0, 246.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: from,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window()
+            .dispatch_event(WindowEvent::PointerMoved { position: to });
+        settle();
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: to,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        settle();
+        if !filtered {
+            assert_eq!(&*started.borrow(), "0");
+            assert!(!moved.borrow().is_empty());
+            assert!(opened.borrow().is_empty());
+        } else {
+            assert!(started.borrow().is_empty());
+            assert!(moved.borrow().is_empty());
+        }
+    }
+}
+
+#[test]
+fn disabled_result_action_does_not_open_the_note_beneath_it() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    let opened = Rc::new(RefCell::new(String::new()));
+    let observed = opened.clone();
+    ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
+    let point = slint::LogicalPosition::new(460.0, 186.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: point,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
+    let ui = setup();
+    ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
+    ui.set_search_scratchpads(true);
+    ui.set_search_can_reorder(true);
+    let moved = Rc::new(RefCell::new(String::new()));
+    let observed = moved.clone();
+    ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+    for cards in [false, true] {
+        ui.set_search_cards(cards);
+        ui.set_search_query("reset".into());
+        ui.set_search_query("".into());
+        settle();
+        let from = slint::LogicalPosition::new(100.0, 128.0);
+        let edge = slint::LogicalPosition::new(100.0, 450.0);
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: from,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        ui.window()
+            .dispatch_event(WindowEvent::PointerMoved { position: edge });
+        for _ in 0..24 {
+            settle();
+        }
+        assert!(ui.get_search_drag_active());
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: edge,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        assert!(moved.borrow().parse::<usize>().unwrap() >= 4);
+        moved.borrow_mut().clear();
+    }
+    ui.set_search_query("reset".into());
+    ui.set_search_query("".into());
+    settle();
+    let from = slint::LogicalPosition::new(100.0, 128.0);
+    let to = slint::LogicalPosition::new(120.0, 180.0);
+    ui.window().dispatch_event(WindowEvent::PointerPressed {
+        position: from,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    ui.window()
+        .dispatch_event(WindowEvent::PointerMoved { position: to });
+    assert!(ui.get_search_drag_active());
+    key(&ui, Key::Escape);
+    assert!(!ui.get_search_drag_active());
+    assert_eq!(ui.get_active_view(), "pages");
+    ui.window().dispatch_event(WindowEvent::PointerReleased {
+        position: to,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    assert!(moved.borrow().is_empty());
+}

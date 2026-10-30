@@ -114,6 +114,11 @@ export component AppWindow inherits Window {
     callback search-trash-confirmed(string);
     callback search-trash-cancelled();
     callback search-create();
+    in property <bool> search-can-reorder:false;
+    in-out property <bool> search-drag-active:false;
+    callback search-drag-started(string);
+    callback search-drag-cancelled();
+    callback search-reordered(string,bool);
     in-out property <string> search-query;
     in-out property <string> search-folder;
     in property <string> index-status;
@@ -331,6 +336,11 @@ export component AppWindow inherits Window {
                 can-promote: root.search-can-promote;
                 can-trash: root.search-can-trash;
                 can-create: root.search-can-create;
+                can-reorder:root.search-can-reorder;
+                drag-active <=> root.search-drag-active;
+                drag-started(key) => { root.search-drag-started(key); }
+                drag-cancelled => { root.search-drag-cancelled(); }
+                reordered(key,after) => { root.search-reordered(key,after); }
                 scope-changed(value) => { root.search-scope-changed(value); }
                 view-changed(value) => { root.search-view-changed(value); }
                 select-toggled => { root.search-select-toggled(); }

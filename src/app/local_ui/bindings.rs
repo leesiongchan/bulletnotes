@@ -98,6 +98,93 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     }
     {
         let state = state.clone();
+        window.on_search_drag_started(move |value| {
+            let Some(window) = state.window.upgrade() else {
+                return;
+            };
+            let key = state.search_key(&value);
+            let app = state.coordinator.borrow();
+            if window.get_search_can_reorder()
+                && window.get_search_scratchpads()
+                && window.get_search_query().is_empty()
+                && let Some(key) = key
+                && let Some(stack) = app.scratchpads().filter(|_| !app.scratchpads_pending())
+            {
+                let expected = stack
+                    .entries()
+                    .iter()
+                    .map(|e| e.key.clone())
+                    .collect::<Vec<_>>();
+                let selected = if window.get_search_selecting()
+                    && app.search_management.selected().contains(&key)
+                {
+                    expected
+                        .iter()
+                        .filter(|k| app.search_management.selected().contains(*k))
+                        .cloned()
+                        .collect()
+                } else {
+                    vec![key]
+                };
+                *state.search.drag.borrow_mut() =
+                    Some(super::search::SearchDrag { expected, selected });
+            } else {
+                window.set_search_drag_active(false);
+            }
+        });
+    }
+    {
+        let state = state.clone();
+        window.on_search_drag_cancelled(move || {
+            state.search.drag.borrow_mut().take();
+        });
+    }
+    {
+        let state = state.clone();
+        window.on_search_reordered(move |value, after| {
+            let Some(drag) = state.search.drag.borrow_mut().take() else {
+                return;
+            };
+            let Some(window) = state.window.upgrade() else {
+                return;
+            };
+            if !window.get_search_can_reorder()
+                || !window.get_search_query().is_empty()
+                || !window.get_search_scratchpads()
+            {
+                return;
+            }
+            let before = if value.is_empty() {
+                None
+            } else {
+                let Ok(target) = serde_json::from_str::<PageKey>(&value) else {
+                    return;
+                };
+                if drag.selected.contains(&target) {
+                    return;
+                }
+                let Some(index) = drag.expected.iter().position(|key| key == &target) else {
+                    return;
+                };
+                if after {
+                    drag.expected[index + 1..]
+                        .iter()
+                        .find(|key| !drag.selected.contains(key))
+                        .cloned()
+                } else {
+                    Some(target)
+                }
+            };
+            state.dispatch(AppAction::MoveSearchScratchpads {
+                expected: drag.expected,
+                selected: drag.selected,
+                before,
+                open_after: None,
+            });
+        });
+    }
+    {
+        let state = state.clone();
         window.on_search_scope_changed(move |_| {
             state.reset_search_selection();
             state.dispatch(AppAction::CancelOpen);

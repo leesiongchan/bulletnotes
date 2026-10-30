@@ -21,6 +21,16 @@ export component PageBrowser inherits Rectangle {
     in property <bool> can-promote;
     in property <bool> can-trash;
     in property <bool> can-create;
+    in property <bool> can-reorder;
+    in-out property <bool> drag-active;
+    private property <length> drag-x;
+    private property <length> drag-y;
+    private property <int> drag-index;
+    private property <bool> drag-after;
+    private property <length> edge-step:!root.drag-active ? 0px : root.drag-y < 24px ? 8px : root.drag-y > list.visible-height - 24px ? -8px : 0px;
+    callback drag-started(string);
+    callback drag-cancelled();
+    callback reordered(string,bool);
     in property <string> index-status;
     in property <bool> can-load-more:false;
     in-out property <int> selected-index:-1;
@@ -45,7 +55,40 @@ export component PageBrowser inherits Rectangle {
     callback trash-cancelled();
     callback create();
     public function focus-query() { root.selected-index = -1; query-input.focus(); }
+    pure function pointer-index(x:length,y:length) -> int {
+        let index = floor((y - list.content-y) / root.row-height) * root.columns + floor(x / (list.width / root.columns));
+        return x >= 0px && x < list.width && y >= 0px && y < list.visible-height && index < root.results.length ? index : -1;
+    }
+    pure function pointer-action(x:length,y:length) -> int {
+        let local-x = mod(x,list.width / root.columns) - 4px;
+        let local-y = mod(y - list.content-y,root.row-height) - 3px;
+        let cell-width = list.width / root.columns - 8px;
+        let button-y = root.cards ? root.row-height - 33px : 27px;
+        if (local-y >= button-y && local-y < button-y + 28px) {
+            if (local-x >= cell-width - 42px && local-x < cell-width - 14px) { return 3; }
+            if (local-x >= cell-width - 76px && local-x < cell-width - 48px) { return 2; }
+        }
+        return root.selecting && local-x >= 8px && local-x < 36px && local-y >= 10px && local-y < 38px ? 1 : 0;
+    }
+    function cancel-drag() { if (root.drag-active) { root.drag-active = false; root.drag-cancelled(); } }
+    function update-drag(x:length,y:length) {
+        if (!root.drag-active || root.results.length == 0) { return; }
+        root.drag-x = x; root.drag-y = y;
+        root.drag-index = max(0,min(root.results.length - 1,floor((y - list.content-y) / root.row-height) * root.columns + floor(clamp(x,0px,list.width - 1px) / (list.width / root.columns))));
+        root.drag-after = root.cards ? x - floor(x / (list.width / root.columns)) * (list.width / root.columns) > list.width / root.columns / 2 : y - list.content-y - floor((y - list.content-y) / root.row-height) * root.row-height > root.row-height / 2;
+    }
+    function drop-drag() {
+        if (!root.drag-active) { return; }
+        if (root.drag-y < 0px || root.drag-y > list.visible-height || root.drag-x < 0px || root.drag-x > list.width) { root.cancel-drag(); return; }
+        root.drag-active = false;
+        root.reordered(root.results[root.drag-index].key,root.drag-after);
+    }
+    Timer {
+        interval:16ms;running:root.drag-active && root.edge-step != 0px;
+        triggered => { list.content-y = clamp(list.content-y + root.edge-step,min(0px,list.visible-height - list.content-height),0px); root.update-drag(root.drag-x,root.drag-y); }
+    }
     public function cancel-or-close() {
+        if (root.drag-active) { root.cancel-drag(); return; }
         if (root.confirm-count > 0) { root.trash-cancelled(); query-input.focus(); }
         else if (root.selecting) { root.selecting = false; root.select-toggled(); query-input.focus(); }
         else { root.query = ""; root.return-to-note(); }
@@ -65,14 +108,16 @@ export component PageBrowser inherits Rectangle {
         }
     }
     changed results => {
+        root.cancel-drag();
         if (root.selected-index >= root.results.length) { root.focus-query(); }
     }
-    changed query => { root.selected-index = -1; list.content-y = 0px; }
-    changed scratchpads => { root.selected-index = -1; list.content-y = 0px; }
-    changed folder => { root.selected-index = -1; list.content-y = 0px; }
-    changed cards => { root.reveal-selection(); }
-    changed height => { root.reveal-selection(); }
-    changed width => { root.reveal-selection(); }
+    changed query => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed scratchpads => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed folder => { root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
+    changed cards => { root.cancel-drag(); root.reveal-selection(); }
+    changed height => { root.cancel-drag(); root.reveal-selection(); }
+    changed width => { root.cancel-drag(); root.reveal-selection(); }
+    changed visible => { if (!root.visible) { root.cancel-drag(); } }
     changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
     background:root.theme.paper;
     Rectangle {
@@ -126,6 +171,7 @@ export component PageBrowser inherits Rectangle {
                 theme:root.theme;data:root.results[row * root.columns + col];cards:root.cards;columns:root.columns;
                 selected:root.selected-index == row * root.columns + col;
                 selecting:root.selecting;busy:root.busy;
+                hovered:pointer-surface.has-hover && row * root.columns + col == root.pointer-index(pointer-surface.mouse-x,pointer-surface.mouse-y);
                 opened => { root.open-page(root.results[row * root.columns + col].key); }
                 toggled => { root.selection-toggled(root.results[row * root.columns + col].key); }
                 promote(open) => { root.promote(root.results[row * root.columns + col].key,open); }
@@ -133,6 +179,48 @@ export component PageBrowser inherits Rectangle {
                 step(amount) => { root.move-selection(amount); }
             }
         }
+    }
+    // Keep the pointer owner outside virtualized rows while edge scrolling replaces them.
+    pointer-surface := TouchArea {
+        x:list.x;y:list.y;width:list.width;height:list.visible-height;
+        enabled:!root.busy && root.confirm-count == 0;
+        private property <int> source-index:-1;
+        private property <int> action:0;
+        private property <bool> dragged:false;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                self.source-index = root.pointer-index(self.mouse-x,self.mouse-y);
+                self.action = root.pointer-action(self.mouse-x,self.mouse-y);
+                self.dragged = false;
+            }
+            if (event.kind == PointerEventKind.cancel) { root.cancel-drag(); }
+            if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left && self.dragged) { root.drop-drag(); }
+        }
+        moved => {
+            if (self.pressed && self.source-index >= 0 && self.action == 0 && root.can-reorder && root.scratchpads && root.query == "") {
+                if (!self.dragged && (abs(self.mouse-x - self.pressed-x) > 6px || abs(self.mouse-y - self.pressed-y) > 6px)) {
+                    self.dragged = true;root.drag-active = true;root.drag-started(root.results[self.source-index].key);
+                }
+                if (root.drag-active) { root.update-drag(self.mouse-x,self.mouse-y); }
+            }
+        }
+        clicked => {
+            if (!self.dragged && self.source-index >= 0 && self.source-index == root.pointer-index(self.mouse-x,self.mouse-y)) {
+                if (self.action == 3) { if (root.results[self.source-index].can-trash) { root.trash(root.results[self.source-index].key); } }
+                else if (self.action == 2) { if (root.results[self.source-index].can-promote) { root.promote(root.results[self.source-index].key,false); } }
+                else if (self.action == 1 || root.selecting) { root.selection-toggled(root.results[self.source-index].key); }
+                else { root.selected-index = self.source-index;root.open-page(root.results[self.source-index].key); }
+            }
+        }
+    }
+    Rectangle {
+        private property <int> insertion:root.drag-index + (root.drag-after ? 1 : 0);
+        x:root.cards ? list.x + mod(self.insertion,root.columns) * list.width / root.columns : list.x;
+        y:list.y + floor(self.insertion / root.columns) * root.row-height + list.content-y;
+        width:root.cards ? 3px : list.width;
+        height:root.cards ? min(root.row-height,list.y + list.visible-height - self.y) : 3px;
+        background:root.theme.accent;
+        visible:root.drag-active && self.y >= list.y && self.y < list.y + list.visible-height;
     }
     ThemeScrollbar { x:list.x + list.width - self.width;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {

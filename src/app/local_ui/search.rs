@@ -14,9 +14,14 @@ use std::{
     rc::Rc,
 };
 
+pub(super) struct SearchDrag {
+    pub(super) expected: Vec<crate::domain::page::PageKey>,
+    pub(super) selected: Vec<crate::domain::page::PageKey>,
+}
 #[derive(Default)]
 pub(super) struct SearchState {
     pub(super) find: RefCell<NoteFind>,
+    pub(super) drag: RefCell<Option<SearchDrag>>,
     pub(super) request_id: Cell<u64>,
     pub(super) invalid_folder: Cell<bool>,
     pub(super) connection: RefCell<Option<crate::domain::connection::ConnectionId>>,

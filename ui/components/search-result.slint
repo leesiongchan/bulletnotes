@@ -10,6 +10,7 @@ export component SearchResult inherits FocusScope {
     in property <int> columns:1;
     in property <bool> busy;
     private property <bool> pending-focus:false;
+    in property <bool> hovered;
     callback opened();
     callback toggled();
     callback promote(bool);
@@ -39,10 +40,9 @@ export component SearchResult inherits FocusScope {
     Rectangle {
         x:4px; y:3px; width:parent.width - 8px; height:parent.height - 6px;
         border-radius:12px;
-        background:root.data.checked || root.selected || touch.has-hover ? root.theme.selection : (root.cards ? root.theme.surface : transparent);
+        background:root.data.checked || root.selected || root.hovered ? root.theme.selection : (root.cards ? root.theme.surface : transparent);
         border-width:root.has-focus ? 2px : (root.cards ? 1px : 0px);
         border-color:root.has-focus ? root.theme.accent : root.theme.line;
-        touch := TouchArea { enabled:!root.busy; clicked => { root.focus(); if (root.selecting) { root.toggled(); } else { root.opened(); } } }
         Text {
             x:root.selecting ? 40px : 14px; y:12px;
             width:parent.width - self.x - (root.cards ? 14px : 86px);
