@@ -130,9 +130,26 @@ impl AppearanceController {
         {
             return Err(ThemeError::UnknownTheme);
         }
-        match slot {
-            SystemAppearance::Light => candidate.appearance.light_theme = id,
-            SystemAppearance::Dark => candidate.appearance.dark_theme = id,
+        candidate.appearance.assign_theme(id, slot);
+        Ok(candidate)
+    }
+    /// Cycle a theme's slots atomically, restoring the previous choice in a vacated slot.
+    pub fn cycle_assignment_candidate(&self, id: ThemeId) -> Result<AppSettings, ThemeError> {
+        let appearance = &self.displayed.appearance;
+        let light = appearance.light_theme == id;
+        let dark = appearance.dark_theme == id;
+        let mut candidate = self.assignment_candidate(id.clone(), SystemAppearance::Light)?;
+        if light && dark {
+            candidate
+                .appearance
+                .restore_theme(SystemAppearance::Dark, &id);
+        } else if light {
+            candidate
+                .appearance
+                .restore_theme(SystemAppearance::Light, &id);
+            candidate
+                .appearance
+                .assign_theme(id, SystemAppearance::Dark);
         }
         Ok(candidate)
     }

@@ -448,7 +448,7 @@ fn utility_views_keep_neutral_background_when_writing_palette_changes() {
             settle();
             let image = ui.window().take_snapshot().unwrap();
             let i = (100 * image.width() as usize + 5) * 4;
-            let paper = ui.get_settings_theme().paper;
+            let paper = ui.get_theme().paper;
             assert_eq!(
                 &image.as_bytes()[i..i + 3],
                 &[paper.red(), paper.green(), paper.blue()],

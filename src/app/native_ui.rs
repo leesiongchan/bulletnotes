@@ -48,8 +48,10 @@ impl NativeUi {
         self.0.integration.replace(Some(native));
         self.0.ready.set(true);
         if result.is_err() {
-            self.0
-                .message("Shortcut unavailable · choose another in Appearance.", true);
+            self.0.message(
+                "Shortcut unavailable · choose another in Settings → General.",
+                true,
+            );
         }
         self.0.preferences();
         Ok(())

@@ -1,19 +1,24 @@
 export component PaperMaterial inherits Rectangle {
     in property <bool> active:false;
     in property <color> tint;
-    in property <float> strength;
+    in property <bool> dark:false;
+    in property <color> paper:white;
+    // Warm paper has room for highlights; near-white paper needs shadow grain.
+    private property <bool> raised-grain:!root.dark && min(root.paper.red,root.paper.green,root.paper.blue) < 245;
+    private property <float> finish-opacity:root.raised-grain ? (root.kind == "eggshell" ? 0.45 : 0.8) : root.kind == "bone" ? 0.07 : root.kind == "eggshell" ? 0.05 : 0.08;
+    in property <string> kind:"smooth";
     clip:true;
     accessible-role:none;
-    if root.active: Image {
+    if root.active && root.kind != "smooth": Image {
         width:parent.width; height:parent.height;
-        source:@image-url("../../assets/paper/eggshell.png");
+        source:root.kind == "linen" ? @image-url("../../assets/paper/linen.svg") : root.kind == "bone" ? @image-url("../../assets/paper/bone.svg") : @image-url("../../assets/paper/eggshell.png");
         image-fit:preserve;
         horizontal-tiling:repeat;
         vertical-tiling:repeat;
         horizontal-alignment:left;
         vertical-alignment:top;
-        colorize:root.tint;
-        opacity:root.strength;
+        colorize:root.raised-grain ? white : root.tint;
+        opacity:root.finish-opacity;
         accessible-role:none;
     }
 }

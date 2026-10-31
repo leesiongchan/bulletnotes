@@ -126,13 +126,50 @@ pub enum PaperStyle {
     Ruled,
     Grid,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaperType {
+    #[default]
+    #[serde(alias = "theme")]
+    Smooth,
+    Bone,
+    Eggshell,
+    Linen,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaperIntensity {
+    Subtle,
+    #[default]
+    Clear,
+    Bold,
+}
+fn enabled() -> bool {
+    true
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceSettings {
     pub mode: AppearanceMode,
     pub light_theme: ThemeId,
     pub dark_theme: ThemeId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_light_theme: Option<ThemeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_dark_theme: Option<ThemeId>,
     pub paper: PaperStyle,
     pub font_size: f32,
+    #[serde(default)]
+    pub paper_type: PaperType,
+    #[serde(default)]
+    pub paper_intensity: PaperIntensity,
+    #[serde(default)]
+    pub keep_bottom_bar_visible: bool,
+    #[serde(default = "enabled")]
+    pub show_note_count: bool,
+    #[serde(default = "enabled")]
+    pub show_note_date: bool,
+    #[serde(default = "enabled")]
+    pub show_newest_indicator: bool,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -140,12 +177,50 @@ impl Default for AppearanceSettings {
             mode: AppearanceMode::System,
             light_theme: ThemeId("bulletnotes".into()),
             dark_theme: ThemeId("bulletnotes-dark".into()),
+            previous_light_theme: None,
+            previous_dark_theme: None,
             paper: PaperStyle::Plain,
             font_size: 15.0,
+            paper_type: PaperType::Smooth,
+            paper_intensity: PaperIntensity::Clear,
+            keep_bottom_bar_visible: false,
+            show_note_count: true,
+            show_note_date: true,
+            show_newest_indicator: true,
         }
     }
 }
 impl AppearanceSettings {
+    pub(crate) fn assign_theme(&mut self, id: ThemeId, slot: SystemAppearance) {
+        let (current, previous) = match slot {
+            SystemAppearance::Light => (&mut self.light_theme, &mut self.previous_light_theme),
+            SystemAppearance::Dark => (&mut self.dark_theme, &mut self.previous_dark_theme),
+        };
+        if *current != id {
+            *previous = Some(std::mem::replace(current, id));
+        }
+    }
+    pub(crate) fn restore_theme(&mut self, slot: SystemAppearance, excluded: &ThemeId) {
+        let (previous, default, alternative) = match slot {
+            SystemAppearance::Light => (&self.previous_light_theme, "bulletnotes", "paper"),
+            SystemAppearance::Dark => (&self.previous_dark_theme, "bulletnotes-dark", "graphite"),
+        };
+        let restored = previous
+            .as_ref()
+            .filter(|id| *id != excluded)
+            .cloned()
+            .unwrap_or_else(|| {
+                ThemeId(
+                    if excluded.0 == default {
+                        alternative
+                    } else {
+                        default
+                    }
+                    .into(),
+                )
+            });
+        self.assign_theme(restored, slot);
+    }
     pub fn validate(&self) -> Result<(), ThemeError> {
         if !self.font_size.is_finite() || !(11.0..=24.0).contains(&self.font_size) {
             return Err(ThemeError::InvalidFontSize);
@@ -164,6 +239,18 @@ pub struct ResolvedTheme {
     pub paper: PaperStyle,
     pub font_size: f32,
     pub pattern: Color,
+    pub paper_type: PaperType,
+}
+
+pub(crate) fn resolve_paper_pattern(theme: &Theme, intensity: PaperIntensity) -> Color {
+    let pattern = theme
+        .grid
+        .unwrap_or_else(|| theme.paper.mix(theme.ink, 0.10));
+    match intensity {
+        PaperIntensity::Subtle => theme.paper.mix(pattern, 0.55),
+        PaperIntensity::Clear => pattern,
+        PaperIntensity::Bold => pattern.mix(theme.ink, 0.10),
+    }
 }
 
 pub fn resolve_theme(
@@ -172,6 +259,17 @@ pub fn resolve_theme(
     themes: &[ThemeEntry],
 ) -> Result<ResolvedTheme, ThemeError> {
     settings.validate()?;
+    for previous in [
+        &settings.previous_light_theme,
+        &settings.previous_dark_theme,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !themes.iter().any(|entry| entry.id == *previous) {
+            return Err(ThemeError::UnknownTheme);
+        }
+    }
     let id = if settings.uses_dark(system) {
         &settings.dark_theme
     } else {
@@ -187,10 +285,8 @@ pub fn resolve_theme(
         palette: entry.theme.clone(),
         paper: settings.paper,
         font_size: settings.font_size,
-        pattern: entry
-            .theme
-            .grid
-            .unwrap_or_else(|| entry.theme.paper.mix(entry.theme.ink, 0.10)),
+        pattern: resolve_paper_pattern(&entry.theme, settings.paper_intensity),
+        paper_type: settings.paper_type,
     })
 }
 
@@ -206,11 +302,12 @@ pub fn select_theme(
         return Err(ThemeError::LowContrast);
     }
     let mut candidate = previous.clone();
-    if candidate.uses_dark(system) {
-        candidate.dark_theme = entry.id.clone();
+    let slot = if candidate.uses_dark(system) {
+        SystemAppearance::Dark
     } else {
-        candidate.light_theme = entry.id.clone();
-    }
+        SystemAppearance::Light
+    };
+    candidate.assign_theme(entry.id.clone(), slot);
     candidate.validate()?;
     Ok(candidate)
 }

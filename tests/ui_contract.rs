@@ -240,3 +240,35 @@ fn hidden_chrome_keeps_attention_visible() {
     assert_eq!(chrome_pixel(&ui, 25, 460), [255, 252, 247]);
     assert!(ui.get_status_text().contains("Retry"));
 }
+
+#[test]
+fn theme_assignment_cycles_restore_previous_slots_without_changing_mode() {
+    use bulletnotes::theme::{AppearanceMode, SystemAppearance, ThemeId};
+    let mut settings = AppSettings::default();
+    settings.appearance.light_theme = ThemeId("paper".into());
+    settings.appearance.dark_theme = ThemeId("graphite".into());
+    settings.appearance.mode = AppearanceMode::System;
+    let mut controller = AppearanceController::new(settings, SystemAppearance::Light).unwrap();
+    for (light, dark) in [
+        ("matcha", "graphite"),
+        ("paper", "matcha"),
+        ("matcha", "matcha"),
+        ("matcha", "graphite"),
+    ] {
+        let candidate = controller
+            .cycle_assignment_candidate(ThemeId("matcha".into()))
+            .unwrap();
+        assert_eq!(candidate.appearance.light_theme.0, light);
+        assert_eq!(candidate.appearance.dark_theme.0, dark);
+        assert_eq!(candidate.appearance.mode, AppearanceMode::System);
+        let ticket = controller.begin_settings_commit(candidate, true).unwrap();
+        controller.complete_settings_commit(ticket, Ok(())).unwrap();
+    }
+    let before = controller.committed().clone();
+    assert!(
+        controller
+            .cycle_assignment_candidate(ThemeId("missing".into()))
+            .is_err()
+    );
+    assert_eq!(controller.committed(), &before);
+}
