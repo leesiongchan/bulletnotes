@@ -21,12 +21,12 @@ export component ActionButton inherits FocusScope {
     }
     Rectangle {
         border-radius: root.circular ? self.height / 2 : 7px;
-        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : (root.circular ? (root.material-effects && !root.high-contrast ? @linear-gradient(180deg, root.theme.surface, root.theme.paper) : root.theme.paper) : transparent);
-        border-width: root.has-focus ? 2px : (root.circular ? 1px : 0px);
+        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : (root.circular ? root.theme.paper : transparent);
+        border-width: root.has-focus ? 2px : (root.high-contrast && root.circular ? 1px : 0px);
         border-color: root.has-focus ? root.theme.accent : (root.high-contrast ? root.theme.ink : root.theme.line.with-alpha(0.3));
         drop-shadow-offset-y: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? 1px : 0px;
-        drop-shadow-blur: 0px;
-        drop-shadow-color: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? root.theme.ink.with-alpha(0.06) : transparent;
+        drop-shadow-blur: root.circular && root.material-effects && !root.high-contrast ? 5px : 0px;
+        drop-shadow-color: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? root.theme.ink.with-alpha(0.14) : transparent;
         Image {
             source: root.icon;
             colorize: root.enabled ? root.theme.ink : root.theme.muted;
@@ -42,6 +42,7 @@ export component ActionButton inherits FocusScope {
             clicked => { root.focus(); root.clicked(); }
         }
     }
+    Tooltip { text: @markdown("\{root.label}"); }
 }
 
 export component ChoiceButton inherits FocusScope {
@@ -81,4 +82,5 @@ export component ChoiceButton inherits FocusScope {
             clicked => { root.focus(); root.clicked(); }
         }
     }
+    Tooltip { text: @markdown("\{root.label}"); }
 }

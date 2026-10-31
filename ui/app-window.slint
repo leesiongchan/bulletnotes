@@ -24,7 +24,7 @@ export component AppWindow inherits Window {
     in property <UiTheme> theme;
     in property <UiTheme> settings-theme;
     callback about-presentation-changed();
-    changed settings-theme => { root.about-presentation-changed(); }
+    changed settings-theme => { root.about-presentation-changed(); root.search-palette-changed(); }
     changed prefers-reduced-transparency => { root.about-presentation-changed(); }
     callback search-palette-changed();
     changed system-high-contrast => { root.search-palette-changed(); root.about-presentation-changed(); }
@@ -58,8 +58,8 @@ export component AppWindow inherits Window {
     changed header-needed => { if (root.header-needed) { root.header-revealed = true; } }
     changed footer-needed => { if (root.footer-needed) { root.footer-revealed = true; } }
     changed header-revealed => { root.header-visibility-changed(root.header-revealed,root.prefers-reduced-motion || !root.chrome-active); }
-    Timer { interval:100ms; running:root.header-revealed && !root.header-needed; triggered => { root.header-revealed = false; } }
-    Timer { interval:100ms; running:root.footer-revealed && !root.footer-needed; triggered => { root.footer-revealed = false; } }
+    Timer { interval:root.active-view == "note" ? 300ms : 0ms; running:root.header-revealed && !root.header-needed; triggered => { root.header-revealed = false; } }
+    Timer { interval:300ms; running:root.footer-revealed && !root.footer-needed; triggered => { root.footer-revealed = false; } }
     // Focus only after the reveal has a visible frame; Slint drops focus in hidden ancestors.
     Timer {
         interval:16ms; running:root.pending-chrome-focus != 0;
@@ -197,7 +197,7 @@ export component AppWindow inherits Window {
     in property <bool> prefers-reduced-motion:false;
     in property <bool> prefers-reduced-transparency:false;
     in property <bool> system-high-contrast:false;
-    private property <UiTheme> chrome-theme:root.active-view == "appearance" || root.active-view == "connection" ? root.settings-theme : root.theme;
+    private property <UiTheme> chrome-theme:root.active-view != "note" ? root.settings-theme : root.theme;
     private property <bool> decorative-effects:!root.system-high-contrast && !root.prefers-reduced-transparency;
     callback local-startup-ready();
     in property <bool> sync-available:false;
@@ -281,7 +281,7 @@ export component AppWindow inherits Window {
         if (root.active-view != "connection") { root.connection-token = ""; }
     }
     Rectangle {
-        background: root.active-view == "appearance" || root.active-view == "connection" ? root.settings-theme.paper : root.theme.paper;
+        background: root.chrome-theme.paper;
         border-radius: 16px;
         clip: true;
         keys := FocusScope {
@@ -327,11 +327,11 @@ export component AppWindow inherits Window {
 
             pages := PageBrowser {
                 high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
-                y: 44px;
-                height: parent.height - 44px;
+                y: 20px;
+                height: parent.height - 20px;
                 width: parent.width;
                 visible: root.active-view == "pages";
-                theme: root.theme;
+                theme: root.settings-theme;
                 results: root.page-results;
                 scratchpads <=> root.search-scratchpads;
                 cards <=> root.search-cards;
@@ -372,8 +372,8 @@ export component AppWindow inherits Window {
             }
 
             appearance := AppearancePanel {
-                y: 44px;
-                height: parent.height - 44px;
+                y: 20px;
+                height: parent.height - 20px;
                 width: parent.width;
                 visible: root.active-view == "appearance";
                 theme-pairs: root.theme-options;
@@ -402,7 +402,7 @@ export component AppWindow inherits Window {
 
             connection := ConnectionPanel {
                 high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
-                y:44px; height:parent.height - 44px; width:parent.width;
+                y:20px; height:parent.height - 20px; width:parent.width;
                 visible:root.active-view == "connection";
                 theme:root.settings-theme; server-url <=> root.connection-url;
                 token <=> root.connection-token; remember <=> root.connection-remember;
@@ -412,9 +412,9 @@ export component AppWindow inherits Window {
             }
             auxiliary := RecoveryPanel {
                 high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
-                y:44px; height:parent.height - 44px; width:parent.width;
+                y:20px; height:parent.height - 20px; width:parent.width;
                 visible:root.active-view == "recovery";
-                theme:root.theme; section <=> root.recovery-section; items:root.recovery-items;
+                theme:root.settings-theme; section <=> root.recovery-section; items:root.recovery-items;
                 selected-id:root.recovery-selected-id; path:root.recovery-path;
                 local-text:root.recovery-local; remote-text:root.recovery-remote; base-text:root.recovery-base;
                 merge-text <=> root.recovery-merge; destination <=> root.recovery-destination;
@@ -445,7 +445,7 @@ export component AppWindow inherits Window {
             }
             header := Rectangle {
                 x:0px; y:root.prefers-reduced-motion || root.header-revealed ? 0px : -4px;
-                width:parent.width; height:44px;
+                width:parent.width; height:root.active-view == "note" ? 44px : 34px;
                 background:root.chrome-theme.paper;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.chrome-theme.line;
                 opacity:root.header-revealed ? 1 : 0;
@@ -453,13 +453,13 @@ export component AppWindow inherits Window {
                 animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? 160ms : 200ms); easing:ease-out; }
                 WindowMoveArea {x:160px; width:max(0px,parent.width - 248px); height:parent.height; enabled:root.header-revealed;}
                 appearance-button := ActionButton {
-                    x:82px; y:6px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:82px; y:root.active-view == "note" ? 6px : 1px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, " + root.shortcut-modifier + " comma";
                     clicked => {root.show-appearance();}
                 }
                 browse := ActionButton {
-                    x:120px; y:6px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:120px; y:root.active-view == "note" ? 6px : 1px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, " + root.shortcut-modifier + " K";
                     clicked => {root.browse-pages();}
@@ -472,13 +472,13 @@ export component AppWindow inherits Window {
                     horizontal-alignment:center; vertical-alignment:center;
                 }
                 new-button := ActionButton {
-                    x:parent.width - 82px; y:6px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:parent.width - 82px; y:root.active-view == "note" ? 6px : 1px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                     enabled:root.header-revealed && header.opacity > 0 && !root.lifecycle-pending;
                     icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, " + root.shortcut-modifier + " N";
                     clicked => {root.new-note();}
                 }
                 pin := ActionButton {
-                    x:parent.width - 42px; y:6px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:parent.width - 42px; y:root.active-view == "note" ? 6px : 1px; circular:true; theme:root.chrome-theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/pin.svg");
                     label:root.is-pinned ? "Unpin note, " + root.shortcut-modifier + " P" : "Pin above other windows, " + root.shortcut-modifier + " P";
@@ -488,10 +488,10 @@ export component AppWindow inherits Window {
             footer := Rectangle {
                 y:parent.height - 54px + (root.prefers-reduced-motion || root.footer-revealed ? 0px : 4px);
                 height:44px; x:10px; width:parent.width - 20px; border-radius:22px;
-                border-width:1px; border-color:root.theme.line.with-alpha(root.system-high-contrast ? 1 : 0.25);
+                border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.ink;
                 opacity:root.footer-revealed ? 1 : 0; visible:self.opacity > 0 && root.active-view == "note";
                 animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? 160ms : 200ms); easing:ease-out;}
-                background:root.theme.surface;
+                background:root.system-high-contrast ? root.theme.paper : transparent;
                 HorizontalLayout {
                     y:6px; width:parent.width; height:32px; padding-left:6px; padding-right:6px; spacing:6px;
                     trash-button := ActionButton {

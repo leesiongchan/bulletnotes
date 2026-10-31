@@ -12,7 +12,7 @@ export component NoteEditor inherits Rectangle {
     in property <bool> read-only:false;
     in property <length> top-clearance:16px;
     out property <float> scroll-y:-scroll.content-y / 1px;
-    out property <length> line-height:root.font-size-px * 1.6px;
+    out property <length> line-height:root.font-size-px * (root.paper-style == "ruled" ? 1.8px : 1.6px);
     private property <float> line-factor:root.line-height / max(1px,measure-one.font-metrics.ascent - measure-one.font-metrics.descent);
     out property <int> selection-anchor: input.anchor-position-byte-offset;
     out property <int> selection-caret: input.cursor-position-byte-offset;
@@ -66,7 +66,7 @@ export component NoteEditor inherits Rectangle {
         wrap: no-wrap;
     }
 
-    private property <length> decoration-step:root.paper-style == "ruled" || root.paper-style == "grid" ? root.line-height : 18px;
+    private property <length> decoration-step:root.paper-style == "ruled" ? root.line-height : root.paper-style == "grid" ? max(27px,root.line-height) : 22.5px;
     private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? root.top-clearance : root.paper-style == "grid" ? 5.35px : 0px)) / root.decoration-step);
     private property <int> rows:ceil(root.height / root.decoration-step) + 2;
     private property <int> columns:ceil(root.width / root.decoration-step) + 1;
@@ -76,14 +76,14 @@ export component NoteEditor inherits Rectangle {
         width: parent.width;
         visible: root.paper-style != "plain";
         accessible-role: none;
-        background: root.paper-style == "ruled" || root.paper-style == "grid" ? root.theme.pattern : transparent;
+        background: root.paper-style == "ruled" || root.paper-style == "grid" ? root.theme.pattern.with-alpha(0.5) : transparent;
         for col in root.columns: Rectangle {
             visible: root.paper-style == "dots";
-            x: col * 18px + 8px;
+            x: col * root.decoration-step + 8px;
             width: 1.5px;
             height: 1.5px;
             border-radius: 1px;
-            background: root.theme.pattern;
+            background: root.theme.pattern.with-alpha(0.5);
             accessible-role: none;
         }
     }
@@ -92,7 +92,7 @@ export component NoteEditor inherits Rectangle {
         x: col * root.decoration-step;
         width: max(0.5px,1phx);
         height: parent.height;
-        background: root.theme.pattern;
+        background: root.theme.pattern.with-alpha(0.5);
         accessible-role: none;
     }
     context := ContextMenuArea {

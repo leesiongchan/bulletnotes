@@ -36,10 +36,10 @@ export component PageBrowser inherits Rectangle {
     in property <string> index-status;
     in property <bool> can-load-more:false;
     in-out property <int> selected-index:-1;
-    private property <int> columns:root.cards ? max(1,floor((root.width - 32px) / 236px)) : 1;
+    private property <int> columns:root.cards ? max(1,floor((root.width - 36px) / 224px)) : 1;
     private property <length> row-height:root.cards ? min(236px,max(160px,list.visible-height)) : 112px;
     private property <int> row-count:ceil(root.results.length / root.columns);
-    out property <bool> escape-allowed: query-input.has-focus ? query-input.source-edits-allowed : (folder-input.has-focus ? folder-input.source-edits-allowed : true);
+    out property <bool> escape-allowed: !query-input.has-focus || query-input.source-edits-allowed;
     callback load-more();
     callback query-changed(string);
     callback folder-changed(string);
@@ -56,21 +56,31 @@ export component PageBrowser inherits Rectangle {
     callback trash-confirmed(string);
     callback trash-cancelled();
     callback create();
-    public function focus-query() { root.selected-index = -1; query-input.focus(); }
+    public function focus-query() {
+        if (root.folder != "") { root.folder = ""; root.folder-changed(""); }
+        root.selected-index = -1; query-input.focus();
+    }
     pure function pointer-index(x:length,y:length) -> int {
         let index = floor((y - list.content-y) / root.row-height) * root.columns + floor(x / (list.width / root.columns));
         return x >= 0px && x < list.width && y >= 0px && y < list.visible-height && index < root.results.length ? index : -1;
     }
     pure function pointer-action(x:length,y:length) -> int {
-        let local-x = mod(x,list.width / root.columns) - 4px;
-        let local-y = mod(y - list.content-y,root.row-height) - 3px;
-        let cell-width = list.width / root.columns - 8px;
-        let button-y = root.cards ? root.row-height - 33px : 27px;
+        let local-x = mod(x,list.width / root.columns) - 6px;
+        let local-y = mod(y - list.content-y,root.row-height) - 6px;
+        let cell-width = list.width / root.columns - 12px;
+        let button-y = root.cards ? root.row-height - 39px : 27px;
         if (local-y >= button-y && local-y < button-y + 28px) {
             if (local-x >= cell-width - 42px && local-x < cell-width - 14px) { return 3; }
             if (local-x >= cell-width - 76px && local-x < cell-width - 48px) { return 2; }
         }
         return root.selecting && local-x >= 8px && local-x < 36px && local-y >= 10px && local-y < 38px ? 1 : 0;
+    }
+    pure function action-hint(index:int,action:int) -> string {
+        if (index < 0 || root.drag-active) { return ""; }
+        if (action == 3) { return root.results[index].can-trash ? "Move to Trash" : root.results[index].trash-disabled-reason; }
+        if (action == 2 && root.results[index].can-promote) { return "Promote to front"; }
+        if (action == 1) { return root.results[index].checked ? "Deselect note" : "Select note"; }
+        return "";
     }
     function cancel-drag() { if (root.drag-active) { root.drag-active = false; root.drag-cancelled(); } }
     function update-drag(x:length,y:length) {
@@ -149,21 +159,8 @@ export component PageBrowser inherits Rectangle {
         Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:root.theme.muted;font-size:13px;accessible-role:none; }
         ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:parent.width - 39px;y:5px;width:34px;theme:root.theme;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
     }
-    Rectangle {
-        x:24px;y:60px;width:parent.width - 48px;height:28px;border-radius:8px;background:root.theme.surface;visible:!root.scratchpads;
-        border-width:folder-input.has-focus ? 1px : 0px;border-color:root.theme.accent;
-        Text { x:10px;width:44px;height:parent.height;text:"Folder";font-size:13px;color:root.theme.muted;vertical-alignment:center; }
-        folder-input := TextInput {
-            x:60px;width:parent.width - 70px;height:parent.height;single-line:true;vertical-alignment:center;
-            text <=> root.folder;color:root.theme.ink;font-size:13px;enabled:root.confirm-count == 0;
-            selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;
-            accessible-label:"Filter by folder, empty for all folders";
-            edited => { root.folder-changed(self.text); }
-        }
-        Text { x:60px;width:parent.width - 70px;height:parent.height;vertical-alignment:center;text:"All folders";visible:root.folder == "";font-size:13px;color:root.theme.muted;accessible-role:none; }
-    }
     list := ListView {
-        x:12px;y:root.scratchpads ? 64px : 98px;width:parent.width - 24px;
+        x:18px;y:62px;width:parent.width - 36px;
         height:max(0px,parent.height - self.y - toolbar.height - 38px);
         vertical-scrollbar-policy:always-off;enabled:root.confirm-count == 0;
         for row in root.row-count: Rectangle {
@@ -191,6 +188,20 @@ export component PageBrowser inherits Rectangle {
         private property <int> source-index:-1;
         private property <int> action:0;
         private property <bool> dragged:false;
+        private property <string> hint:root.action-hint(root.pointer-index(self.mouse-x,self.mouse-y),root.pointer-action(self.mouse-x,self.mouse-y));
+        Tooltip {
+            Rectangle {
+                width:pointer-surface.hint == "" ? 0px : min(320px,hint-text.preferred-width + 18px);
+                height:pointer-surface.hint == "" ? 0px : hint-text.preferred-height + 12px;
+                background:root.theme.surface;border-radius:6px;
+                border-width:pointer-surface.hint == "" ? 0px : 1px;border-color:root.theme.line;
+                hint-text := Text {
+                    x:9px;y:6px;width:max(0px,parent.width - 18px);
+                    text:pointer-surface.hint;color:root.theme.ink;font-size:12px;wrap:word-wrap;
+                }
+            }
+        }
+
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
                 self.source-index = root.pointer-index(self.mouse-x,self.mouse-y);
@@ -226,7 +237,7 @@ export component PageBrowser inherits Rectangle {
         background:root.theme.accent;
         visible:root.drag-active && self.y >= list.y && self.y < list.y + list.visible-height;
     }
-    ThemeScrollbar { x:list.x + list.width - self.width;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
+    ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {
         x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
         Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"Menlo";font-size:13px;horizontal-alignment:center; }

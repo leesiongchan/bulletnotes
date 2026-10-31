@@ -62,7 +62,7 @@ export component RecoveryPanel inherits Rectangle {
     background:root.theme.paper;
     Text { x:24px; y:14px; text:"Recovery"; font-size:21px; color:root.theme.ink; }
     back := ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
-        x:parent.width - 44px; y:9px; theme:root.theme;
+        x:parent.width - 44px; y:14px; theme:root.theme;
         icon:@image-url("../assets/icons/close.svg"); label:"Return to note";
         clicked => { root.return-to-note(); }
     }

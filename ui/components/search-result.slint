@@ -40,7 +40,7 @@ export component SearchResult inherits FocusScope {
         return reject;
     }
     Rectangle {
-        x:4px; y:3px; width:parent.width - 8px; height:parent.height - 6px;
+        x:6px; y:6px; width:parent.width - 12px; height:parent.height - 12px;
         border-radius:12px;
         background:root.data.checked || root.selected || root.hovered ? root.theme.selection : (root.cards ? root.theme.surface : transparent);
         border-width:root.has-focus ? 2px : (root.cards ? 1px : 0px);

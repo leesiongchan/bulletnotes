@@ -233,7 +233,7 @@ impl State {
                                     search_decorations(
                                         &list_excerpt,
                                         &list_ranges,
-                                        window.get_theme().ink,
+                                        window.get_settings_theme().ink,
                                     )
                                     .as_slice(),
                                 ),
@@ -246,7 +246,7 @@ impl State {
                                     search_decorations(
                                         page.key.path.as_str(),
                                         &page.highlights.path,
-                                        window.get_theme().ink,
+                                        window.get_settings_theme().ink,
                                     )
                                     .as_slice(),
                                 ),
@@ -254,7 +254,7 @@ impl State {
                                     search_decorations(
                                         page.excerpt.as_deref().unwrap_or(""),
                                         &page.highlights.excerpt,
-                                        window.get_theme().ink,
+                                        window.get_settings_theme().ink,
                                     )
                                     .as_slice(),
                                 ),

@@ -29,6 +29,7 @@ component ThemeModeButton inherits FocusScope {
         }
         touch := TouchArea { clicked => { root.focus(); root.clicked(); } }
     }
+    Tooltip { text: @markdown("\{root.name}: assign to \{root.dark ? "dark" : "light"} mode"); }
 }
 component ThemeCard inherits FocusScope {
     in property <ThemeOption> option;
@@ -48,15 +49,15 @@ component ThemeCard inherits FocusScope {
         clip:true;
         background:root.option.palette.paper;
         for row in 5: Rectangle {
-            y:(row + 1) * 22.5px;
+            y:(row + 1) * 27px;
             height:0.5px; width:parent.width;
-            background:root.option.palette.pattern;
+            background:root.option.palette.pattern.with-alpha(0.5);
             accessible-role:none;
         }
         for col in 12: Rectangle {
-            x:9px + col * 22.5px;
+            x:9px + col * 27px;
             width:0.5px; height:parent.height;
-            background:root.option.palette.pattern;
+            background:root.option.palette.pattern.with-alpha(0.5);
             accessible-role:none;
         }
         TouchArea { clicked => { root.focus(); root.clicked(); } }
@@ -136,7 +137,7 @@ export component AppearancePanel inherits Rectangle {
 
     ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
         x: parent.width - 44px;
-        y: 9px;
+        y: 14px;
         theme: root.chrome;
         icon: @image-url("../../assets/icons/close.svg");
         label: "Return to note";

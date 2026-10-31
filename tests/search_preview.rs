@@ -227,7 +227,7 @@ fn disabled_result_action_does_not_open_the_note_beneath_it() {
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
     ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
-    let point = slint::LogicalPosition::new(460.0, 186.0);
+    let point = slint::LogicalPosition::new(452.0, 127.0);
     ui.window().dispatch_event(WindowEvent::PointerPressed {
         position: point,
         button: slint::platform::PointerEventButton::Left,
@@ -258,8 +258,8 @@ fn row_actions_and_shift_return_do_not_open_before_promotion_finishes() {
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
     ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
-    for x in [427.0, 461.0] {
-        let point = slint::LogicalPosition::new(x, 152.0);
+    for x in [419.0, 453.0] {
+        let point = slint::LogicalPosition::new(x, 127.0);
         ui.window().dispatch_event(WindowEvent::PointerPressed {
             position: point,
             button: slint::platform::PointerEventButton::Left,
@@ -433,4 +433,96 @@ fn reorder_hint_keeps_index_completeness_visible() {
         ui.get_search_action_message()
     );
     text_item(&ui, &combined);
+}
+
+#[test]
+fn utility_views_keep_neutral_background_when_writing_palette_changes() {
+    let ui = setup();
+    ui.set_prefers_reduced_transparency(true);
+    for id in ["rose", "graphite", "antinote-vancouver"] {
+        let mut settings = AppSettings::default();
+        settings.appearance.light_theme = bulletnotes::theme::ThemeId(id.into());
+        present_settings(&ui, &settings, SystemAppearance::Light).unwrap();
+        for view in ["pages", "appearance", "connection", "recovery"] {
+            ui.set_active_view(view.into());
+            settle();
+            let image = ui.window().take_snapshot().unwrap();
+            let i = (100 * image.width() as usize + 5) * 4;
+            let paper = ui.get_settings_theme().paper;
+            assert_eq!(
+                &image.as_bytes()[i..i + 3],
+                &[paper.red(), paper.green(), paper.blue()],
+                "{id}: {view}"
+            );
+        }
+    }
+}
+
+#[test]
+fn opening_search_clears_a_legacy_hidden_folder_filter() {
+    let ui = setup();
+    ui.set_active_view("note".into());
+    settle();
+    ui.set_search_folder("old/folder".into());
+    let cleared = Rc::new(RefCell::new(false));
+    let observed = cleared.clone();
+    ui.on_folder_changed(move |folder| *observed.borrow_mut() = folder.is_empty());
+    ui.set_active_view("pages".into());
+    settle();
+    assert!(ui.get_search_folder().is_empty());
+    assert!(*cleared.borrow());
+}
+
+#[test]
+fn enabled_toolbar_icons_show_hover_hints() {
+    icon_hint_appears(true);
+}
+
+#[test]
+fn result_icons_show_hover_hints_above_the_drag_surface() {
+    icon_hint_appears(false);
+}
+
+fn icon_hint_appears(toolbar: bool) {
+    let ui = setup();
+    if toolbar {
+        ui.set_active_view("note".into());
+        ui.set_header_hovered(true);
+    } else {
+        let mut item = row(0);
+        item.can_trash = true;
+        ui.set_page_results(ModelRc::from([item]));
+    }
+    settle();
+    ui.window().dispatch_event(WindowEvent::PointerMoved {
+        position: if toolbar {
+            slint::LogicalPosition::new(136.0, 22.0)
+        } else {
+            slint::LogicalPosition::new(452.0, 127.0)
+        },
+    });
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(1000));
+    let inner = i_slint_core::window::WindowInner::from_pub(ui.window());
+    assert!(
+        !inner.active_popups.borrow().is_empty(),
+        "toolbar: {toolbar}"
+    );
+    if !toolbar {
+        let popups = inner.active_popups.borrow();
+        let popup = i_slint_core::item_tree::ItemRc::new(popups[0].component.clone(), 0);
+        let hint = popup.visit_descendants(|item| {
+            if item
+                .downcast::<i_slint_core::items::ComplexText>()
+                .is_some_and(|text| text.as_pin_ref().text().as_str() == "Move to Trash")
+            {
+                std::ops::ControlFlow::Break(())
+            } else {
+                std::ops::ControlFlow::Continue(())
+            }
+        });
+        assert!(
+            hint.is_some(),
+            "result hint must describe the hovered action"
+        );
+    }
 }

@@ -226,7 +226,7 @@ fn settings_scheme_follows_app_mode_not_note_palette() {
         assert_eq!(window.get_settings_theme().dark, dark);
         assert_eq!(
             rgb(window.get_settings_theme().paper).hex(),
-            if dark { "#25272B" } else { "#F7F3EB" }
+            if dark { "#292929" } else { "#F2F1ED" }
         );
         let expected = settings
             .themes()

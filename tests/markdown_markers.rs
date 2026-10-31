@@ -216,14 +216,17 @@ fn tasks_and_bullets_align_their_body_text_in_compact_slots() {
 fn editor_rows_follow_font_size_spacing() {
     let source = "MMMM\nMMMM\n";
     let window = setup(source);
-    for font in [11.0, 15.0, 24.0] {
-        window.set_font_size_px(font);
-        let _ = snapshot(&window);
-        assert!(
-            (window.get_editor_line_height() - font * 1.6).abs() < 0.1,
-            "{font}pt text must use 1.6em rows; got {}",
-            window.get_editor_line_height()
-        );
+    for (paper, spacing) in [("plain", 1.6), ("ruled", 1.8)] {
+        window.set_paper_style(paper.into());
+        for font in [11.0, 15.0, 24.0] {
+            window.set_font_size_px(font);
+            let _ = snapshot(&window);
+            assert!(
+                (window.get_editor_line_height() - font * spacing).abs() < 0.1,
+                "{paper} {font}pt text must use {spacing}em rows; got {}",
+                window.get_editor_line_height()
+            );
+        }
     }
     assert_eq!(window.get_note_text(), source);
 }
@@ -285,7 +288,7 @@ fn grid_pitch_and_text_inset_match_editor_geometry() {
     assert!(
         starts
             .windows(2)
-            .all(|x| (x[1] - x[0] - 22.4).abs() <= 0.65),
+            .all(|x| (x[1] - x[0] - 27.0).abs() <= 0.65),
         "grid columns: {starts:?}"
     );
 }

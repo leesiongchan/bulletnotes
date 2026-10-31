@@ -19,6 +19,7 @@ pub trait ChromeWindow: slint::ComponentHandle {
     const FLOATING: bool;
     fn hover_edges(&self, header: bool, footer: bool);
     fn visible_edges(&self) -> (bool, bool);
+    fn header_hover_depth(&self, shown: bool) -> f64;
     fn reset_chrome(&self);
     fn observe_header(&self, callback: Box<dyn Fn(bool, bool)>);
 }
@@ -34,6 +35,14 @@ impl ChromeWindow for crate::AppWindow {
             self.get_header_opacity() > 0.0,
             self.get_footer_opacity() > 0.0,
         )
+    }
+    fn header_hover_depth(&self, shown: bool) -> f64 {
+        match (self.get_active_view().as_str(), shown) {
+            ("note", true) => 72.0,
+            ("note", false) => 56.0,
+            (_, true) => 34.0,
+            (_, false) => 24.0,
+        }
     }
     fn reset_chrome(&self) {
         self.invoke_reset_chrome();
@@ -204,11 +213,11 @@ impl ChromeMonitor {
                             && point.y >= 0.0
                             && point.y <= size.height;
                         let header_depth = if W::FLOATING {
-                            if shown_header { 52.0 } else { 16.0 }
+                            window.header_hover_depth(shown_header)
                         } else {
                             36.0
                         };
-                        let footer_depth = if shown_footer { 62.0 } else { 16.0 };
+                        let footer_depth = if shown_footer { 80.0 } else { 64.0 };
                         let header = in_window && point.y >= size.height - header_depth;
                         let footer = W::FLOATING && in_window && point.y <= footer_depth;
                         if event_ref.r#type() == NSEventType::LeftMouseDown {

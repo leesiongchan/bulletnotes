@@ -146,11 +146,38 @@ fn settings_palette(
         .find(|entry| entry.id.0 == id)
         .ok_or(ThemeError::InvalidSettings)?
         .theme;
-    let adjusted = high_contrast.then(|| theme::accessibility::high_contrast(theme));
-    Ok(palette(
-        adjusted.as_ref().unwrap_or(theme),
-        theme.grid.unwrap_or(theme.line),
-    ))
+    // Utility views use neutral chrome, independent of the selected writing paper.
+    let mut chrome = theme.clone();
+    let colors = if dark {
+        [
+            "#292929", "#353535", "#F1EFEB", "#B9B6AF", "#DBC9A7", "#696762", "#4B473F",
+        ]
+    } else {
+        [
+            "#F2F1ED", "#E7E7E7", "#4E4638", "#706B63", "#66512C", "#B8B8B5", "#DAD6CB",
+        ]
+    };
+    [
+        chrome.paper,
+        chrome.surface,
+        chrome.ink,
+        chrome.muted,
+        chrome.accent,
+        chrome.line,
+        chrome.selection,
+    ] = [
+        theme::Color::parse(colors[0])?,
+        theme::Color::parse(colors[1])?,
+        theme::Color::parse(colors[2])?,
+        theme::Color::parse(colors[3])?,
+        theme::Color::parse(colors[4])?,
+        theme::Color::parse(colors[5])?,
+        theme::Color::parse(colors[6])?,
+    ];
+    chrome.cursor = Some(chrome.accent);
+    chrome.scrollbar = Some(chrome.muted);
+    let adjusted = high_contrast.then(|| theme::accessibility::high_contrast(&chrome));
+    Ok(palette(adjusted.as_ref().unwrap_or(&chrome), chrome.line))
 }
 
 fn apply_about_presentation(window: &AboutWindow, source: &AppWindow) {

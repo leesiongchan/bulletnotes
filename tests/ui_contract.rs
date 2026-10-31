@@ -177,10 +177,10 @@ fn chrome_pixel(ui: &bulletnotes::AppWindow, x: usize, y: usize) -> [u8; 3] {
     [p[i], p[i + 1], p[i + 2]]
 }
 #[test]
-fn header_uses_paper_and_footer_keeps_surface() {
+fn header_and_footer_use_paper_without_an_outer_surface() {
     let ui = chrome_window();
     assert_eq!(chrome_pixel(&ui, 250, 10), [247, 243, 235]);
-    assert_eq!(chrome_pixel(&ui, 250, 504), [255, 252, 247]);
+    assert_eq!(chrome_pixel(&ui, 250, 504), [247, 243, 235]);
 }
 #[test]
 fn circular_idle_focus_and_contrast_are_distinct() {
@@ -217,7 +217,7 @@ fn minimum_chrome_retains_path_and_actions() {
     ui.set_header_hovered(false);
     ui.set_footer_hovered(false);
     i_slint_backend_testing::mock_elapsed_time(std::time::Duration::ZERO);
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(150));
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
     assert_eq!(
         (
             ui.get_note_text(),
@@ -233,7 +233,7 @@ fn hidden_chrome_keeps_attention_visible() {
     ui.set_header_hovered(false);
     ui.set_footer_hovered(false);
     i_slint_backend_testing::mock_elapsed_time(std::time::Duration::ZERO);
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(150));
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
     ui.set_status_attention(true);
     ui.set_status_text("Local save failed. Retry.".into());
     assert!(!ui.get_header_revealed() && !ui.get_footer_revealed());
