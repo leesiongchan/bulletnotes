@@ -318,7 +318,7 @@ async fn selected_cached_page_bypasses_the_remaining_background_downloads() {
         .await
         .unwrap();
     let f = Fixture::start(Some(b"cached source")).await;
-    let c = client(&f, Duration::from_secs(2));
+    let c = client(&f, Duration::from_secs(10));
     let selected = PageKey {
         connection: config().id().clone(),
         path: PagePath::parse("page-099.md").unwrap(),
@@ -329,19 +329,25 @@ async fn selected_cached_page_bypasses_the_remaining_background_downloads() {
         .unwrap();
     f.data.lock().unwrap().catalogue_override = Some(serde_json::Value::Array(
         (0..100)
-            .map(|n| serde_json::json!({"name":format!("page-{n:03}.md")}))
+            .map(|n| serde_json::json!({"name":if n == 0 { "blocked.md".to_string() } else { format!("page-{n:03}.md") }}))
             .collect(),
     ));
-    f.fault(Fault::SlowReads);
+    f.fault(Fault::SlowReadsWithBlockedPage);
     let sync = SyncHandle::start(store.clone(), c, None).unwrap();
     until(|| sync.snapshot().catalogue_total == 100).await;
+    until(|| {
+        f.seen()
+            .iter()
+            .any(|request| request.uri.ends_with("/blocked.md"))
+    })
+    .await;
     {
         let mut data = f.data.lock().unwrap();
         data.body = Some(b"new selected source".to_vec());
         data.revision += 1;
     }
     sync.set_selected_page(Some(selected.clone()));
-    let fresh = tokio::time::timeout(Duration::from_millis(1500), async {
+    let fresh = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if store.load_page(&selected).await.unwrap().unwrap().body == "new selected source" {
                 break;
@@ -355,6 +361,10 @@ async fn selected_cached_page_bypasses_the_remaining_background_downloads() {
         "a selected cached page waited behind the entire background download queue"
     );
     assert!(!sync.snapshot().complete);
+    assert!(
+        sync.snapshot().indexed < 99,
+        "the remaining downloads finished before the selected page"
+    );
     sync.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
 }
@@ -483,7 +493,7 @@ async fn shutdown_cancels_network_without_losing_the_unknown_payload() {
         .await
         .unwrap();
     f.data.lock().unwrap().seen.clear();
-    f.fault(Fault::TimeoutAfterWrite);
+    f.fault(Fault::BlockAfterWrite);
     store.create_draft(key()).await.unwrap();
     store
         .save_local(key(), "saved before shutdown".into(), LocalRevision(1))
@@ -491,7 +501,7 @@ async fn shutdown_cancels_network_without_losing_the_unknown_payload() {
         .unwrap();
     let sync = SyncHandle::start(store.clone(), c.clone(), Some(evidence.clone())).unwrap();
     until(|| f.body().is_some()).await;
-    tokio::time::timeout(Duration::from_millis(150), sync.shutdown())
+    tokio::time::timeout(Duration::from_secs(5), sync.shutdown())
         .await
         .unwrap()
         .unwrap();

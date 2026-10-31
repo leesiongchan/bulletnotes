@@ -25,7 +25,9 @@ impl MergeExecutor {
     pub async fn merge(&self, base: String, local: String, remote: String) -> TextMergeResult {
         let timer =
             crate::diagnostics::OperationTimer::start(crate::diagnostics::Operation::TextMerge);
-        let result = self.merge_with(base, local, remote, merge_text).await;
+        let result = self
+            .merge_with(base, local, remote, merge_text, WAIT_LIMIT)
+            .await;
         timer.complete(if result.disposition == MergeDisposition::BudgetFallback {
             crate::diagnostics::Outcome::ResourceLimit
         } else {
@@ -40,6 +42,7 @@ impl MergeExecutor {
         local: String,
         remote: String,
         worker: impl FnOnce(&str, &str, &str) -> TextMergeResult + Send + 'static,
+        wait_limit: Duration,
     ) -> TextMergeResult {
         if local == remote || base == remote {
             return TextMergeResult {
@@ -74,7 +77,7 @@ impl MergeExecutor {
             let _permit = permit;
             worker(&base, &worker_local, &worker_remote)
         });
-        match tokio::time::timeout(WAIT_LIMIT, job).await {
+        match tokio::time::timeout(wait_limit, job).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => without_worker(MergeFallbackReason::WorkerFailure),
             Err(_) => without_worker(MergeFallbackReason::WorkerTimeout),
@@ -141,6 +144,7 @@ mod tests {
                             edits: Vec::new(),
                         }
                     },
+                    WAIT_LIMIT,
                 )
                 .await
         });
@@ -303,6 +307,7 @@ mod tests {
                 "LOCAL_SOURCE_SENTINEL".into(),
                 "REMOTE_SOURCE_SENTINEL".into(),
                 |_, _, _| panic!("injected worker failure"),
+                Duration::from_secs(5),
             )
             .await;
         assert_eq!(result.body, "REMOTE_SOURCE_SENTINEL");

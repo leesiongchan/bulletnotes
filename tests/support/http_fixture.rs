@@ -35,6 +35,8 @@ pub enum Fault {
     IgnorePreconditions,
     SlowReads,
     BlockOneRead,
+    SlowReadsWithBlockedPage,
+    BlockAfterWrite,
 }
 #[derive(Clone)]
 pub struct Seen {
@@ -278,13 +280,14 @@ async fn handle(State(state): State<Arc<Mutex<Data>>>, request: Request<Body>) -
             data.max_active_reads = data.max_active_reads.max(data.active_reads);
         }
         let blocked = (reading
-            && matches!(fault, Fault::BlockOneRead)
-            && parts.uri.path().ends_with("/blocked.md"))
+            && matches!(fault, Fault::BlockOneRead | Fault::SlowReadsWithBlockedPage)
+            && parts.uri.path().ends_with("/blocked.md")
+            || parts.method == Method::PUT && matches!(fault, Fault::BlockAfterWrite))
         .then(|| data.release.clone());
         (
             reply,
             matches!(fault, Fault::TimeoutAfterWrite) && parts.method != Method::GET
-                || reading && matches!(fault, Fault::SlowReads),
+                || reading && matches!(fault, Fault::SlowReads | Fault::SlowReadsWithBlockedPage),
             reading,
             blocked,
         )
