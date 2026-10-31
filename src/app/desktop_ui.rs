@@ -66,9 +66,12 @@ impl NativeUi {
             {
                 *state.hotkey.borrow_mut() = Some(registration);
             } else {
-                // Keep the manager so a conflicting default can be changed in Appearance.
+                // Keep the manager so a conflicting default can be changed in General settings.
                 *state.hotkey.borrow_mut() = Some(registration);
-                state.message("Shortcut unavailable. Choose another in Appearance.", true);
+                state.message(
+                    "Shortcut unavailable. Choose another in Settings → General.",
+                    true,
+                );
             }
         } else {
             state.message(

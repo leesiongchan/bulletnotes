@@ -7,7 +7,10 @@ use crate::{
     AppWindow,
     domain::error::StoreError,
     store::{StoreHandle, settings::AppSettings},
-    theme::{AppearanceMode, PaperStyle, SystemAppearance, Theme, ThemeError, ThemeId},
+    theme::{
+        AppearanceMode, PaperIntensity, PaperStyle, PaperType, SystemAppearance, Theme, ThemeError,
+        ThemeId,
+    },
 };
 use slint::ComponentHandle;
 use std::{
@@ -117,7 +120,7 @@ impl State {
         match ticket {
             Ok(ticket) => {
                 match self.sender.try_send(Write::Settings(Box::new(ticket))) {
-                    Ok(()) => self.message("Saving appearance…"),
+                    Ok(()) => self.message("Saving settings…"),
                     Err(error) => {
                         if let Write::Settings(ticket) = error.into_inner() {
                             let _ = self
@@ -125,7 +128,7 @@ impl State {
                                 .borrow_mut()
                                 .complete_settings_commit(*ticket, Err(StoreError::Closed));
                         }
-                        self.message("Appearance could not be saved. Try again.");
+                        self.message("Settings could not be saved. Try again.");
                     }
                 }
                 self.present();
@@ -201,9 +204,9 @@ pub fn bind(
                         .complete_settings_commit(*ticket, result);
                     state.present();
                     state.message(if result.is_ok() {
-                        "Appearance saved"
+                        "Settings saved"
                     } else {
-                        "Appearance could not be saved. Try selecting your theme again."
+                        "Settings could not be saved. Try changing the setting again."
                     });
                 }
                 Write::Metadata(change, reply) => {
@@ -253,6 +256,22 @@ pub fn bind(
     }
     {
         let state = state.clone();
+        window.on_cycle_theme_assignment(move |id| {
+            let candidate = state
+                .controller
+                .borrow()
+                .cycle_assignment_candidate(ThemeId(id.to_string()));
+            match candidate {
+                Ok(candidate) => {
+                    state.clear_pending();
+                    state.submit(candidate, true);
+                }
+                Err(error) => state.message(&error.to_string()),
+            }
+        });
+    }
+    {
+        let state = state.clone();
         window.on_appearance_changed(move || {
             if let Some(window) = state.window.upgrade() {
                 let mut candidate = state.controller.borrow().displayed().clone();
@@ -268,6 +287,23 @@ pub fn bind(
                     _ => PaperStyle::Plain,
                 };
                 candidate.appearance.font_size = window.get_font_size_px();
+                candidate.appearance.paper_type = match window.get_paper_type().as_str() {
+                    "smooth" => PaperType::Smooth,
+                    "bone" => PaperType::Bone,
+                    "eggshell" => PaperType::Eggshell,
+                    "linen" => PaperType::Linen,
+                    _ => PaperType::Smooth,
+                };
+                candidate.appearance.paper_intensity = match window.get_paper_intensity().as_str() {
+                    "subtle" => PaperIntensity::Subtle,
+                    "bold" => PaperIntensity::Bold,
+                    _ => PaperIntensity::Clear,
+                };
+                candidate.start_with_new_note = window.get_start_with_new_note();
+                candidate.appearance.keep_bottom_bar_visible = window.get_keep_bottom_bar_visible();
+                candidate.appearance.show_note_count = window.get_show_note_count();
+                candidate.appearance.show_note_date = window.get_show_note_date();
+                candidate.appearance.show_newest_indicator = window.get_show_newest_indicator();
                 state.clear_pending();
                 state.submit(candidate, true);
             }

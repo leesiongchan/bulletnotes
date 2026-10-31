@@ -291,3 +291,12 @@ fn invalid_settings_never_resolve_silently() {
     };
     assert!(resolve_theme(&settings, SystemAppearance::Light, &themes).is_err());
 }
+
+#[test]
+fn legacy_paper_default_becomes_smooth_and_is_never_written_back() {
+    use bulletnotes::theme::PaperType;
+    let kind: PaperType = serde_json::from_str("\"theme\"").unwrap();
+    assert_eq!(kind, PaperType::Smooth);
+    assert_eq!(serde_json::to_string(&kind).unwrap(), "\"smooth\"");
+    assert_eq!(PaperType::default(), PaperType::Smooth);
+}

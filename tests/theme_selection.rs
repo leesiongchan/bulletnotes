@@ -139,16 +139,15 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         window.window().set_size(slint::LogicalSize::new(600.0, 850.0));
         window.window().dispatch_event(WindowEvent::WindowActiveChanged(true));
         let _ = window.window().take_snapshot().unwrap();
+        window.invoke_reveal_theme_choices();
         binding.flush().await.unwrap();
-        for (index, (id, activation)) in [("bulletnotes", Key::Space.into()), ("bulletnotes-dark", Key::Space.into()), ("antinote-vancouver", Key::Return.into())].into_iter().enumerate() {
+        for (index, (id, activation)) in [("bulletnotes", slint::SharedString::from(Key::Space)), ("bulletnotes-dark", Key::Space.into()), ("antinote-vancouver", Key::Return.into())].into_iter().enumerate() {
             for _ in 0..if index == 0 { 0 } else { 2 } {
                 window.window().dispatch_event(WindowEvent::KeyPressed { text: Key::Tab.into() });
                 window.window().dispatch_event(WindowEvent::KeyReleased { text: Key::Tab.into() });
             }
-            for text in [slint::SharedString::from(Key::Tab), activation] {
-                window.window().dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
-                window.window().dispatch_event(WindowEvent::KeyReleased { text });
-            }
+            window.window().dispatch_event(WindowEvent::KeyPressed { text: activation.clone() });
+            window.window().dispatch_event(WindowEvent::KeyReleased { text: activation });
             binding.flush().await.unwrap();
             assert_eq!(window.get_selected_theme_id(), id, "card focus must survive saving and continue with Tab");
         }
@@ -160,10 +159,8 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         assert_eq!(store.load_settings().await.unwrap().appearance.light_theme.0, "antinote-vancouver");
         window.invoke_theme_assigned("antinote-tartan".into(), true);
         binding.flush().await.unwrap();
-        for text in [slint::SharedString::from(Key::Tab), Key::Space.into()] {
-            window.window().dispatch_event(WindowEvent::KeyPressed { text:text.clone() });
-            window.window().dispatch_event(WindowEvent::KeyReleased { text });
-        }
+        window.window().dispatch_event(WindowEvent::KeyPressed { text:Key::Space.into() });
+        window.window().dispatch_event(WindowEvent::KeyReleased { text:Key::Space.into() });
         binding.flush().await.unwrap();
         assert_eq!(store.load_settings().await.unwrap().appearance.dark_theme.0, "antinote-vancouver");
         let before = store.load_settings().await.unwrap();

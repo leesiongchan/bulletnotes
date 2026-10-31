@@ -1,0 +1,11 @@
+import { Palette } from "std-widgets.slint";
+import { UiTheme } from "../types.slint";
+// Slint globals belong to each root window; keep standard widgets in its scheme.
+export component ThemeContext inherits Rectangle {
+    in property <UiTheme> theme;
+    width:0px; height:0px; visible:false;
+    accessible-role:none;
+    function apply-scheme() { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    init => { root.apply-scheme(); }
+    changed theme => { root.apply-scheme(); }
+}

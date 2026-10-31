@@ -28,7 +28,7 @@ deferred.
 Use **BN → Show Bulletnotes** to reopen the window. The default shortcut is
 Option+A on macOS and Alt+A on Windows/X11. Wayland global shortcuts are
 currently unavailable; use the window or tray menu instead. If another application owns it, keep using the menu and choose another
-combination in Appearance. Supported physical keys are A–Z, digits, Space and
+combination in Settings → General. Supported physical keys are A–Z, digits, Space and
 F1–F20 with at least one modifier. A failed change keeps the working shortcut.
 
 Hover near the top or bottom edge to reveal the matching header or footer.
@@ -106,18 +106,46 @@ also declines list items. Line movement preserves literal content, mixed line
 endings, and the final newline. Commands wait while native composition is active
 or its state is unknown, and respect read-only, recovery, and local-save barriers.
 
-## Appearance
+## General and Appearance
 
-Text size and paper controls appear before the theme collection. Command+comma
-opens these settings.
+Command+comma opens Settings, with **General** and **Appearance** categories.
+General offers **Start with a new note**, the global show/hide shortcut, and
+SilverBullet connection settings. Starting with a new note applies on launch;
+it preserves previous notes and their saved positions. The default restores the
+last cached note.
 
-Themes use grid-backed cards, eight color swatches, and separate sun
-and moon buttons. The sun assigns a palette to Light; the moon assigns it to Dark.
-Both preserve the current Light/Dark/System mode. Clicking the rest of a card
-assigns the currently effective slot. The 14 featured palettes appear first in
-their catalog order, followed by the remaining palettes. Cards use two columns
-when space permits and a single column in narrow windows. Settings controls use
-the desktop light/dark appearance independently of note colors.
+Appearance groups text, paper, window details, and themes. **Paper type** chooses
+the surface finish: Smooth removes grain, Bone gives a fine finish, Eggshell gives
+an organic grain, and
+Linen gives a woven texture. Explicit finishes use raised highlights on warm light
+paper and ink grain on dark or near-white paper, so the surface is visible
+without darkening the warm light palette. Explicit finishes work with every theme while
+preserving its colors. **Paper style** independently chooses Plain, Dots, Ruled,
+or Grid; **Paper intensity** controls the strength of dots and lines. The finish,
+style, and intensity apply throughout notes, settings, search, connection,
+recovery, About, and theme previews through the same paper renderer. Grain is
+suppressed under reduced transparency and increased contrast; Settings explains
+why the selected finish is hidden and retains that choice.
+
+**Keep bottom bar visible** keeps note controls visible while the note is active.
+Separate switches control note count, date, and the latest-note indicator. Their
+defaults preserve the existing information and automatic bar visibility.
+
+Themes use square cards with one continuous strip split into eight palette
+colors. Each card has one assignment button that cycles **Light → Dark → Both**;
+an unassigned theme starts at Light. The button announces the current assignment
+and the next action. Cycling restores the previous theme in a vacated slot,
+including after restart; if none exists, it uses a different built-in palette.
+Assignments save together and preserve the current Light/Dark/System mode.
+Clicking the rest of a card assigns the currently effective slot.
+
+The 14 featured palettes appear first in catalog order, followed by the remaining
+palettes. The gallery uses two columns in narrow windows and four in wider ones.
+The selected palette applies throughout the app: notes, search, settings,
+connection, recovery, and About share the same resolved colors. System appearance
+selects your saved light or dark palette; explicit Light/Dark mode keeps its
+selected palette everywhere. Previously saved Theme default paper choices load
+as Smooth.
 
 Paper, Graphite, Matcha and Rose are built in. Light and Dark assignments are
 independent; System follows desktop appearance changes. Font size (11–24

@@ -1,0 +1,45 @@
+import { UiTheme } from "../types.slint";
+import { PaperMaterial } from "paper-material.slint";
+export component PaperSurface inherits Rectangle {
+    in property <UiTheme> theme;
+    in property <string> paper-type:"smooth";
+    in property <string> paper-style:"plain";
+    in property <float> font-size-px:15;
+    in property <bool> material-effects:true;
+    in property <length> content-y:0px;
+    in property <length> top-clearance:16px;
+    out property <length> line-height:root.font-size-px * 1.6px;
+    background:root.theme.paper;
+    clip:true;
+    accessible-role:none;
+    PaperMaterial {width:parent.width; height:parent.height; active:root.material-effects; kind:root.paper-type; tint:root.theme.ink; dark:root.theme.dark; paper:root.theme.paper;}
+    private property <length> decoration-step:root.paper-style == "ruled" || root.paper-style == "grid" ? root.line-height : 18px;
+    private property <int> first-row:floor((-root.content-y - (root.paper-style == "ruled" ? root.top-clearance : root.paper-style == "grid" ? 5.35px : 0px)) / root.decoration-step);
+    private property <int> rows:ceil(root.height / root.decoration-step) + 2;
+    private property <int> columns:ceil(root.width / root.decoration-step) + 1;
+    for row in root.rows: Rectangle {
+        y: root.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? root.top-clearance - 3px : root.paper-style == "grid" ? 5.35px : -3px);
+        height: root.paper-style == "dots" ? 2px : root.paper-style == "grid" ? max(0.5px,1phx) : 1px;
+        width: parent.width;
+        visible: root.paper-style != "plain";
+        accessible-role: none;
+        background: root.paper-style == "ruled" || root.paper-style == "grid" ? root.theme.pattern : transparent;
+        for col in root.columns: Rectangle {
+            visible: root.paper-style == "dots";
+            x: col * 18px + 8px;
+            width: 1.5px;
+            height: 1.5px;
+            border-radius: 1px;
+            background: root.theme.pattern;
+            accessible-role: none;
+        }
+    }
+    for col in root.columns: Rectangle {
+        visible: root.paper-style == "grid";
+        x: col * root.decoration-step;
+        width: max(0.5px,1phx);
+        height: parent.height;
+        background: root.theme.pattern;
+        accessible-role: none;
+    }
+}

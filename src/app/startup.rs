@@ -17,7 +17,11 @@ pub async fn open(path: &Path, fallback: ConnectionId) -> Result<Startup, StoreE
         let mut settings = store.load_settings().await?;
         let connection = settings.active_connection.clone().unwrap_or(fallback);
         settings.active_connection = Some(connection.clone());
-        let last_page = store.last_cached_page(&connection).await?;
+        let last_page = if settings.start_with_new_note {
+            None
+        } else {
+            store.last_cached_page(&connection).await?
+        };
         Ok(Startup {
             store: store.clone(),
             settings,

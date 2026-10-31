@@ -167,3 +167,76 @@ async fn last_note_follows_visits_when_the_wall_clock_stalls_or_moves_backwards(
     );
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn start_with_new_note_preserves_the_previous_note() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("startup.sqlite");
+    let page = key("https://notes.example", "previous.md");
+    let store = StoreHandle::open(&path).await.unwrap();
+    store.create_draft(page.clone()).await.unwrap();
+    store
+        .save_local(page.clone(), "previous café".into(), LocalRevision(1))
+        .await
+        .unwrap();
+    store.record_visit(&page, 1).await.unwrap();
+    let mut json = serde_json::to_value(store.load_settings().await.unwrap()).unwrap();
+    json["start_with_new_note"] = true.into();
+    store
+        .save_settings(serde_json::from_value(json).unwrap())
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    let restored = startup::open(&path, page.connection.clone()).await.unwrap();
+    assert!(
+        restored.last_page.is_none(),
+        "new-note startup must skip reopening the previous page"
+    );
+    assert_eq!(
+        restored.store.load_page(&page).await.unwrap().unwrap().body,
+        "previous café"
+    );
+    restored.store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn older_settings_keep_the_existing_appearance_and_startup_defaults() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    store.shutdown().await.unwrap();
+    let legacy = r#"{"schema_version":1,"appearance":{"mode":"System","light_theme":"bulletnotes","dark_theme":"bulletnotes-dark","paper":"Plain","font_size":15.0},"imported_themes":[],"active_connection":null,"window":null,"hotkey":{"key":"KeyA","alt":true,"control":false,"shift":false,"command":false}}"#;
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute("INSERT INTO settings VALUES (1, ?1)", [legacy])
+        .unwrap();
+    drop(db);
+    let store = StoreHandle::open(&path).await.unwrap();
+    assert_eq!(store.load_settings().await.unwrap(), Default::default());
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_paper_type_loads_as_smooth_and_saves_the_explicit_value() {
+    use bulletnotes::theme::PaperType;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy-paper.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    let mut json = serde_json::to_value(store.load_settings().await.unwrap()).unwrap();
+    store.shutdown().await.unwrap();
+    json["appearance"]["paper_type"] = "theme".into();
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute("INSERT INTO settings VALUES (1, ?1)", [json.to_string()])
+        .unwrap();
+    drop(db);
+    let store = StoreHandle::open(&path).await.unwrap();
+    let settings = store.load_settings().await.unwrap();
+    assert_eq!(settings.appearance.paper_type, PaperType::Smooth);
+    store.save_settings(settings).await.unwrap();
+    store.shutdown().await.unwrap();
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let json: String = db
+        .query_row("SELECT value FROM settings", [], |row| row.get(0))
+        .unwrap();
+    let saved: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(saved["appearance"]["paper_type"], "smooth");
+}

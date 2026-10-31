@@ -1,6 +1,6 @@
 # Bulletnotes themes
 
-New installations default to System appearance, **Bulletnotes** for light, **Bulletnotes Dark** for dark, Plain paper, and 15 px text. Existing saved choices and imported theme IDs are preserved. The catalog contains 43 built-in themes. Settings, Connection, and About follow the branded light/dark appearance independently of the selected note palette.
+New installations default to System appearance, **Bulletnotes** for light, **Bulletnotes Dark** for dark, Plain paper, and 15 px text. Existing saved choices and imported theme IDs are preserved. The catalog contains 43 built-in themes. All app views, including Settings, Connection, recovery, search, and About, share the selected palette and accessibility adjustments. Paper finishes are Smooth (the default), Bone, Eggshell, and Linen; legacy Theme default choices load as Smooth.
 
 Themes are UTF-8 JSON palette files, at most 32,768 bytes. Version 1 requires `schemaVersion: 1`, a `name` of 1–32 Unicode scalars after trimming, `dark` as a boolean, and seven opaque `#RRGGBB` colors: `paper`, `surface`, `ink`, `muted`, `accent`, `line`, and `selection`. See [Bulletnotes](../assets/themes/bulletnotes.json) for a complete example.
 
@@ -22,7 +22,7 @@ palette and Markdown colors.
 
 Unknown fields are ignored on import and omitted on export. Duplicate keys are rejected recursively, including inside unknown fields. Invalid JSON, missing fields, unsupported versions, and invalid values reject the entire import. Files are data only; they cannot execute code or load remote resources.
 
-Every import receives a new local ID, even when its display name matches a built-in theme. Light and dark assignments, paper pattern, and text size remain separate preferences. The two built-in Bulletnotes themes add a faint static eggshell paper tooth. Imported palettes, including exported copies of Bulletnotes, use flat paper; materials are not part of schema 1. Increase Contrast and Reduce Transparency remove grain and decorative depth; Reduce Motion disables transitions. Native blur remains deferred.
+Every import receives a new local ID, even when its display name matches a built-in theme. Light/dark assignments, paper type, paper style, intensity, and text size remain separate preferences. Smooth has no grain; Bone, Eggshell, and Linen work with every palette, including imported copies. The same paper renderer applies finish and pattern throughout the app and in theme previews; materials remain application preferences rather than part of theme JSON schema 1. Increase Contrast and Reduce Transparency remove grain and decorative depth; Reduce Motion disables transitions. Native blur remains deferred.
 
 The built-in Bulletnotes, Bulletnotes Dark, Paper, Graphite, Matcha, and Rose palettes check normal text against paper/surface at 4.5:1, control boundaries at 3:1, and selected text at 4.5:1. Ratios are evaluated without rounding using the [W3C contrast calculation](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). New low-contrast file imports require confirmation before they enter the picker.
 Every theme already in the picker applies immediately when selected, including
@@ -32,9 +32,7 @@ The theme picker also bundles 14 featured palettes and 23 community palettes. Th
 palettes. Every bundled palette can be selected directly. Both light and dark assignments can use any palette. These are bundled snapshots and require no network access.
 
 The featured palettes are Vancouver, Tokyo Drift, Gundam Wing, Vendetta, Totoro, Mononoke, Piccolo, A24, Tartan, Agrabah, Muad'Dib, Knight, Sanrio, and Shadow Moses.
-The picker presents Bulletnotes and Bulletnotes Dark first, then those featured themes. Cards use a compact single column or two columns in wider windows. Each card's
-sun and moon assign its palette to Light and Dark independently, preserving the
-current appearance mode. Clicking the card assigns the currently effective slot.
+The picker presents Bulletnotes and Bulletnotes Dark first, then those featured themes. Square cards use two columns in narrow windows and four in wider windows. The eight swatches form one continuous segmented rectangle. One assignment icon cycles Light → Dark → Both, preserving appearance mode. Vacating a slot restores its previous palette (or a nonmatching built-in fallback); history survives restart and both assignments save atomically. Clicking the card assigns the currently effective slot.
 A native capture of the open Tartan note verified its displayed paper, text,
 heading, link, and syntax colors against Bulletnotes. Both native renderers apply
 macOS color conversion: Tartan background `#F3F1EB` displays as sRGB `#F5F4EF`,

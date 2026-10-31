@@ -122,7 +122,7 @@ export component PageBrowser inherits Rectangle {
     changed width => { root.cancel-drag(); root.reveal-selection(); }
     changed visible => { if (!root.visible) { root.cancel-drag(); } }
     changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
-    background:root.theme.paper;
+    background:transparent;
     Rectangle {
         x:24px;y:14px;width:parent.width - 48px;height:38px;border-radius:12px;
         background:root.theme.surface;border-width:query-input.has-focus ? 1px : 0px;border-color:root.theme.accent;

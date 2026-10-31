@@ -54,6 +54,8 @@ pub struct AppSettings {
     pub hotkey: HotkeySettings,
     #[serde(default)]
     pub search_view: SearchView,
+    #[serde(default)]
+    pub start_with_new_note: bool,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -65,6 +67,7 @@ impl Default for AppSettings {
             window: None,
             hotkey: HotkeySettings::default(),
             search_view: SearchView::List,
+            start_with_new_note: false,
         }
     }
 }

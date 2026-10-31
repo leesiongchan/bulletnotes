@@ -1,5 +1,6 @@
-import { VerticalBox, CheckBox } from "std-widgets.slint";
+import { VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
+import { SettingToggle } from "components/settings-controls.slint";
 import { UiTheme } from "types.slint";
 import { ActionButton, ChoiceButton } from "components/action-button.slint";
 component ConnectionField inherits Rectangle {
@@ -47,7 +48,7 @@ export component ConnectionPanel inherits Rectangle {
     callback test-connection();
     callback return-to-note();
     public function focus-panel() { url.focus-field(); }
-    background: root.theme.paper;
+    background: transparent;
     Text { x:24px; y:14px; text:"Connection"; font-size:21px; color:root.theme.ink; }
     ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
         x: parent.width - 44px; y: 9px; theme: root.theme;
@@ -65,7 +66,7 @@ export component ConnectionPanel inherits Rectangle {
             url := ConnectionField { theme:root.theme; text <=> root.server-url; label:"SilverBullet HTTPS server URL"; placeholder:"https://notes.example.com"; enabled: !root.busy; }
             Text { text:"Bearer token · optional"; color:root.theme.ink; font-size:12px; }
             ConnectionField { theme:root.theme; text <=> root.token; password:true; label:"SilverBullet bearer token"; placeholder:"Leave blank to use Keychain or public access"; enabled:!root.busy; }
-            CheckBox { text:"Remember token in Keychain"; checked <=> root.remember; enabled:!root.busy; }
+            SettingToggle { theme:root.theme; high-contrast:root.high-contrast; label:"Remember token securely"; checked <=> root.remember; enabled:!root.busy; }
             Text {
                 text:(root.automatic-mode ? "Connecting uses one temporary page" : "Testing uses one temporary page") + " in Quick Notes/Bulletnotes Probe to check safe updates, then removes it. Your existing notes stay untouched.";
                 wrap:word-wrap; color:root.theme.muted; font-size:13px;

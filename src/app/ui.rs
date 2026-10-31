@@ -4,8 +4,8 @@ use crate::{
     UiMarkdownColors, UiTheme, UiThemeSwatches,
     store::settings::AppSettings,
     theme::{
-        self, AppearanceMode, AppearanceSettings, PaperStyle, ResolvedTheme, SystemAppearance,
-        Theme, ThemeError, palette::ThemeEntry,
+        self, AppearanceMode, PaperIntensity, PaperStyle, PaperType, ResolvedTheme,
+        SystemAppearance, Theme, ThemeError,
     },
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
@@ -123,38 +123,22 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
         }
         .into(),
     );
+    window.set_paper_type(
+        match resolved.paper_type {
+            PaperType::Smooth => "smooth",
+            PaperType::Bone => "bone",
+            PaperType::Eggshell => "eggshell",
+            PaperType::Linen => "linen",
+        }
+        .into(),
+    );
     window.set_selected_theme_id(resolved.id.0.as_str().into());
 }
-fn settings_palette(
-    settings: &AppearanceSettings,
-    system: SystemAppearance,
-    themes: &[ThemeEntry],
-    high_contrast: bool,
-) -> Result<UiTheme, ThemeError> {
-    let dark = match settings.mode {
-        AppearanceMode::Light => false,
-        AppearanceMode::Dark => true,
-        AppearanceMode::System => system == SystemAppearance::Dark,
-    };
-    let id = if dark {
-        "bulletnotes-dark"
-    } else {
-        "bulletnotes"
-    };
-    let theme = &themes
-        .iter()
-        .find(|entry| entry.id.0 == id)
-        .ok_or(ThemeError::InvalidSettings)?
-        .theme;
-    let adjusted = high_contrast.then(|| theme::accessibility::high_contrast(theme));
-    Ok(palette(
-        adjusted.as_ref().unwrap_or(theme),
-        theme.grid.unwrap_or(theme.line),
-    ))
-}
-
 fn apply_about_presentation(window: &AboutWindow, source: &AppWindow) {
-    window.set_theme(source.get_settings_theme());
+    window.set_theme(source.get_theme());
+    window.set_paper_type(source.get_paper_type());
+    window.set_paper_style(source.get_paper_style());
+    window.set_font_size_px(source.get_font_size_px());
     window.set_high_contrast(source.get_system_high_contrast());
     window.set_reduce_transparency(source.get_prefers_reduced_transparency());
 }
@@ -183,12 +167,6 @@ pub fn present_settings(
     window.set_search_cards(settings.search_view == crate::store::settings::SearchView::Cards);
     let themes = settings.themes().map_err(|_| ThemeError::InvalidSettings)?;
     let resolved = theme::resolve_theme(&settings.appearance, system, &themes)?;
-    let chrome = settings_palette(
-        &settings.appearance,
-        system,
-        &themes,
-        window.get_system_high_contrast(),
-    )?;
     let native_order = [
         "bulletnotes",
         "bulletnotes-dark",
@@ -221,10 +199,7 @@ pub fn present_settings(
             name: entry.theme.name.as_str().into(),
             palette: palette(
                 &entry.theme,
-                entry
-                    .theme
-                    .grid
-                    .unwrap_or_else(|| entry.theme.paper.mix(entry.theme.ink, 0.10)),
+                theme::resolve_paper_pattern(&entry.theme, settings.appearance.paper_intensity),
             ),
             swatches: {
                 let theme = &entry.theme;
@@ -285,7 +260,19 @@ pub fn present_settings(
         }
         .into(),
     );
-    window.set_settings_theme(chrome);
+    window.set_start_with_new_note(settings.start_with_new_note);
+    window.set_paper_intensity(
+        match settings.appearance.paper_intensity {
+            PaperIntensity::Subtle => "subtle",
+            PaperIntensity::Clear => "clear",
+            PaperIntensity::Bold => "bold",
+        }
+        .into(),
+    );
+    window.set_keep_bottom_bar_visible(settings.appearance.keep_bottom_bar_visible);
+    window.set_show_note_count(settings.appearance.show_note_count);
+    window.set_show_note_date(settings.appearance.show_note_date);
+    window.set_show_newest_indicator(settings.appearance.show_newest_indicator);
     apply_theme(window, &resolved);
     Ok(())
 }

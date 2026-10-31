@@ -1,9 +1,10 @@
-import { PaperMaterial } from "paper-material.slint";
+import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, MarkdownCommand, MarkdownEdit } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
     in property <bool> paper-material:false;
+    in property <string> paper-type:"smooth";
     in-out property <string> text;
     in property <[TextInputDecoration]> decorations;
     in property <[TextInputMarker]> markers;
@@ -12,7 +13,7 @@ export component NoteEditor inherits Rectangle {
     in property <bool> read-only:false;
     in property <length> top-clearance:16px;
     out property <float> scroll-y:-scroll.content-y / 1px;
-    out property <length> line-height:root.font-size-px * 1.6px;
+    out property <length> line-height:paper.line-height;
     private property <float> line-factor:root.line-height / max(1px,measure-one.font-metrics.ascent - measure-one.font-metrics.descent);
     out property <int> selection-anchor: input.anchor-position-byte-offset;
     out property <int> selection-caret: input.cursor-position-byte-offset;
@@ -56,7 +57,11 @@ export component NoteEditor inherits Rectangle {
     public function restore-selection(anchor: int, caret: int, y: float) { input.set-selection-offsets(anchor,caret); scroll.content-y = -max(0,y) * 1px; }
     background: root.theme.paper;
     clip: true;
-    PaperMaterial { width:parent.width; height:parent.height; active:root.paper-material; tint:root.theme.ink; strength:root.theme.dark ? 0.015 : 0.005; }
+    paper := PaperSurface {
+        width:parent.width; height:parent.height; theme:root.theme;
+        paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+        material-effects:root.paper-material; content-y:scroll.content-y; top-clearance:root.top-clearance;
+    }
     measure-one := Text {
         visible: false;
         text: "Ag";
@@ -66,35 +71,6 @@ export component NoteEditor inherits Rectangle {
         wrap: no-wrap;
     }
 
-    private property <length> decoration-step:root.paper-style == "ruled" || root.paper-style == "grid" ? root.line-height : 18px;
-    private property <int> first-row:floor((-scroll.content-y - (root.paper-style == "ruled" ? root.top-clearance : root.paper-style == "grid" ? 5.35px : 0px)) / root.decoration-step);
-    private property <int> rows:ceil(root.height / root.decoration-step) + 2;
-    private property <int> columns:ceil(root.width / root.decoration-step) + 1;
-    for row in root.rows: Rectangle {
-        y: scroll.content-y + (root.first-row + row + 1) * root.decoration-step + (root.paper-style == "ruled" ? root.top-clearance - 3px : root.paper-style == "grid" ? 5.35px : -3px);
-        height: root.paper-style == "dots" ? 2px : root.paper-style == "grid" ? max(0.5px,1phx) : 1px;
-        width: parent.width;
-        visible: root.paper-style != "plain";
-        accessible-role: none;
-        background: root.paper-style == "ruled" || root.paper-style == "grid" ? root.theme.pattern : transparent;
-        for col in root.columns: Rectangle {
-            visible: root.paper-style == "dots";
-            x: col * 18px + 8px;
-            width: 1.5px;
-            height: 1.5px;
-            border-radius: 1px;
-            background: root.theme.pattern;
-            accessible-role: none;
-        }
-    }
-    for col in root.columns: Rectangle {
-        visible: root.paper-style == "grid";
-        x: col * root.decoration-step;
-        width: max(0.5px,1phx);
-        height: parent.height;
-        background: root.theme.pattern;
-        accessible-role: none;
-    }
     context := ContextMenuArea {
         Menu {
             MenuItem { title:"Move note to Trash"; enabled:!root.read-only; activated => { root.move-to-trash(); } }
