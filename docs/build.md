@@ -109,6 +109,11 @@ uses the real store and automatic sync. Close an older app normally before
 starting a new version against the same store; the writer lock prevents
 simultaneous use.
 
+On macOS, `rustup run 1.99.1 cargo run --example chrome-check --locked` opens a
+short-lived generated window and verifies that the close/minimize/zoom controls
+keep fixed frames through repeated hover reveals. It also checks that revealed
+controls remain enabled. This probe opens no store, credentials, or network.
+
 ## Desktop integration
 
 macOS preserves its existing Application Support path and Keychain identifiers.

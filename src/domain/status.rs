@@ -35,9 +35,8 @@ pub fn status_text(local: LocalSaveState, remote: SyncState, matches_base: bool)
             SyncState::Conflict => "Conflict · saved locally",
             SyncState::Failed => "Cannot sync · saved locally",
             SyncState::Synced if matches_base => "Synced",
-            SyncState::Pending | SyncState::Syncing | SyncState::Synced => {
-                "Saved locally · sync pending"
-            }
+            SyncState::Syncing => "Syncing with SilverBullet…",
+            SyncState::Pending | SyncState::Synced => "Saved locally · sync pending",
         },
     }
 }

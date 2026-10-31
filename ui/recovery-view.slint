@@ -20,7 +20,7 @@ component SourcePane inherits Rectangle {
             x:8px; y:8px; width:max(1px,parent.visible-width - 24px);
             height:max(parent.visible-height - 16px,self.preferred-height);
             text <=> root.text; wrap:word-wrap; single-line:false; read-only:root.read-only;
-            color:root.theme.ink; font-family:"Menlo"; font-size:12px;
+            color:root.theme.ink; font-family:"DM Mono"; font-size:12px;
             selection-background-color:root.theme.cursor; selection-foreground-color:root.theme.ink;
             accessible-label:root.label;
             input-method-hints:{capitalization:none,auto-correct:false,auto-complete:false};

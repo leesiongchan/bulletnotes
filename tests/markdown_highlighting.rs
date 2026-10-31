@@ -93,6 +93,98 @@ fn source_is_not_colored_inside_code_blocks() {
 }
 
 #[test]
+fn fenced_languages_highlight_tokens_without_changing_source() {
+    use slint::Model;
+    let source = "```rust\r\nlet café = \"日本語\"; // comment\r\n```\r\n";
+    let window = setup(source);
+    let spans = window.invoke_highlight_markdown(source.into(), window.get_theme(), false);
+    let at = |offset: usize| {
+        spans
+            .iter()
+            .find(|s| s.start <= offset as i32 && (offset as i32) < s.end)
+            .map(|s| s.foreground)
+    };
+    assert_ne!(
+        at(source.find("let").unwrap()),
+        at(source.find("日本語").unwrap()),
+        "keywords and strings need distinct styling"
+    );
+    assert_eq!(window.get_note_text(), source);
+    let unknown = "```unknown-language\nlet x = \"literal\";\n```\n";
+    let spans = window.invoke_highlight_markdown(unknown.into(), window.get_theme(), false);
+    assert!(
+        spans
+            .iter()
+            .filter(|s| s.start >= 20 && s.end < 42)
+            .all(|s| s.foreground == window.get_theme().ink)
+    );
+}
+
+#[test]
+fn incomplete_code_unicode_ranges_and_budget_fallback_are_safe() {
+    use slint::Model;
+    let window = setup("");
+    let source = "```rust\r\nlet café = \"日本語\";\r\n";
+    let spans = window.invoke_highlight_markdown(source.into(), window.get_theme(), false);
+    let mut end = 0;
+    for span in spans.iter() {
+        assert!(span.start >= end && span.end > span.start);
+        assert!(
+            source.is_char_boundary(span.start as usize)
+                && source.is_char_boundary(span.end as usize)
+        );
+        end = span.end;
+    }
+    assert!(
+        spans.row_count() > 2,
+        "an unclosed fence still highlights valid code"
+    );
+    let source = format!("```rust\n{}\n```\n", "let value = \"text\";\n".repeat(2000));
+    let spans = window.invoke_highlight_markdown(source.as_str().into(), window.get_theme(), false);
+    assert!(
+        spans
+            .iter()
+            .all(|span| span.end <= 7 || span.start as usize >= source.len() - 4),
+        "oversized blocks fall back to plain code, retaining fence styling"
+    );
+    let source = format!(
+        "{}\n```rust\nlet value = \"text\";\n```",
+        "plain prose\n".repeat(12000)
+    );
+    let spans = window.invoke_highlight_markdown(source.as_str().into(), window.get_theme(), false);
+    assert!(
+        spans.iter().all(
+            |span| span.end as usize <= source.find("let value").unwrap()
+                || span.start as usize >= source.rfind("```").unwrap()
+        ),
+        "oversized notes retain source without tokenizing code"
+    );
+}
+
+#[test]
+fn unchanged_code_reuses_colors_at_new_unicode_offsets() {
+    use slint::Model;
+    let window = setup("");
+    let code = "```rust\nlet value = \"text\";\n```\n";
+    let initial: Vec<_> = window
+        .invoke_highlight_markdown(code.into(), window.get_theme(), false)
+        .iter()
+        .collect();
+    let prefix = "日本語\n\n";
+    let shifted = format!("{prefix}{code}");
+    let shifted: Vec<_> = window
+        .invoke_highlight_markdown(shifted.as_str().into(), window.get_theme(), false)
+        .iter()
+        .collect();
+    assert_eq!(initial.len(), shifted.len());
+    for (original, shifted) in initial.iter().zip(shifted) {
+        assert_eq!(shifted.start, original.start + prefix.len() as i32);
+        assert_eq!(shifted.end, original.end + prefix.len() as i32);
+        assert_eq!(shifted.foreground, original.foreground);
+    }
+}
+
+#[test]
 fn theme_updates_and_high_contrast_recolor_without_touching_source() {
     let source = "# Heading\n[link](https://example.com)\n";
     let window = setup(source);

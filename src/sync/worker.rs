@@ -42,6 +42,8 @@ pub struct SyncSnapshot {
     pub conflicts: usize,
     pub error: Option<SyncError>,
     pub page_errors: BTreeMap<PageKey, SyncError>,
+    /// Work executing in a lane; excludes queued admission and catalogue polling.
+    pub executing: HashSet<PageKey>,
     pub generation: u64,
 }
 #[derive(Clone)]
@@ -78,6 +80,7 @@ impl SyncHandle {
             conflicts: 0,
             error: None,
             page_errors: BTreeMap::new(),
+            executing: HashSet::new(),
             generation: 0,
         };
         let (snapshot, receiver) = watch::channel(initial);
@@ -426,6 +429,25 @@ struct Admission {
     key: PageKey,
     shared: Arc<Shared>,
     load: Arc<AtomicUsize>,
+}
+struct Execution {
+    key: PageKey,
+    shared: Arc<Shared>,
+}
+impl Execution {
+    fn start(key: PageKey, shared: Arc<Shared>) -> Self {
+        shared.snapshot.send_modify(|snapshot| {
+            snapshot.executing.insert(key.clone());
+        });
+        Self { key, shared }
+    }
+}
+impl Drop for Execution {
+    fn drop(&mut self) {
+        self.shared.snapshot.send_modify(|snapshot| {
+            snapshot.executing.remove(&self.key);
+        });
+    }
 }
 impl Drop for Admission {
     fn drop(&mut self) {
@@ -855,6 +877,7 @@ async fn run_lane(
             shared: shared.clone(),
             load: load.clone(),
         };
+        let _execution = Execution::start(work_key(&work).clone(), shared.clone());
         // Cancellation retains every claimed payload as unknown during shutdown.
         let result = tokio::select! {biased;
             _=async{loop{if control.changed().await.is_err()||control.borrow().stop{break;}}}=>{break;},

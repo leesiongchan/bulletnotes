@@ -1,11 +1,14 @@
+export global Motion { in-out property <bool> reduced:false; }
 import { Palette } from "std-widgets.slint";
 import { UiTheme } from "../types.slint";
 // Slint globals belong to each root window; keep standard widgets in its scheme.
 export component ThemeContext inherits Rectangle {
     in property <UiTheme> theme;
+    in property <bool> reduced-motion:false;
+    changed reduced-motion => { Motion.reduced = root.reduced-motion; }
     width:0px; height:0px; visible:false;
     accessible-role:none;
     function apply-scheme() { Palette.color-scheme = root.theme.dark ? ColorScheme.dark : ColorScheme.light; }
-    init => { root.apply-scheme(); }
+    init => { root.apply-scheme(); Motion.reduced = root.reduced-motion; }
     changed theme => { root.apply-scheme(); }
 }

@@ -51,7 +51,7 @@ export component SearchResult inherits FocusScope {
             height:root.cards ? min(150px,max(48px,parent.height - 76px)) : 48px;
             text:root.cards ? (root.data.excerpt != "" ? root.data.excerpt : root.data.title) : (root.data.list-excerpt != "" ? root.data.list-excerpt : root.data.excerpt != "" ? root.data.excerpt : root.data.title);
             text-decorations:root.cards ? root.data.excerpt-highlights : root.data.list-excerpt-highlights;
-            font-family:"Menlo"; font-size:13px;
+            font-family:"DM Mono"; font-size:13px;
             color:root.theme.ink; wrap:word-wrap; max-lines:root.cards ? 9 : 3; overflow:elide;
         }
         Text {

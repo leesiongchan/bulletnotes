@@ -1,8 +1,15 @@
+import { Motion } from "theme-context.slint";
 export component ThemeScrollbar inherits Rectangle {
     in property <color> thumb-color;
     in property <length> content-height;
     in property <length> visible-height;
     in-out property <length> content-y;
+    in property <bool> reduced-motion:Motion.reduced;
+    private property <bool> recent:false;
+    private property <bool> interacting:touch.has-hover || touch.pressed;
+    changed interacting => {root.recent = true; idle.start(); idle.restart();}
+    changed content-y => { root.recent = true; idle.start(); idle.restart(); }
+    idle := Timer { interval:900ms; running:false; triggered => { root.recent = false; self.stop(); } }
     private property <length> maximum:max(0px,root.content-height - root.visible-height);
     private property <length> travel:max(1px,root.height - thumb.height - 4px);
     width: 12px;
@@ -16,14 +23,16 @@ export component ThemeScrollbar inherits Rectangle {
     accessible-action-increment => { root.content-y = max(-root.maximum,root.content-y - 40px); }
     accessible-action-decrement => { root.content-y = min(0px,root.content-y + 40px); }
     thumb := Rectangle {
-        x: 3px;
+        x: 3.5px;
         y: 2px + root.travel * clamp(-root.content-y / max(1px,root.maximum),0,1);
-        width: 6px;
+        width: 5px;
         height: min(root.height - 4px,max(24px,(root.height - 4px) * root.visible-height / max(1px,root.content-height)));
         border-radius: 3px;
         background: root.thumb-color;
+        opacity: root.recent || touch.has-hover || touch.pressed ? 1 : 0;
+        animate opacity { duration:root.reduced-motion || root.recent || touch.has-hover || touch.pressed ? 0ms : 180ms; }
     }
-    TouchArea {
+    touch := TouchArea {
         private property <length> pressed-value;
         pointer-event(event) => {
             if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {

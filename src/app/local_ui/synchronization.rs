@@ -252,7 +252,9 @@ impl State {
         if !snapshot.writable || editor.permission() == Permission::ReadOnly {
             return SyncState::ReadOnly;
         }
-        if facts.is_none_or(|facts| facts.pending || facts.deleted) {
+        if snapshot.executing.contains(editor.key()) {
+            SyncState::Syncing
+        } else if facts.is_none_or(|facts| facts.pending || facts.deleted) {
             SyncState::Pending
         } else {
             SyncState::Synced

@@ -188,11 +188,11 @@ fn circular_idle_focus_and_contrast_are_distinct() {
     let ui = chrome_window();
     let idle = ui.window().take_snapshot().unwrap();
     // The normal fine edge must strengthen when accessibility contrast is enabled.
-    let idle_edge = chrome_pixel(&ui, 463, 22);
+    let idle_edge = chrome_pixel(&ui, 463, 16);
     ui.set_system_high_contrast(true);
     let contrast = ui.window().take_snapshot().unwrap();
     assert!(idle.as_bytes() != contrast.as_bytes());
-    assert_ne!(chrome_pixel(&ui, 463, 22), idle_edge);
+    assert_ne!(chrome_pixel(&ui, 463, 16), idle_edge);
     ui.window()
         .dispatch_event(slint::platform::WindowEvent::KeyPressed {
             text: slint::platform::Key::F6.into(),

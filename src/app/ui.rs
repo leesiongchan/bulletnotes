@@ -100,8 +100,57 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
             }
         }
     });
-    window.on_highlight_markdown(|source, palette, high_contrast| {
-        ModelRc::from(super::markdown::decorations(&source, &palette, high_contrast).as_slice())
+    let cache = std::cell::RefCell::new(None);
+    window.on_highlight_markdown(move |source, palette, high_contrast| {
+        let mut cache = cache.borrow_mut();
+        if let Some((text, previous, contrast, spans)) = cache.as_ref()
+            && text == &source
+            && previous == &palette
+            && contrast == &high_contrast
+        {
+            return ModelRc::clone(spans);
+        }
+        let spans = ModelRc::from(
+            super::markdown::decorations(&source, &palette, high_contrast).as_slice(),
+        );
+        *cache = Some((source, palette, high_contrast, spans.clone()));
+        spans
+    });
+    let weak = window.as_weak();
+    window.on_code_layout_changed(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let source = window.get_note_text();
+        let ranges = super::code_highlighting::block_ranges(&source);
+        if ranges.is_empty() {
+            window.set_code_panels(ModelRc::default());
+            return;
+        }
+        let anchor = window.get_editor_anchor();
+        let caret = window.get_editor_caret();
+        let (start, end) = (anchor.min(caret), anchor.max(caret));
+        let markers: Vec<_> = super::markdown::markers(&source, &window.get_theme())
+            .into_iter()
+            .filter(|marker| {
+                !(marker.start..=marker.end).contains(&caret)
+                    && !(start < marker.end && end > marker.start)
+            })
+            .collect();
+        window.set_code_layout_markers(ModelRc::from(markers.as_slice()));
+        let panels: Vec<_> = ranges
+            .into_iter()
+            .filter_map(|range| {
+                let end = super::code_highlighting::layout_end(&source, range.end);
+                let (Ok(start), Ok(end)) = (i32::try_from(range.start), i32::try_from(end)) else {
+                    return None;
+                };
+                let top = window.invoke_measure_code_offset(start);
+                let bottom = window.invoke_measure_code_offset(end);
+                Some(crate::CodePanel { top, bottom })
+            })
+            .collect();
+        window.set_code_panels(ModelRc::from(panels.as_slice()));
     });
     window.on_mark_markdown(|source, palette| {
         ModelRc::from(super::markdown::markers(&source, &palette).as_slice())

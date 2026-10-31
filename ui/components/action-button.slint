@@ -21,18 +21,15 @@ export component ActionButton inherits FocusScope {
     }
     Rectangle {
         border-radius: root.circular ? self.height / 2 : 7px;
-        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : (root.circular ? root.theme.paper : transparent);
+        background: root.selected || touch.pressed || touch.has-hover ? root.theme.selection : transparent;
         border-width: root.has-focus ? 2px : (root.high-contrast && root.circular ? 1px : 0px);
         border-color: root.has-focus ? root.theme.accent : (root.high-contrast ? root.theme.ink : root.theme.line.with-alpha(0.3));
-        drop-shadow-offset-y: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? 1px : 0px;
-        drop-shadow-blur: root.circular && root.material-effects && !root.high-contrast ? 5px : 0px;
-        drop-shadow-color: root.circular && root.material-effects && !root.high-contrast && !touch.pressed ? root.theme.ink.with-alpha(0.14) : transparent;
         Image {
             source: root.icon;
             colorize: root.enabled ? root.theme.ink : root.theme.muted;
             opacity: root.enabled ? 1 : 0.45;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
         }

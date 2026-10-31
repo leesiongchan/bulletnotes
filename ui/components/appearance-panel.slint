@@ -62,7 +62,7 @@ component ThemeCard inherits FocusScope {
         TouchArea { clicked => { root.focus(); root.clicked(); } }
         Text {
             x:12px; y:12px; width:parent.width - 64px; height:42px;
-            text:root.option.name; font-family:"Menlo"; font-size:12px;
+            text:root.option.name; font-family:"DM Mono"; font-size:12px;
             color:root.option.palette.ink; wrap:word-wrap; max-lines:2; overflow:elide;
         }
         Rectangle {
@@ -121,6 +121,7 @@ export component AppearancePanel inherits Rectangle {
     in property <bool> hotkey-busy:false;
     callback return-to-note();
     callback show-connection();
+    callback show-recovery();
     callback apply-hotkey();
     callback changed();
     callback theme-selected(string);
@@ -214,6 +215,16 @@ export component AppearancePanel inherits Rectangle {
                         clicked => {root.show-connection();}
                     }
                 }
+                SettingsHeading {theme:root.theme; text:"Recovery";}
+                SettingsGroup {
+                    theme:root.theme;
+                    Text {text:"Restore deleted notes, review sync conflicts, or recover a kept version."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    ChoiceButton {
+                        text:"Open recovery…"; label:"Changes, Trash, and kept versions";
+                        theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                        clicked => {root.show-recovery();}
+                    }
+                }
             }
             appearance-content := VerticalBox {
                 visible:root.category == "appearance";
@@ -240,7 +251,7 @@ export component AppearancePanel inherits Rectangle {
                             paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
                             material-effects:root.material-effects && !root.high-contrast;
                         }
-                        Text {x:16px; y:14px; text:"A little space to think."; font-family:"Menlo"; font-size:14px; color:root.theme.ink;}
+                        Text {x:16px; y:14px; text:"A little space to think."; font-family:"DM Mono"; font-size:14px; color:root.theme.ink;}
                         Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == "bone" ? "Bone · fine, understated grain" : root.paper-type == "eggshell" ? "Eggshell · soft, organic grain" : root.paper-type == "linen" ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:12px; color:root.theme.muted; overflow:elide;}
                     }
                     HorizontalLayout {
@@ -287,7 +298,6 @@ export component AppearancePanel inherits Rectangle {
                     SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Keep bottom bar visible"; description:"Keep navigation and note details in view while the note is active."; checked <=> root.keep-bottom-bar-visible; toggled => {root.changed();}}
                     SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Show note count"; checked <=> root.show-note-count; toggled => {root.changed();}}
                     SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Show note date"; checked <=> root.show-note-date; toggled => {root.changed();}}
-                    SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Show latest-note indicator"; description:"Mark the front of the scratchpad stack when the bottom bar is hidden."; checked <=> root.show-newest-indicator; toggled => {root.changed();}}
                 }
                 SettingsHeading {theme:root.theme; text:"Appearance";}
                 SettingsGroup {

@@ -142,7 +142,8 @@ impl State {
                     )
                     || matches!(
                         self.sync_state(editor),
-                        crate::domain::status::SyncState::Authentication
+                        crate::domain::status::SyncState::Offline
+                            | crate::domain::status::SyncState::Authentication
                             | crate::domain::status::SyncState::Failed
                             | crate::domain::status::SyncState::Conflict
                     ),

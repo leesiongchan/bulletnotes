@@ -240,7 +240,7 @@ export component PageBrowser inherits Rectangle {
     ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {
         x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
-        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"Menlo";font-size:13px;horizontal-alignment:center; }
+        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"DM Mono";font-size:13px;horizontal-alignment:center; }
         if root.can-create: Rectangle {
             y:38px;width:parent.width;height:38px;border-radius:19px;background:root.theme.surface;
             ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }

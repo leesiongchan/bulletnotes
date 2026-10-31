@@ -255,9 +255,11 @@ fn grid_pitch_and_text_inset_match_editor_geometry() {
     let input = inner.focus_item.borrow().upgrade().unwrap();
     assert!(input.downcast::<i_slint_core::items::TextInput>().is_some());
     assert_eq!(input.map_to_window(input.geometry().origin).x, 45.0);
-    let ink_rows: Vec<_> = (0..image.height() as usize)
+    // Measure editor glyphs only; the persistent sync indicator also uses ink.
+    let inset = (45.0 * scale) as usize;
+    let ink_rows: Vec<_> = (0..image.height() as usize - (70.0 * scale) as usize)
         .filter(|&y| {
-            pixels[y * image.width() as usize..(y + 1) * image.width() as usize]
+            pixels[y * image.width() as usize + inset..(y + 1) * image.width() as usize - inset]
                 .iter()
                 .any(|p| p[0] > 180 && p[1] < 80 && p[2] < 80)
         })

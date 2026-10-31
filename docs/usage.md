@@ -5,7 +5,7 @@ currently a development build; input, accessibility, selection, performance, and
 distribution release gates remain open. The note window has solid paper. Markdown source stays visible and editable,
 with bold first/second-level headings, regular-weight lower headings, true bold and
 italics (including combined emphasis), muted punctuation and strikethrough text,
-underlined link destinations, and subtle code backgrounds. Heading, link, and syntax colors
+underlined link destinations, and continuous code-block backgrounds with local language highlighting. Heading, link, and syntax colors
 follow the theme’s Markdown roles when supplied; text keeps the selected base size and line spacing.
 Rows and grid cells use 1.6 times the selected font size, with half-point grid
 lines (at least one physical pixel) and a 45-point text inset. Font and paper
@@ -72,8 +72,9 @@ stack when the query is empty; dragging a checked note moves the selected block
 together. Explicit order is local to the connection and survives restart without
 renaming notes or syncing their order. Edits, visits, and sync do not implicitly
 reorder existing notes; new scratchpads enter at the front. Command+1 jumps to
-the front. The footer shows `1 of N` there, and a
-small accent dot marks it while controls are hidden. Ordinary SilverBullet pages
+the front. The footer shows `1 of N` there. Sync status remains available in Connection settings and in the footer when space
+permits; failures still show an attention message. There is no permanent corner
+dot. Recovery tools are under **Settings → General → Recovery**. Ordinary SilverBullet pages
 have no stack position; Jump to Newest returns to scratchpads.
 
 Existing generated filenames supply their creation time. Manually named legacy
@@ -128,8 +129,8 @@ suppressed under reduced transparency and increased contrast; Settings explains
 why the selected finish is hidden and retains that choice.
 
 **Keep bottom bar visible** keeps note controls visible while the note is active.
-Separate switches control note count, date, and the latest-note indicator. Their
-defaults preserve the existing information and automatic bar visibility.
+Separate switches control note count and date. Sync failures remain visible without a permanent corner indicator. The former
+latest-note-dot switch is retired.
 
 Themes use square cards with one continuous strip split into eight palette
 colors. Each card has one assignment button that cycles **Light → Dark → Both**;
@@ -177,6 +178,10 @@ names cannot overwrite a built-in theme identity.
 
 ## Connection and recovery
 
+Open **Settings → General → Recovery** to review Changes, restore items from
+Trash, or recover kept versions. The writing toolbar retains the normal delete
+action; recoverable data and sync safeguards are unchanged.
+
 Connection settings target an HTTPS SilverBullet server; the initial endpoint is
 `https://notes.harflix.lol`. Tokens are stored in macOS Keychain, Windows Credential Manager, or Linux Secret
 Service only when chosen; session-only use remains available. Linux needs a running
@@ -217,3 +222,14 @@ attribution.
 
 Run `scripts/check.sh` for formatting, strict all-feature Clippy, and automated
 regressions.
+
+The menu bar shows only the handwritten b, adapting to system light/dark appearance
+independently of the note theme. Scrollbars reveal on scrolling or edge hover,
+remain visible while dragging, and fade after inactivity. DM Mono is bundled for
+writing and previews (including italic and medium styles), with DM Sans for controls.
+Toolbar icons share fine rounded strokes and quiet hover/focus states.
+
+Fenced code blocks can declare a language, for example `rust`, `js`, or `python`.
+Unknown languages and oversized code remain plain and editable; highlighting is
+limited to 32 KiB per block and 128 KiB per note. Fences stay visible, source bytes
+remain unchanged, and highlighting runs locally without sending code to a service.

@@ -33,6 +33,7 @@ pub mod diagnostics_ui;
 
 mod lifecycle;
 
+mod code_highlighting;
 mod markdown;
 
 mod source_commands;

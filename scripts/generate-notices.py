@@ -59,6 +59,13 @@ with tempfile.TemporaryDirectory(prefix="bulletnotes-notices-") as temporary:
     if components:
         supplement = "<section><h2>Slint Royalty-free License 2.0</h2><p>" + html.escape("; ".join(components)) + "</p><pre>" + html.escape(full_text.decode()) + "</pre></section>"
         rendered = rendered.replace("</html>", supplement + "</html>")
+    font_notices = "".join(
+        "<section><h2>" + name + "</h2><pre>" + html.escape(
+            (root / "site/assets/fonts" / license_name).read_text(encoding="utf-8")
+        ) + "</pre></section>"
+        for name, license_name in [("DM Mono", "dm-mono-OFL.txt"), ("DM Sans", "dm-sans-OFL.txt")]
+    )
+    rendered = rendered.replace("</html>", font_notices + "</html>")
     destination = args.output or root / "packaging/ThirdPartyNotices.html"
-    destination.write_text(rendered, encoding="utf-8")
+    destination.write_text("\n".join(line.rstrip() for line in rendered.splitlines()) + "\n", encoding="utf-8")
     print("Runtime notices generated; covered " + str(len(components)) + " custom Slint license warnings with hash-verified full text.")

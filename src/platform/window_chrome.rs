@@ -82,10 +82,11 @@ pub fn configure(window: &slint::Window) -> ProbeResult<()> {
     Ok(())
 }
 fn show_buttons(window: &NSWindow, visible: bool) {
+    // Keep native controls in layout: hiding/repositioning them causes AppKit to
+    // reset their geometry during the reveal animation.
     for button in standard_buttons(window) {
         button.setEnabled(visible);
         button.setAlphaValue(if visible { 1.0 } else { 0.0 });
-        button.setHidden(!visible);
     }
 }
 fn standard_buttons(
@@ -99,45 +100,14 @@ fn standard_buttons(
     .into_iter()
     .filter_map(|kind| window.standardWindowButton(kind))
 }
-fn align_buttons(window: &NSWindow) {
-    for button in standard_buttons(window) {
-        // SAFETY: the live window and retained standard buttons are accessed on the main thread.
-        if let Some(parent) = unsafe { button.superview() } {
-            let frame = button.frame();
-            let bounds = parent.convertRect_toView(frame, None);
-            let delta =
-                window.frame().size.height - 22.0 - bounds.origin.y - bounds.size.height / 2.0;
-            button.setFrameOrigin(objc2_foundation::NSPoint::new(
-                frame.origin.x,
-                frame.origin.y + if parent.isFlipped() { -delta } else { delta },
-            ));
-        }
-    }
-}
-fn animate_buttons(
-    window: &Retained<NSWindow>,
-    visible: bool,
-    immediate: bool,
-    generation: &Rc<Cell<u64>>,
-) {
-    let current = generation.get().wrapping_add(1);
-    generation.set(current);
+fn animate_buttons(window: &Retained<NSWindow>, visible: bool, immediate: bool) {
     if immediate {
         show_buttons(window, visible);
-        if visible {
-            align_buttons(window);
-        }
         return;
     }
     let buttons: Vec<_> = standard_buttons(window).collect();
     for button in &buttons {
         button.setEnabled(visible);
-        if visible {
-            button.setHidden(false);
-        }
-    }
-    if visible {
-        align_buttons(window);
     }
     let targets = buttons.clone();
     let changes = RcBlock::new(move |context: NonNull<NSAnimationContext>| {
@@ -149,25 +119,13 @@ fn animate_buttons(
                 .setAlphaValue(if visible { 1.0 } else { 0.0 });
         }
     });
-    let generation = generation.clone();
-    let native = window.clone();
-    let completion = RcBlock::new(move || {
-        if visible && generation.get() == current {
-            align_buttons(&native);
-        }
-        if !visible && generation.get() == current {
-            for button in &buttons {
-                button.setHidden(true);
-            }
-        }
-    });
-    NSAnimationContext::runAnimationGroup_completionHandler(&changes, Some(&completion));
+    NSAnimationContext::runAnimationGroup_completionHandler(&changes, None);
 }
 
 pub struct ChromeMonitor {
     token: Retained<AnyObject>,
     notifications: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
-    _generation: Rc<Cell<u64>>,
+    _lifetime: Rc<()>,
 }
 impl ChromeMonitor {
     pub fn install<W: ChromeWindow + 'static>(
@@ -176,16 +134,13 @@ impl ChromeMonitor {
     ) -> ProbeResult<Self> {
         configure(window.window())?;
         let native = native_window(window.window())?;
-        if W::FLOATING {
-            align_buttons(&native);
-        }
-        let generation = Rc::new(Cell::new(0));
+        let lifetime = Rc::new(());
         show_buttons(&native, window.visible_edges().0);
-        let weak_generation = Rc::downgrade(&generation);
+        let weak_lifetime = Rc::downgrade(&lifetime);
         let buttons_window = native.clone();
         window.observe_header(Box::new(move |visible, immediate| {
-            if let Some(generation) = weak_generation.upgrade() {
-                animate_buttons(&buttons_window, visible, immediate, &generation);
+            if weak_lifetime.upgrade().is_some() {
+                animate_buttons(&buttons_window, visible, immediate);
             }
         }));
         let weak = window.as_weak();
@@ -278,10 +233,8 @@ impl ChromeMonitor {
         } {
             let weak = window.as_weak();
             let native = native.clone();
-            let generation = generation.clone();
             let block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
                 let _ = weak.upgrade_in_event_loop(|window| window.reset_chrome());
-                generation.set(generation.get().wrapping_add(1));
                 show_buttons(&native, false);
             });
             notifications.push(unsafe {
@@ -296,7 +249,7 @@ impl ChromeMonitor {
         Ok(Self {
             token,
             notifications,
-            _generation: generation,
+            _lifetime: lifetime,
         })
     }
 }

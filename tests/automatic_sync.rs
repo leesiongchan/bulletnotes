@@ -68,6 +68,45 @@ async fn recovery(store: &StoreHandle, f: &SpaceFixture) -> RecoveryUploadHead {
         .unwrap()
         .remove(0)
 }
+
+#[tokio::test]
+async fn executing_activity_tracks_a_real_held_put_and_clears_on_shutdown() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&dir.path().join("activity.sqlite"))
+        .await
+        .unwrap();
+    let f = SpaceFixture::start().await;
+    f.put("one.md", "base");
+    store
+        .apply_remote(client(&f).read(&key("one.md")).await.unwrap())
+        .await
+        .unwrap();
+    f.data.lock().unwrap().delay_put = Some("one.md".into());
+    let release = f.data.lock().unwrap().release.clone();
+    store
+        .save_local(key("one.md"), "edited".into(), LocalRevision(1))
+        .await
+        .unwrap();
+    let sync = start(&store, &f).await;
+    until(|| f.data.lock().unwrap().delay_put.is_none()).await;
+    assert!(sync.snapshot().executing.contains(&key("one.md")));
+    release.notify_one();
+    until(|| sync.snapshot().pending == 0).await;
+    until(|| !sync.snapshot().executing.contains(&key("one.md"))).await;
+    f.data.lock().unwrap().delay_put = Some("one.md".into());
+    store
+        .save_local(key("one.md"), "second".into(), LocalRevision(2))
+        .await
+        .unwrap();
+    sync.refresh();
+    until(|| f.data.lock().unwrap().delay_put.is_none()).await;
+    assert!(sync.snapshot().executing.contains(&key("one.md")));
+    sync.shutdown().await.unwrap();
+    assert!(
+        sync.snapshot().executing.is_empty(),
+        "cancelled work must not leave the indicator blinking"
+    );
+}
 #[tokio::test]
 async fn denied_canonical_put_recovers_after_fresh_permission_without_restart() {
     for refresh in [true, false] {

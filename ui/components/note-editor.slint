@@ -1,6 +1,6 @@
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { UiTheme, MarkdownCommand, MarkdownEdit } from "../types.slint";
+import { UiTheme, MarkdownCommand, MarkdownEdit, CodePanel } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <UiTheme> theme;
     in property <bool> paper-material:false;
@@ -8,6 +8,22 @@ export component NoteEditor inherits Rectangle {
     in-out property <string> text;
     in property <[TextInputDecoration]> decorations;
     in property <[TextInputMarker]> markers;
+    in property <[CodePanel]> code-panels;
+    in property <[TextInputMarker]> layout-markers;
+    private property <bool> layout-dirty:true;
+    private property <float> measured-y:0;
+    callback code-layout-changed();
+    changed text => {root.layout-dirty = true;}
+    changed width => {root.layout-dirty = true;}
+    changed height => {root.layout-dirty = true;}
+    changed decorations => {root.layout-dirty = true;}
+    changed markers => {root.layout-dirty = true;}
+    changed selection-anchor => {root.layout-dirty = true;}
+    changed selection-caret => {root.layout-dirty = true;}
+    changed line-factor => {root.layout-dirty = true;}
+    changed font-size-px => {root.layout-dirty = true;}
+    Timer {interval:16ms; running:root.layout-dirty; triggered => {root.layout-dirty = false; root.code-layout-changed();}}
+    public function measure-offset(offset:int) -> float {mirror.set-selection-offsets(offset,offset); return root.measured-y;}
     in property <float> font-size-px:15;
     in property <string> paper-style:"plain";
     in property <bool> read-only:false;
@@ -65,10 +81,21 @@ export component NoteEditor inherits Rectangle {
     measure-one := Text {
         visible: false;
         text: "Ag";
-        font-family: "Menlo";
+        font-family: "DM Mono";
         font-size: root.font-size-px * 1px;
         line-height-factor: 1;
         wrap: no-wrap;
+    }
+    // The renderer measures the same full source without disturbing the real caret.
+    mirror := TextInput {
+        visible:false; accessible-role:none; read-only:true;
+        width:input.width; height:input.height;
+        text:root.text + "\n";
+        text-decorations:root.decorations; text-markers:root.layout-markers;
+        font-family:input.font-family; font-size:input.font-size;
+        line-height-factor:input.line-height-factor;
+        single-line:false; wrap:word-wrap;
+        cursor-position-changed(pos) => {root.measured-y = pos.y / 1px;}
     }
 
     context := ContextMenuArea {
@@ -118,6 +145,14 @@ export component NoteEditor inherits Rectangle {
             height: parent.height;
             content-width: self.visible-width;
             content-height: max(self.visible-height,input.preferred-height + root.top-clearance + 64px);
+            for panel in root.code-panels: Rectangle {
+                x:input.x - 8px; y:root.top-clearance + panel.top * 1px;
+                width:input.width + 16px; height:max(0px,(panel.bottom - panel.top) * 1px);
+                border-radius:6px; background:root.theme.surface;
+                border-width:1px; border-color:root.theme.line.with-alpha(0.15);
+                visible:input.preedit-text.is-empty;
+                accessible-role:none;
+            }
             input := TextInput {
                 x: 45px;
                 y: root.top-clearance;
@@ -130,7 +165,7 @@ export component NoteEditor inherits Rectangle {
                 preserve-selection-on-focus-loss: true;
                 wrap: word-wrap;
                 read-only: root.read-only;
-                font-family: "Menlo";
+                font-family: "DM Mono";
                 font-size: root.font-size-px * 1px;
                 line-height-factor: root.line-factor;
                 color: root.theme.ink;

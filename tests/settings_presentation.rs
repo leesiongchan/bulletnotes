@@ -19,6 +19,51 @@ fn window(threading: bool) -> AppWindow {
     AppWindow::new().unwrap()
 }
 
+#[test]
+fn recovery_is_keyboard_accessible_from_general_settings_at_minimum_size() {
+    use slint::{
+        LogicalSize,
+        platform::{Key, WindowEvent},
+    };
+    let window = window(false);
+    present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
+    window.window().set_size(LogicalSize::new(400.0, 440.0));
+    window.set_settings_category("general".into());
+    window.set_active_view("appearance".into());
+    let opened = Rc::new(Cell::new(false));
+    let observed = opened.clone();
+    window.on_show_recovery(move || observed.set(true));
+    window.show().unwrap();
+    for _ in 0..30 {
+        let _ = window.window().take_snapshot().unwrap();
+        let inner = i_slint_core::window::WindowInner::from_pub(window.window());
+        let label = inner.focus_item.borrow().upgrade().and_then(|item| {
+            item.accessible_string_property(
+                i_slint_core::accessibility::AccessibleStringProperty::Label,
+            )
+        });
+        if label.as_deref() == Some("Changes, Trash, and kept versions") {
+            window.window().dispatch_event(WindowEvent::KeyPressed {
+                text: Key::Return.into(),
+            });
+            window.window().dispatch_event(WindowEvent::KeyReleased {
+                text: Key::Return.into(),
+            });
+            break;
+        }
+        window.window().dispatch_event(WindowEvent::KeyPressed {
+            text: Key::Tab.into(),
+        });
+        window.window().dispatch_event(WindowEvent::KeyReleased {
+            text: Key::Tab.into(),
+        });
+    }
+    assert!(
+        opened.get(),
+        "recovery must remain reachable with the keyboard after leaving the footer"
+    );
+}
+
 fn rgb(color: slint::Color) -> Color {
     Color {
         r: color.red(),

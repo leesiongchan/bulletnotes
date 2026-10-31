@@ -30,6 +30,10 @@ The icon finish was informed by Apple's Camera icon: coherent lighting, precise 
 
 ## App design language
 
-Bulletnotes and Bulletnotes Dark carry the identity into the native editor: eggshell or warm graphite paper, readable persimmon accents, silver-toned edges, and shallow control highlights. Settings uses the branded palette independently of custom note colors. Typography stays native, with Menlo for source editing.
+Bulletnotes and Bulletnotes Dark carry the identity into the native editor: eggshell or warm graphite paper, readable persimmon accents, silver-toned edges, and shallow control highlights. All app-owned views follow the resolved palette, including custom note colors. Typography uses bundled DM Mono for writing and previews, with DM Sans for controls. The SIL Open Font licenses live beside the fonts under `site/assets/fonts/`.
 
 The 128 × 128 transparent mask at `../../assets/paper/eggshell.png` is tiled at logical scale and tinted at 0.5% in light mode and 1.5% in dark mode. High Contrast and Reduce Transparency suppress it and decorative depth. Imported palettes stay flat.
+
+Interface icons use a shared 24 × 24 grid, 1.5 px rounded strokes, and theme tinting.
+Toolbar controls stay flat at rest, with selection tints and visible keyboard focus.
+The tray retains the handwritten b, with a white variant for dark system appearance.

@@ -143,10 +143,7 @@ pub(super) fn decorations(
                         syntax = quiet;
                     }
                     Tag::CodeBlock(_) => {
-                        body = SourceStyle {
-                            code: true,
-                            ..plain
-                        };
+                        body = plain;
                         syntax = quiet;
                     }
                     Tag::MetadataBlock(_) => {
@@ -197,6 +194,12 @@ pub(super) fn decorations(
             }
         }
     }
+    spans.extend(super::code_highlighting::tokens(
+        source,
+        palette,
+        high_contrast,
+    ));
+    spans.sort_by_key(|span| span.start);
     spans
 }
 
