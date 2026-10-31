@@ -1,4 +1,5 @@
 """Safety contracts for the development desktop packager (no compiler required)."""
+import html
 import importlib.util
 import io
 import json
@@ -34,6 +35,10 @@ class DesktopPackagingTests(unittest.TestCase):
             source.write_bytes(source_license)
             (root / 'packaging/Slint-License.md').write_bytes(bundled_license)
             shutil.copy(ROOT / 'packaging/about.toml', root / 'packaging/about.toml')
+            font_dir = root / 'site/assets/fonts'
+            font_dir.mkdir(parents=True)
+            for name in ('dm-mono-OFL.txt', 'dm-sans-OFL.txt'):
+                shutil.copy(ROOT / 'site/assets/fonts' / name, font_dir / name)
             script = root / 'scripts/generate-notices.py'
             shutil.copy(ROOT / 'scripts/generate-notices.py', script)
             output = root / 'notices.html'
@@ -65,6 +70,10 @@ class DesktopPackagingTests(unittest.TestCase):
                         license_text.replace(b'\n', source_eol))
                     self.assertIn('Slint Royalty-free License 2.0', rendered)
                     self.assertIn('slint 1.18.1', rendered)
+                    for name in ('dm-mono-OFL.txt', 'dm-sans-OFL.txt'):
+                        font_license = (ROOT / 'site/assets/fonts' / name).read_text(encoding='utf-8')
+                        expected = '\n'.join(line.rstrip() for line in html.escape(font_license).splitlines()).strip()
+                        self.assertIn(expected, rendered)
 
     def test_notices_reject_changed_license_text(self):
         license_text = (ROOT / 'packaging/Slint-License.md').read_bytes()
