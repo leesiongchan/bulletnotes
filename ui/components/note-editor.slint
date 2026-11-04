@@ -1,8 +1,8 @@
+import { Theme, Typography, Radius } from "theme.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { UiTheme, MarkdownCommand, MarkdownEdit, CodePanel } from "../types.slint";
+import { MarkdownCommand, MarkdownEdit, CodePanel } from "../types.slint";
 export component NoteEditor inherits Rectangle {
-    in property <UiTheme> theme;
     in property <bool> paper-material:false;
     in property <string> paper-type:"smooth";
     in-out property <string> text;
@@ -71,17 +71,17 @@ export component NoteEditor inherits Rectangle {
     public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }
     public function focus-editor() { input.focus(); }
     public function restore-selection(anchor: int, caret: int, y: float) { input.set-selection-offsets(anchor,caret); scroll.content-y = -max(0,y) * 1px; }
-    background: root.theme.paper;
+    background: Theme.palette.paper;
     clip: true;
     paper := PaperSurface {
-        width:parent.width; height:parent.height; theme:root.theme;
+        width:parent.width; height:parent.height;
         paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
         material-effects:root.paper-material; content-y:scroll.content-y; top-clearance:root.top-clearance;
     }
     measure-one := Text {
         visible: false;
         text: "Ag";
-        font-family: "DM Mono";
+        font-family: Typography.mono;
         font-size: root.font-size-px * 1px;
         line-height-factor: 1;
         wrap: no-wrap;
@@ -140,7 +140,7 @@ export component NoteEditor inherits Rectangle {
         }
 
         scroll := ThemeScrollView {
-            scrollbar-color: root.theme.scrollbar;
+            scrollbar-color: Theme.palette.scrollbar;
             width: parent.width;
             height: parent.height;
             content-width: self.visible-width;
@@ -148,8 +148,8 @@ export component NoteEditor inherits Rectangle {
             for panel in root.code-panels: Rectangle {
                 x:input.x - 8px; y:root.top-clearance + panel.top * 1px;
                 width:input.width + 16px; height:max(0px,(panel.bottom - panel.top) * 1px);
-                border-radius:6px; background:root.theme.surface;
-                border-width:1px; border-color:root.theme.line.with-alpha(0.15);
+                border-radius:Radius.tight; background:Theme.palette.surface;
+                border-width:1px; border-color:Theme.palette.line.with-alpha(0.15);
                 visible:input.preedit-text.is-empty;
                 accessible-role:none;
             }
@@ -165,12 +165,12 @@ export component NoteEditor inherits Rectangle {
                 preserve-selection-on-focus-loss: true;
                 wrap: word-wrap;
                 read-only: root.read-only;
-                font-family: "DM Mono";
+                font-family: Typography.mono;
                 font-size: root.font-size-px * 1px;
                 line-height-factor: root.line-factor;
-                color: root.theme.ink;
-                selection-background-color: root.theme.cursor;
-                selection-foreground-color: root.theme.ink;
+                color: Theme.palette.ink;
+                selection-background-color: Theme.palette.cursor;
+                selection-foreground-color: Theme.palette.ink;
                 input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
                 page-height: scroll.visible-height;
                 accessible-label: "Markdown note";

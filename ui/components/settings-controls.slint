@@ -1,21 +1,17 @@
-import { UiTheme } from "../types.slint";
+import { Theme, Typography, Radius } from "theme.slint";
 export component SettingsGroup inherits Rectangle {
-    in property <UiTheme> theme;
-    background:root.theme.surface;
-    border-radius:10px;
+    background:Theme.palette.surface;
+    border-radius:Radius.group;
     min-height:content.min-height;
     preferred-height:content.preferred-height;
     content := VerticalLayout { padding:14px; spacing:12px; @children }
 }
 export component SettingsHeading inherits Text {
-    in property <UiTheme> theme;
-    color:root.theme.ink;
-    font-size:14px;
+    color:Theme.palette.ink;
+    font-size:Typography.heading;
     font-weight:600;
 }
 export component SettingToggle inherits FocusScope {
-    in property <UiTheme> theme;
-    in property <bool> high-contrast;
     in property <string> label;
     in property <string> description;
     in-out property <bool> checked;
@@ -39,18 +35,18 @@ export component SettingToggle inherits FocusScope {
         width:max(1px,parent.width - 58px);
         height:self.preferred-height;
         spacing:4px;
-        Text {text:root.label; font-size:13px; color:root.theme.ink; wrap:word-wrap;}
-        Text {visible:root.description != ""; text:root.description; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+        Text {text:root.label; font-size:Typography.body; color:Theme.palette.ink; wrap:word-wrap;}
+        Text {visible:root.description != ""; text:root.description; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
     }
     Rectangle {
         x:parent.width - 38px; y:(parent.height - 22px) / 2;
-        width:38px; height:22px; border-radius:11px;
-        background:root.checked ? root.theme.accent : root.theme.line.with-alpha(root.high-contrast ? 1 : 0.35);
-        border-width:root.has-focus || root.high-contrast ? 2px : 0px;
-        border-color:root.has-focus ? root.theme.ink : root.theme.line;
+        width:38px; height:22px; border-radius:self.height / 2;
+        background:root.checked ? Theme.palette.accent : Theme.palette.line.with-alpha(Theme.high-contrast ? 1 : 0.35);
+        border-width:root.has-focus || Theme.high-contrast ? 2px : 0px;
+        border-color:root.has-focus ? Theme.palette.ink : Theme.palette.line;
         Rectangle {
             x:root.checked ? 19px : 3px; y:3px; width:16px; height:16px;
-            border-radius:8px; background:root.theme.dark ? root.theme.ink : root.theme.paper;
+            border-radius:self.height / 2; background:Theme.palette.dark ? Theme.palette.ink : Theme.palette.paper;
         }
     }
     TouchArea {enabled:root.enabled; clicked => {root.focus(); root.toggle();}}

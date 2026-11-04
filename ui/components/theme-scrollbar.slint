@@ -1,10 +1,10 @@
-import { Motion } from "theme-context.slint";
+import { Theme, Motion } from "theme.slint";
 export component ThemeScrollbar inherits Rectangle {
     in property <color> thumb-color;
     in property <length> content-height;
     in property <length> visible-height;
     in-out property <length> content-y;
-    in property <bool> reduced-motion:Motion.reduced;
+    in property <bool> reduced-motion:Theme.reduced-motion;
     private property <bool> recent:false;
     private property <bool> interacting:touch.has-hover || touch.pressed;
     changed interacting => {root.recent = true; idle.start(); idle.restart();}
@@ -30,7 +30,7 @@ export component ThemeScrollbar inherits Rectangle {
         border-radius: 3px;
         background: root.thumb-color;
         opacity: root.recent || touch.has-hover || touch.pressed ? 1 : 0;
-        animate opacity { duration:root.reduced-motion || root.recent || touch.has-hover || touch.pressed ? 0ms : 180ms; }
+        animate opacity { duration:root.reduced-motion || root.recent || touch.has-hover || touch.pressed ? 0ms : Motion.fade; }
     }
     touch := TouchArea {
         private property <length> pressed-value;

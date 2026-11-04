@@ -1,9 +1,9 @@
+import { Theme, ThemeContext, Typography, Radius, Motion } from "components/theme.slint";
 import "../site/assets/fonts/dm-mono-italic.ttf";
 import "../site/assets/fonts/dm-mono-medium.ttf";
 import "../site/assets/fonts/dm-mono-medium-italic.ttf";
 import "../site/assets/fonts/dm-mono.ttf";
 import "../site/assets/fonts/dm-sans.ttf";
-import { ThemeContext } from "components/theme-context.slint";
 import { RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
 import { Palette, AboutSlint } from "std-widgets.slint";
@@ -17,7 +17,7 @@ import { AppearancePanel } from "components/appearance-panel.slint";
 export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel }
 
 export component AppWindow inherits Window {
-    default-font-family: "DM Sans";
+    default-font-family: Typography.sans;
     title: "Bulletnotes";
     icon: @image-url("../assets/bulletnotes-logo.png");
     preferred-width: 505px;
@@ -28,8 +28,8 @@ export component AppWindow inherits Window {
     no-frame: Platform.os == OperatingSystemType.macos;
     resize-border-width: 0px;
     always-on-top: root.is-pinned;
-    in property <UiTheme> theme;
-    ThemeContext { theme:root.theme; reduced-motion:root.prefers-reduced-motion; }
+    in-out property <UiTheme> theme <=> Theme.palette;
+    ThemeContext {}
     callback about-presentation-changed();
     changed prefers-reduced-transparency => { root.about-presentation-changed(); }
     callback search-palette-changed();
@@ -102,7 +102,7 @@ export component AppWindow inherits Window {
     changed paper-type => { root.about-presentation-changed(); }
     changed paper-style => { root.about-presentation-changed(); }
     changed font-size-px => { root.about-presentation-changed(); }
-    private property <bool> paper-material-active:root.decorative-effects && root.paper-type != "smooth";
+    private property <bool> paper-material-active:Theme.material-effects && root.paper-type != "smooth";
     in-out property <string> paper-intensity:"clear";
     in-out property <bool> start-with-new-note:false;
     in-out property <bool> keep-bottom-bar-visible:false;
@@ -218,10 +218,9 @@ export component AppWindow inherits Window {
     in property <bool> can-hide-to-tray:true;
     property <string> shortcut-modifier:Platform.os == OperatingSystemType.macos ? "Command" : "Control";
     callback apply-hotkey();
-    in property <bool> prefers-reduced-motion:false;
-    in property <bool> prefers-reduced-transparency:false;
-    in property <bool> system-high-contrast:false;
-    private property <bool> decorative-effects:!root.system-high-contrast && !root.prefers-reduced-transparency;
+    in-out property <bool> prefers-reduced-motion <=> Theme.reduced-motion;
+    in-out property <bool> prefers-reduced-transparency <=> Theme.reduce-transparency;
+    in-out property <bool> system-high-contrast <=> Theme.high-contrast;
     callback local-startup-ready();
     in property <bool> sync-available:false;
     callback request-quit();
@@ -311,8 +310,8 @@ export component AppWindow inherits Window {
         clip: true;
         PaperSurface {
             width:parent.width; height:parent.height; visible:root.active-view != "note";
-            theme:root.theme; paper-type:root.paper-type; paper-style:root.paper-style;
-            font-size-px:root.font-size-px; material-effects:root.decorative-effects;
+            paper-type:root.paper-type; paper-style:root.paper-style;
+            font-size-px:root.font-size-px;
         }
         keys := FocusScope {
             key-pressed(event) => { root.shortcut(event) }
@@ -329,7 +328,6 @@ export component AppWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     top-clearance:root.find-visible ? 93.75px : 33.75px;
-                    theme: root.theme;
                     paper-material:root.paper-material-active;
                     paper-type:root.paper-type;
                     text <=> root.note-text;
@@ -347,10 +345,9 @@ export component AppWindow inherits Window {
                 }
 
                 find := FindBar {
-                high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                     y: 48px; height: 36px; width: parent.width;
                     visible: root.find-visible;
-                    theme: root.theme; query <=> root.find-query; status: root.find-status;
+                    query <=> root.find-query; status: root.find-status;
                     query-changed(query) => { root.find-query-changed(query); }
                     step(direction) => { root.find-step(direction); }
                     close => { root.close-find(); }
@@ -359,12 +356,10 @@ export component AppWindow inherits Window {
             }
 
             pages := PageBrowser {
-                high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                 y: 20px;
                 height: parent.height - 20px;
                 width: parent.width;
                 visible: root.active-view == "pages";
-                theme: root.theme;
                 results: root.page-results;
                 scratchpads <=> root.search-scratchpads;
                 cards <=> root.search-cards;
@@ -412,9 +407,6 @@ export component AppWindow inherits Window {
                 theme-pairs: root.theme-options;
                 light-theme: root.selected-light-theme-id;
                 dark-theme: root.selected-dark-theme-id;
-                theme: root.theme;
-                high-contrast: root.system-high-contrast;
-                material-effects:root.decorative-effects;
                 category <=> root.settings-category;
                 reduce-transparency:root.prefers-reduced-transparency;
                 paper-type <=> root.paper-type;
@@ -444,20 +436,18 @@ export component AppWindow inherits Window {
             }
 
             connection := ConnectionPanel {
-                high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                 y:20px; height:parent.height - 20px; width:parent.width;
                 visible:root.active-view == "connection";
-                theme:root.theme; server-url <=> root.connection-url;
+                server-url <=> root.connection-url;
                 token <=> root.connection-token; remember <=> root.connection-remember;
                 busy:root.connection-busy || root.lifecycle-pending; message:root.connection-message; automatic-mode:root.sync-available;
                 test-connection => { root.test-connection(); }
                 return-to-note => { root.return-to-note(); }
             }
             auxiliary := RecoveryPanel {
-                high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
                 y:20px; height:parent.height - 20px; width:parent.width;
                 visible:root.active-view == "recovery";
-                theme:root.theme; section <=> root.recovery-section; items:root.recovery-items;
+                section <=> root.recovery-section; items:root.recovery-items;
                 selected-id:root.recovery-selected-id; path:root.recovery-path;
                 local-text:root.recovery-local; remote-text:root.recovery-remote; base-text:root.recovery-base;
                 merge-text <=> root.recovery-merge; destination <=> root.recovery-destination;
@@ -476,8 +466,8 @@ export component AppWindow inherits Window {
             Rectangle {
                 x:20px; width:parent.width - 40px; height:48px; y:parent.height - 112px;
                 visible:root.status-attention && root.active-view == "note";
-                background:root.theme.surface; border-radius:10px; border-width:1px; border-color:root.theme.accent;
-                Text {x:12px; width:parent.width - 24px; height:parent.height; text:root.status-text; color:root.theme.ink; font-size:11px; wrap:word-wrap; vertical-alignment:center;}
+                background:root.theme.surface; border-radius:Radius.group; border-width:1px; border-color:root.theme.accent;
+                Text {x:12px; width:parent.width - 24px; height:parent.height; text:root.status-text; color:root.theme.ink; font-size:Typography.caption; wrap:word-wrap; vertical-alignment:center;}
             }
             header := Rectangle {
                 x:0px; y:root.prefers-reduced-motion || root.header-revealed ? 0px : -4px;
@@ -486,16 +476,16 @@ export component AppWindow inherits Window {
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
                 opacity:root.header-revealed ? 1 : 0;
                 visible:self.opacity > 0;
-                animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? 160ms : 200ms); easing:ease-out; }
+                animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? Motion.reveal : Motion.conceal); easing:ease-out; }
                 WindowMoveArea {x:160px; width:max(0px,parent.width - 248px); height:parent.height; enabled:root.header-revealed;}
                 appearance-button := ActionButton {
-                    x:82px; y:root.active-view == "note" ? 0px : 1px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:82px; y:root.active-view == "note" ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, " + root.shortcut-modifier + " comma";
                     clicked => {root.show-appearance();}
                 }
                 browse := ActionButton {
-                    x:120px; y:root.active-view == "note" ? 0px : 1px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:120px; y:root.active-view == "note" ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, " + root.shortcut-modifier + " K";
                     clicked => {root.browse-pages();}
@@ -504,17 +494,17 @@ export component AppWindow inherits Window {
                     x:164px; width:max(0px,parent.width - 252px); height:parent.height;
                     text:root.active-view == "note" ? root.current-path : "Bulletnotes";
                     accessible-label:root.current-path;
-                    color:root.theme.muted; font-size:11px; overflow:elide;
+                    color:root.theme.muted; font-size:Typography.caption; overflow:elide;
                     horizontal-alignment:center; vertical-alignment:center;
                 }
                 new-button := ActionButton {
-                    x:parent.width - 82px; y:root.active-view == "note" ? 0px : 1px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:parent.width - 82px; y:root.active-view == "note" ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0 && !root.lifecycle-pending;
                     icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, " + root.shortcut-modifier + " N";
                     clicked => {root.new-note();}
                 }
                 pin := ActionButton {
-                    x:parent.width - 42px; y:root.active-view == "note" ? 0px : 1px; circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                    x:parent.width - 42px; y:root.active-view == "note" ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/pin.svg");
                     label:root.is-pinned ? "Unpin note, " + root.shortcut-modifier + " P" : "Pin above other windows, " + root.shortcut-modifier + " P";
@@ -523,36 +513,36 @@ export component AppWindow inherits Window {
             }
             footer := Rectangle {
                 y:parent.height - 54px + (root.prefers-reduced-motion || root.footer-revealed ? 0px : 4px);
-                height:44px; x:10px; width:parent.width - 20px; border-radius:12px;
+                height:44px; x:10px; width:parent.width - 20px; border-radius:Radius.surface;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.ink;
                 opacity:root.footer-revealed ? 1 : 0; visible:self.opacity > 0 && root.active-view == "note";
-                animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? 160ms : 200ms); easing:ease-out;}
+                animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? Motion.reveal : Motion.conceal); easing:ease-out;}
                 background:root.system-high-contrast ? root.theme.paper : transparent;
                 HorizontalLayout {
                     y:6px; width:parent.width; height:32px; padding-left:6px; padding-right:6px; spacing:6px;
                     trash-button := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects;
+                        circular:true;
                         enabled:root.footer-revealed && footer.opacity > 0 && !root.note-read-only && !root.recovery-busy && !root.lifecycle-pending;
                         icon:@image-url("../assets/icons/trash.svg"); label:"Move note to recoverable Trash";
                         clicked => {root.trash-current-note();}
                     }
                     HorizontalLayout {
                         horizontal-stretch:1; spacing:8px;
-                        Text {text:root.visible-note-count.is-empty ? root.visible-note-date : (root.visible-note-date.is-empty ? root.visible-note-count : root.visible-note-date + " · " + root.visible-note-count); color:root.theme.muted; font-size:12px; vertical-alignment:center; overflow:elide;}
-                        Text {visible:root.width > 560px; text:root.status-text; color:root.theme.muted; font-size:12px; vertical-alignment:center; overflow:elide;}
+                        Text {text:root.visible-note-count.is-empty ? root.visible-note-date : (root.visible-note-date.is-empty ? root.visible-note-count : root.visible-note-date + " · " + root.visible-note-count); color:root.theme.muted; font-size:Typography.small; vertical-alignment:center; overflow:elide;}
+                        Text {visible:root.width > 560px; text:root.status-text; color:root.theme.muted; font-size:Typography.small; vertical-alignment:center; overflow:elide;}
                     }
                     back := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, " + root.shortcut-modifier + " left bracket";
+                        circular:true; icon:@image-url("../assets/icons/left.svg"); label:"Older scratchpad, " + root.shortcut-modifier + " left bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-older && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(-1);}
                     }
                     next := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, " + root.shortcut-modifier + " right bracket";
+                        circular:true; icon:@image-url("../assets/icons/right.svg"); label:"Newer scratchpad, " + root.shortcut-modifier + " right bracket";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-go-newer && !root.lifecycle-pending;
                         clicked => {root.scratchpad-step(1);}
                     }
                     newest := ActionButton {
-                        circular:true; theme:root.theme; high-contrast:root.system-high-contrast; material-effects:root.decorative-effects; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, " + root.shortcut-modifier + " 1";
+                        circular:true; icon:@image-url("../assets/icons/newest.svg"); label:"Jump to newest scratchpad, " + root.shortcut-modifier + " 1";
                         enabled:root.footer-revealed && footer.opacity > 0 && root.can-jump-to-newest && !root.lifecycle-pending;
                         clicked => {root.jump-to-newest();}
                     }
@@ -585,27 +575,27 @@ export component LocalTray inherits SystemTrayIcon {
 }
 
 export component AboutWindow inherits Window {
-    default-font-family:"DM Sans";
+    default-font-family:Typography.sans;
     title:"About Bulletnotes";
     icon:@image-url("../assets/bulletnotes-logo.png");
     preferred-width:360px; preferred-height:300px;
     min-width:360px; min-height:300px;
     always-on-top:true;
     in property <string> app-version;
-    in property <UiTheme> theme;
-    ThemeContext { theme:root.theme; }
+    in-out property <UiTheme> theme <=> Theme.palette;
+    ThemeContext {}
     in property <string> paper-type:"smooth";
     in property <string> paper-style:"plain";
     in property <float> font-size-px:15;
-    in property <bool> high-contrast:false;
-    in property <bool> reduce-transparency:false;
+    in-out property <bool> high-contrast <=> Theme.high-contrast;
+    in-out property <bool> reduce-transparency <=> Theme.reduce-transparency;
     background:root.theme.paper;
-    PaperSurface {width:parent.width; height:parent.height; theme:root.theme; paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px; material-effects:!root.high-contrast && !root.reduce-transparency;}
+    PaperSurface {width:parent.width; height:parent.height; paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px; }
     VerticalLayout {
         padding:24px; spacing:12px;
         Image { source:@image-url("../assets/bulletnotes-logo.png"); height:80px; image-fit:contain; horizontal-stretch:1; }
-        Text { text:"Bulletnotes"; font-size:24px; font-weight:600; color:root.theme.ink; horizontal-alignment:center; }
-        Text { text:root.app-version; font-size:13px; color:root.theme.muted; horizontal-alignment:center; }
+        Text { text:"Bulletnotes"; font-size:Typography.display; font-weight:600; color:root.theme.ink; horizontal-alignment:center; }
+        Text { text:root.app-version; font-size:Typography.body; color:root.theme.muted; horizontal-alignment:center; }
         AboutSlint {}
     }
 }

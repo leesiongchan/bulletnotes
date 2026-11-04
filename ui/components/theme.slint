@@ -1,0 +1,55 @@
+import { Palette } from "std-widgets.slint";
+import { UiTheme } from "../types.slint";
+
+// Presentation shared by every view in one window. Slint globals are per root
+// window, so Rust sets them through each root's aliased properties.
+export global Theme {
+    in-out property <UiTheme> palette;
+    in-out property <bool> high-contrast;
+    in-out property <bool> reduce-transparency;
+    in-out property <bool> reduced-motion;
+    // Decorative gradients and paper textures yield to accessibility preferences.
+    out property <bool> material-effects: !Theme.high-contrast && !Theme.reduce-transparency;
+}
+
+// Keeps standard widgets in the window's color scheme.
+export component ThemeContext inherits Rectangle {
+    private property <bool> dark: Theme.palette.dark;
+    width:0px; height:0px; visible:false;
+    accessible-role:none;
+    function apply-scheme() { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
+    init => { root.apply-scheme(); }
+    changed dark => { root.apply-scheme(); }
+}
+
+// Design tokens. Values are the ones the views already used; consolidating
+// near-duplicates (for example 5px vs 6px fields) is a deliberate visual change.
+export global Typography {
+    out property <string> sans: "DM Sans";
+    out property <string> mono: "DM Mono";
+    out property <length> caption: 11px;
+    out property <length> small: 12px;
+    out property <length> body: 13px;
+    out property <length> heading: 14px;
+    out property <length> title: 21px;
+    out property <length> display: 24px;
+}
+
+export global Radius {
+    // Tooltips, code panels and text fields.
+    out property <length> tight: 6px;
+    // Buttons and small previews.
+    out property <length> control: 7px;
+    // Cards, connection fields and the find bar.
+    out property <length> card: 8px;
+    // Grouped settings, toolbars and notices.
+    out property <length> group: 10px;
+    // Search field, results and the note footer.
+    out property <length> surface: 12px;
+}
+
+export global Motion {
+    out property <duration> reveal: 160ms;
+    out property <duration> conceal: 200ms;
+    out property <duration> fade: 180ms;
+}

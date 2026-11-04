@@ -1,29 +1,28 @@
+import { Theme, Typography, Radius } from "components/theme.slint";
 import { VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { SettingToggle } from "components/settings-controls.slint";
-import { UiTheme } from "types.slint";
 import { ActionButton, ChoiceButton } from "components/action-button.slint";
 component ConnectionField inherits Rectangle {
-    in property <UiTheme> theme;
     in-out property <string> text;
     in property <string> label;
     in property <string> placeholder;
     in property <bool> password: false;
     in property <bool> enabled: true;
     height: 36px;
-    border-radius: 8px;
-    background: root.theme.surface;
+    border-radius: Radius.card;
+    background: Theme.palette.surface;
     border-width: 1px;
-    border-color: input.has-focus ? root.theme.accent : root.theme.line;
+    border-color: input.has-focus ? Theme.palette.accent : Theme.palette.line;
     public function focus-field() { input.focus(); }
     input := TextInput {
         x: 10px; width: parent.width - 20px; height: parent.height;
         text <=> root.text;
         single-line: true; vertical-alignment: center;
-        color: root.theme.ink; font-size: 12px;
+        color: Theme.palette.ink; font-size: Typography.small;
         input-type: root.password ? InputType.password : InputType.text;
-        selection-background-color: root.theme.cursor;
-        selection-foreground-color: root.theme.ink;
+        selection-background-color: Theme.palette.cursor;
+        selection-foreground-color: Theme.palette.ink;
         input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
         accessible-label: root.label;
         enabled: root.enabled;
@@ -31,14 +30,11 @@ component ConnectionField inherits Rectangle {
     Text {
         x: 10px; width: parent.width - 20px; height: parent.height;
         text: root.placeholder; visible: root.text == "";
-        color: root.theme.muted; font-size: 13px;
+        color: Theme.palette.muted; font-size: Typography.body;
         vertical-alignment: center; accessible-role: none;
     }
 }
 export component ConnectionPanel inherits Rectangle {
-    in property <bool> material-effects:true;
-    in property <bool> high-contrast:false;
-    in property <UiTheme> theme;
     in-out property <string> server-url;
     in-out property <string> token;
     in-out property <bool> remember: false;
@@ -49,30 +45,30 @@ export component ConnectionPanel inherits Rectangle {
     callback return-to-note();
     public function focus-panel() { url.focus-field(); }
     background: transparent;
-    Text { x:24px; y:14px; text:"Connection"; font-size:21px; color:root.theme.ink; }
-    ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
-        x: parent.width - 44px; y: 14px; theme: root.theme;
+    Text { x:24px; y:14px; text:"Connection"; font-size:Typography.title; color:Theme.palette.ink; }
+    ActionButton {
+        x: parent.width - 44px; y: 14px;
         icon: @image-url("../assets/icons/close.svg"); label: "Return to note";
         clicked => { root.return-to-note(); }
     }
     scroll := ThemeScrollView {
-        scrollbar-color: root.theme.scrollbar;
+        scrollbar-color: Theme.palette.scrollbar;
         x:24px; y:54px; width:parent.width - 48px; height:parent.height - 78px;
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {
             x:0px;
             width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:12px;
-            Text { text:"SilverBullet server"; color:root.theme.ink; font-size:12px; }
-            url := ConnectionField { theme:root.theme; text <=> root.server-url; label:"SilverBullet HTTPS server URL"; placeholder:"https://notes.example.com"; enabled: !root.busy; }
-            Text { text:"Bearer token · optional"; color:root.theme.ink; font-size:12px; }
-            ConnectionField { theme:root.theme; text <=> root.token; password:true; label:"SilverBullet bearer token"; placeholder:"Leave blank to use Keychain or public access"; enabled:!root.busy; }
-            SettingToggle { theme:root.theme; high-contrast:root.high-contrast; label:"Remember token securely"; checked <=> root.remember; enabled:!root.busy; }
+            Text { text:"SilverBullet server"; color:Theme.palette.ink; font-size:Typography.small; }
+            url := ConnectionField { text <=> root.server-url; label:"SilverBullet HTTPS server URL"; placeholder:"https://notes.example.com"; enabled: !root.busy; }
+            Text { text:"Bearer token · optional"; color:Theme.palette.ink; font-size:Typography.small; }
+            ConnectionField { text <=> root.token; password:true; label:"SilverBullet bearer token"; placeholder:"Leave blank to use Keychain or public access"; enabled:!root.busy; }
+            SettingToggle { label:"Remember token securely"; checked <=> root.remember; enabled:!root.busy; }
             Text {
                 text:(root.automatic-mode ? "Connecting uses one temporary page" : "Testing uses one temporary page") + " in Quick Notes/Bulletnotes Probe to check safe updates, then removes it. Your existing notes stay untouched.";
-                wrap:word-wrap; color:root.theme.muted; font-size:13px;
+                wrap:word-wrap; color:Theme.palette.muted; font-size:Typography.body;
             }
-            ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:root.busy ? "Checking connection…" : (root.automatic-mode ? "Connect" : "Test connection"); enabled:!root.busy; clicked => { root.test-connection(); } }
-            Text { text:root.message; wrap:word-wrap; color:root.theme.ink; font-size:12px; }
+            ChoiceButton { text:root.busy ? "Checking connection…" : (root.automatic-mode ? "Connect" : "Test connection"); enabled:!root.busy; clicked => { root.test-connection(); } }
+            Text { text:root.message; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.small; }
         }
     }
 }

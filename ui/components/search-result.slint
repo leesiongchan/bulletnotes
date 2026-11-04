@@ -1,10 +1,8 @@
-import { UiTheme, PageRow } from "../types.slint";
+import { Theme, Typography, Radius } from "theme.slint";
+import { PageRow } from "../types.slint";
 import { ActionButton } from "action-button.slint";
 
 export component SearchResult inherits FocusScope {
-    in property <UiTheme> theme;
-    in property <bool> high-contrast:false;
-    in property <bool> material-effects:true;
     in property <PageRow> data;
     in property <bool> selected;
     in property <bool> selecting;
@@ -44,46 +42,46 @@ export component SearchResult inherits FocusScope {
     }
     Rectangle {
         x:6px; y:6px; width:parent.width - 12px; height:parent.height - 12px;
-        border-radius:12px;
-        background:root.data.checked || root.selected || root.hovered ? root.theme.selection : (root.cards ? root.theme.surface : transparent);
+        border-radius:Radius.surface;
+        background:root.data.checked || root.selected || root.hovered ? Theme.palette.selection : (root.cards ? Theme.palette.surface : transparent);
         border-width:root.has-focus ? 2px : (root.cards ? 1px : 0px);
-        border-color:root.has-focus ? root.theme.accent : root.theme.line;
+        border-color:root.has-focus ? Theme.palette.accent : Theme.palette.line;
         Text {
             x:root.selecting ? 40px : 14px; y:12px;
             width:parent.width - self.x - (root.cards ? 14px : 86px);
             height:root.cards ? min(150px,max(48px,parent.height - 76px)) : 48px;
             text:root.cards ? (root.data.excerpt != "" ? root.data.excerpt : root.data.title) : (root.data.list-excerpt != "" ? root.data.list-excerpt : root.data.excerpt != "" ? root.data.excerpt : root.data.title);
             text-decorations:root.cards ? root.data.excerpt-highlights : root.data.list-excerpt-highlights;
-            font-family:"DM Mono"; font-size:13px;
-            color:root.theme.ink; wrap:word-wrap; max-lines:root.cards ? 9 : 3; overflow:elide;
+            font-family:Typography.mono; font-size:Typography.body;
+            color:Theme.palette.ink; wrap:word-wrap; max-lines:root.cards ? 9 : 3; overflow:elide;
         }
         Text {
             x:14px; y:parent.height - 38px; width:parent.width - (root.cards || root.data.availability == "Cached" ? 28px : 104px);
             height:16px; text:root.data.path; text-decorations:root.data.path-highlights;
-            font-size:12px; color:root.theme.muted; overflow:elide;
+            font-size:Typography.small; color:Theme.palette.muted; overflow:elide;
         }
         Text {
             x:14px; y:parent.height - 21px; width:parent.width - 88px; height:14px;
-            text:root.data.modified-label; font-size:11px; color:root.theme.muted; overflow:elide;
+            text:root.data.modified-label; font-size:Typography.caption; color:Theme.palette.muted; overflow:elide;
         }
         Text {
             x:parent.width - 82px; y:root.cards ? parent.height - 57px : 64px; width:68px; height:14px;
             text:root.data.availability == "Cached" ? "" : root.data.availability;
-            font-size:11px; color:root.theme.muted; horizontal-alignment:right; overflow:elide;
+            font-size:Typography.caption; color:Theme.palette.muted; horizontal-alignment:right; overflow:elide;
         }
-        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
-            x:8px;y:10px;theme:root.theme;visible:root.selecting;enabled:!root.busy;
+        ActionButton {
+            x:8px;y:10px;visible:root.selecting;enabled:!root.busy;
             icon:root.data.checked ? @image-url("../../assets/icons/select.svg") : @image-url("../../assets/icons/circle.svg");selected:root.data.checked;
             label:root.data.checked ? "Deselect note" : "Select note"; clicked => { root.toggled(); }
         }
-        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+        ActionButton {
             x:parent.width - 76px;y:root.cards ? parent.height - 27px : 27px;
-            theme:root.theme;icon:@image-url("../../assets/icons/newest.svg");label:"Promote to front";
+            icon:@image-url("../../assets/icons/newest.svg");label:"Promote to front";
             visible:root.data.can-promote;enabled:!root.busy;clicked => { root.promote(false); }
         }
-        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+        ActionButton {
             x:parent.width - 42px;y:root.cards ? parent.height - 27px : 27px;
-            theme:root.theme;icon:@image-url("../../assets/icons/trash.svg");
+            icon:@image-url("../../assets/icons/trash.svg");
             label:root.data.can-trash ? "Move to Trash" : root.data.trash-disabled-reason;
             enabled:root.data.can-trash && !root.busy;clicked => { root.trash(); }
         }

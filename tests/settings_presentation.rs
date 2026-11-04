@@ -722,3 +722,19 @@ fn theme_card_patterns_follow_the_shared_paper_intensity() {
         previous = Some(crop);
     }
 }
+
+#[test]
+fn system_preference_changes_notify_dependent_presentations() {
+    let window = window(false);
+    let search = Rc::new(Cell::new(0));
+    let about = Rc::new(Cell::new(0));
+    let (s, a) = (search.clone(), about.clone());
+    window.on_search_palette_changed(move || s.set(s.get() + 1));
+    window.on_about_presentation_changed(move || a.set(a.get() + 1));
+    window.set_system_high_contrast(true);
+    i_slint_core::properties::ChangeTracker::run_change_handlers();
+    assert_eq!((search.get(), about.get()), (1, 1));
+    window.set_prefers_reduced_transparency(true);
+    i_slint_core::properties::ChangeTracker::run_change_handlers();
+    assert_eq!((search.get(), about.get()), (1, 2));
+}

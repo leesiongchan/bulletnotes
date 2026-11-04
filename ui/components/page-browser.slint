@@ -1,14 +1,12 @@
+import { Theme, Typography, Radius } from "theme.slint";
 import { ListView } from "std-widgets.slint";
 import { ThemeScrollbar } from "theme-scrollbar.slint";
-import { UiTheme, PageRow } from "../types.slint";
+import { PageRow } from "../types.slint";
 import { ChoiceButton } from "action-button.slint";
 import { SearchResult } from "search-result.slint";
 import { SearchToolbar } from "search-toolbar.slint";
 
 export component PageBrowser inherits Rectangle {
-    in property <UiTheme> theme;
-    in property <bool> high-contrast:false;
-    in property <bool> material-effects:true;
     in property <[PageRow]> results;
     in-out property <string> query;
     in-out property <string> folder;
@@ -134,13 +132,13 @@ export component PageBrowser inherits Rectangle {
     changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
     background:transparent;
     Rectangle {
-        x:24px;y:14px;width:parent.width - 48px;height:38px;border-radius:12px;
-        background:root.theme.surface;border-width:query-input.has-focus ? 1px : 0px;border-color:root.theme.accent;
-        Image { x:12px;y:12px;width:14px;height:14px;source:@image-url("../../assets/icons/search.svg");colorize:root.theme.muted; }
+        x:24px;y:14px;width:parent.width - 48px;height:38px;border-radius:Radius.surface;
+        background:Theme.palette.surface;border-width:query-input.has-focus ? 1px : 0px;border-color:Theme.palette.accent;
+        Image { x:12px;y:12px;width:14px;height:14px;source:@image-url("../../assets/icons/search.svg");colorize:Theme.palette.muted; }
         query-input := TextInput {
             x:36px;width:parent.width - 78px;height:parent.height;single-line:true;vertical-alignment:center;
-            text <=> root.query;color:root.theme.ink;font-size:13px;enabled:root.confirm-count == 0;
-            selection-background-color:root.theme.cursor;selection-foreground-color:root.theme.ink;
+            text <=> root.query;color:Theme.palette.ink;font-size:Typography.body;enabled:root.confirm-count == 0;
+            selection-background-color:Theme.palette.cursor;selection-foreground-color:Theme.palette.ink;
             accessible-label:"Search notes";
             edited => { root.query-changed(self.text); }
             key-pressed(event) => {
@@ -156,8 +154,8 @@ export component PageBrowser inherits Rectangle {
                 return reject;
             }
         }
-        Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:root.theme.muted;font-size:13px;accessible-role:none; }
-        ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:parent.width - 39px;y:5px;width:34px;theme:root.theme;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
+        Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:Theme.palette.muted;font-size:Typography.body;accessible-role:none; }
+        ChoiceButton { height:28px; x:parent.width - 39px;y:5px;width:34px;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
     }
     list := ListView {
         x:18px;y:62px;width:parent.width - 36px;
@@ -166,10 +164,9 @@ export component PageBrowser inherits Rectangle {
         for row in root.row-count: Rectangle {
             width:parent.width;height:root.row-height;
             for col in root.columns: SearchResult {
-                high-contrast:root.high-contrast;material-effects:root.material-effects;
                 x:col * parent.width / root.columns;width:parent.width / root.columns;height:root.row-height;
                 visible:row * root.columns + col < root.results.length;
-                theme:root.theme;data:root.results[row * root.columns + col];cards:root.cards;columns:root.columns;
+                data:root.results[row * root.columns + col];cards:root.cards;columns:root.columns;
                 selected:root.selected-index == row * root.columns + col;
                 selecting:root.selecting;busy:root.busy;
                 hovered:pointer-surface.has-hover && row * root.columns + col == root.pointer-index(pointer-surface.mouse-x,pointer-surface.mouse-y);
@@ -193,11 +190,11 @@ export component PageBrowser inherits Rectangle {
             Rectangle {
                 width:pointer-surface.hint == "" ? 0px : min(320px,hint-text.preferred-width + 18px);
                 height:pointer-surface.hint == "" ? 0px : hint-text.preferred-height + 12px;
-                background:root.theme.surface;border-radius:6px;
-                border-width:pointer-surface.hint == "" ? 0px : 1px;border-color:root.theme.line;
+                background:Theme.palette.surface;border-radius:Radius.tight;
+                border-width:pointer-surface.hint == "" ? 0px : 1px;border-color:Theme.palette.line;
                 hint-text := Text {
                     x:9px;y:6px;width:max(0px,parent.width - 18px);
-                    text:pointer-surface.hint;color:root.theme.ink;font-size:12px;wrap:word-wrap;
+                    text:pointer-surface.hint;color:Theme.palette.ink;font-size:Typography.small;wrap:word-wrap;
                 }
             }
         }
@@ -234,24 +231,23 @@ export component PageBrowser inherits Rectangle {
         y:list.y + floor(self.insertion / root.columns) * root.row-height + list.content-y;
         width:root.cards ? 3px : list.width;
         height:root.cards ? min(root.row-height,list.y + list.visible-height - self.y) : 3px;
-        background:root.theme.accent;
+        background:Theme.palette.accent;
         visible:root.drag-active && self.y >= list.y && self.y < list.y + list.visible-height;
     }
-    ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:root.theme.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
+    ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:Theme.palette.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {
         x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
-        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:root.theme.muted;font-family:"DM Mono";font-size:13px;horizontal-alignment:center; }
+        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:Theme.palette.muted;font-family:Typography.mono;font-size:Typography.body;horizontal-alignment:center; }
         if root.can-create: Rectangle {
-            y:38px;width:parent.width;height:38px;border-radius:19px;background:root.theme.surface;
-            ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:12px;y:5px;width:parent.width - 24px;theme:root.theme;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
+            y:38px;width:parent.width;height:38px;border-radius:self.height / 2;background:Theme.palette.surface;
+            ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
         }
     }
-    Text { x:24px;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 48px);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:root.theme.muted;font-size:12px;wrap:word-wrap;max-lines:2;overflow:elide; }
-    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;theme:root.theme;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
+    Text { x:24px;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 48px);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:Theme.palette.muted;font-size:Typography.small;wrap:word-wrap;max-lines:2;overflow:elide; }
+    ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
     toolbar := SearchToolbar {
-        high-contrast:root.high-contrast;material-effects:root.material-effects;
         width:parent.width;y:parent.height - self.height;
-        theme:root.theme;scratchpads:root.scratchpads;cards:root.cards;selecting:root.selecting;
+        scratchpads:root.scratchpads;cards:root.cards;selecting:root.selecting;
         selected-count:root.selected-count;can-promote:root.can-promote;can-trash:root.can-trash;busy:root.busy;
         enabled:root.confirm-count == 0;
         select-toggled => { root.selecting = !root.selecting; root.select-toggled(); }
@@ -262,15 +258,15 @@ export component PageBrowser inherits Rectangle {
     }
     Rectangle {
         visible:root.confirm-count > 0;
-        background:root.theme.paper.with-alpha(0.85);
+        background:Theme.palette.paper.with-alpha(0.85);
         TouchArea { }
         Rectangle {
             x:16px;y:max(12px,(parent.height - self.height) / 2);width:parent.width - 32px;height:174px;
-            border-radius:14px;background:root.theme.surface;border-width:1px;border-color:root.theme.line;
-            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:15px;font-weight:550;color:root.theme.ink; }
-            Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:12px;color:root.theme.muted; }
-            ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:16px;y:128px;width:92px;theme:root.theme;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
-            confirm-button := ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; height:28px; x:parent.width - 154px;y:128px;width:138px;theme:root.theme;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
+            border-radius:14px;background:Theme.palette.surface;border-width:1px;border-color:Theme.palette.line;
+            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:15px;font-weight:550;color:Theme.palette.ink; }
+            Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:Typography.small;color:Theme.palette.muted; }
+            ChoiceButton { height:28px; x:16px;y:128px;width:92px;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
+            confirm-button := ChoiceButton { height:28px; x:parent.width - 154px;y:128px;width:138px;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
         }
     }
 }

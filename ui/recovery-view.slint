@@ -1,27 +1,27 @@
+import { Theme, Typography, Radius } from "components/theme.slint";
 import { ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { ThemeScrollbar } from "components/theme-scrollbar.slint";
-import { UiTheme, PageRow } from "types.slint";
+import { PageRow } from "types.slint";
 import { ActionButton, ChoiceButton, ChoiceOption } from "components/action-button.slint";
 component SourcePane inherits Rectangle {
-    in property <UiTheme> theme;
     in-out property <string> text;
     in property <string> label;
     in property <bool> read-only:true;
     callback edited();
     min-height:120px; preferred-height:140px;
-    background:root.theme.surface;
-    border-width:1px; border-color:root.theme.line; border-radius:6px; clip:true;
+    background:Theme.palette.surface;
+    border-width:1px; border-color:Theme.palette.line; border-radius:Radius.tight; clip:true;
     ThemeScrollView {
-        scrollbar-color: root.theme.scrollbar;
+        scrollbar-color: Theme.palette.scrollbar;
         width:parent.width; height:parent.height;
         content-width:self.visible-width; content-height:max(self.visible-height,input.preferred-height + 16px);
         input := TextInput {
             x:8px; y:8px; width:max(1px,parent.visible-width - 24px);
             height:max(parent.visible-height - 16px,self.preferred-height);
             text <=> root.text; wrap:word-wrap; single-line:false; read-only:root.read-only;
-            color:root.theme.ink; font-family:"DM Mono"; font-size:12px;
-            selection-background-color:root.theme.cursor; selection-foreground-color:root.theme.ink;
+            color:Theme.palette.ink; font-family:Typography.mono; font-size:Typography.small;
+            selection-background-color:Theme.palette.cursor; selection-foreground-color:Theme.palette.ink;
             accessible-label:root.label;
             input-method-hints:{capitalization:none,auto-correct:false,auto-complete:false};
             edited => { root.edited(); }
@@ -29,9 +29,6 @@ component SourcePane inherits Rectangle {
     }
 }
 export component RecoveryPanel inherits Rectangle {
-    in property <bool> material-effects:true;
-    in property <bool> high-contrast:false;
-    in property <UiTheme> theme;
     in-out property <string> section:"conflicts";
     in property <[PageRow]> items;
     in property <string> selected-id;
@@ -60,14 +57,14 @@ export component RecoveryPanel inherits Rectangle {
     callback reload();
     public function focus-panel() { back.focus(); }
     background:transparent;
-    Text { x:24px; y:14px; text:"Recovery"; font-size:21px; color:root.theme.ink; }
-    back := ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
-        x:parent.width - 44px; y:14px; theme:root.theme;
+    Text { x:24px; y:14px; text:"Recovery"; font-size:Typography.title; color:Theme.palette.ink; }
+    back := ActionButton {
+        x:parent.width - 44px; y:14px;
         icon:@image-url("../assets/icons/close.svg"); label:"Return to note";
         clicked => { root.return-to-note(); }
     }
     scroll := ThemeScrollView {
-        scrollbar-color: root.theme.scrollbar;
+        scrollbar-color: Theme.palette.scrollbar;
         x:24px; y:54px; width:parent.width - 48px; height:parent.height - 68px;
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {
@@ -75,61 +72,61 @@ export component RecoveryPanel inherits Rectangle {
             width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:10px;
             HorizontalLayout {
                 spacing:6px;
-                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Changes"; selected:root.section == "conflicts"; enabled:!root.busy; clicked => { root.section="conflicts"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Trash"; selected:root.section == "trash"; enabled:!root.busy; clicked => { root.section="trash"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Kept versions"; selected:root.section == "copies"; enabled:!root.busy; clicked => { root.section="copies"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Changes"; selected:root.section == "conflicts"; enabled:!root.busy; clicked => { root.section="conflicts"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Trash"; selected:root.section == "trash"; enabled:!root.busy; clicked => { root.section="trash"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Kept versions"; selected:root.section == "copies"; enabled:!root.busy; clicked => { root.section="copies"; root.confirming-purge=false; root.section-changed(); } }
             }
-            Text { text:root.message; wrap:word-wrap; color:root.theme.muted; font-size:13px; }
-            if root.items.length == 0:Text { text:root.section == "conflicts" ? "No changes need review." : "No saved copies here."; color:root.theme.ink; font-size:12px; }
+            Text { text:root.message; wrap:word-wrap; color:Theme.palette.muted; font-size:Typography.body; }
+            if root.items.length == 0:Text { text:root.section == "conflicts" ? "No changes need review." : "No saved copies here."; color:Theme.palette.ink; font-size:Typography.small; }
             Rectangle {
                 visible:root.items.length > 0; height:min(92px,root.items.length * 30px);
                 item-scroll := ListView {
                     width:parent.width; height:parent.height;
                     vertical-scrollbar-policy:always-off;
                     content-width:self.visible-width;
-                    for item in root.items:ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects;
+                    for item in root.items:ChoiceOption {
                         width:item-scroll.visible-width; height:30px;
-                        theme:root.theme; text:item.title; label:"Review " + item.title;
+                        text:item.title; label:"Review " + item.title;
                         selected:item.key == root.selected-id; enabled:!root.busy;
                         clicked => { root.confirming-purge=false; root.select-item(item.key); }
                     }
                 }
                 ThemeScrollbar {
                     x:parent.width - self.width; height:parent.height;
-                    thumb-color:root.theme.scrollbar;
+                    thumb-color:Theme.palette.scrollbar;
                     content-height:item-scroll.content-height;
                     visible-height:item-scroll.visible-height;
                     content-y <=> item-scroll.content-y;
                 }
             }
-            if root.selected:Text { text:root.path; wrap:word-wrap; color:root.theme.ink; font-size:12px; }
-            if root.selected:Text { text:root.section == "conflicts" ? "Your local version" : "Saved source"; color:root.theme.ink; font-size:12px; }
-            if root.selected:SourcePane { theme:root.theme; text:root.local-text; label:root.section == "conflicts" ? "Local version" : "Saved recovery source"; }
-            if root.selected && root.section == "conflicts":Text { text:root.remote-deleted ? "Remote page was deleted" : "Remote version"; color:root.theme.ink; font-size:12px; }
-            if root.selected && root.section == "conflicts" && !root.remote-deleted:SourcePane { theme:root.theme; text:root.remote-text; label:"Remote version"; }
-            if root.selected && root.section == "conflicts" && root.has-base:Text { text:"Common base"; color:root.theme.ink; font-size:12px; }
-            if root.selected && root.section == "conflicts" && root.has-base:SourcePane { theme:root.theme; text:root.base-text; label:"Common base"; }
-            if root.selected && root.section == "conflicts":Text { text:"Merged result"; color:root.theme.ink; font-size:12px; }
-            if root.selected && root.section == "conflicts":SourcePane { theme:root.theme; text <=> root.merge-text; label:"Merged result"; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
-            if root.selected && root.stale:ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Reload changes · keep merged draft"; enabled:!root.busy; clicked => { root.reload(); } }
+            if root.selected:Text { text:root.path; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected:Text { text:root.section == "conflicts" ? "Your local version" : "Saved source"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected:SourcePane { text:root.local-text; label:root.section == "conflicts" ? "Local version" : "Saved recovery source"; }
+            if root.selected && root.section == "conflicts":Text { text:root.remote-deleted ? "Remote page was deleted" : "Remote version"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == "conflicts" && !root.remote-deleted:SourcePane { text:root.remote-text; label:"Remote version"; }
+            if root.selected && root.section == "conflicts" && root.has-base:Text { text:"Common base"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == "conflicts" && root.has-base:SourcePane { text:root.base-text; label:"Common base"; }
+            if root.selected && root.section == "conflicts":Text { text:"Merged result"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == "conflicts":SourcePane { text <=> root.merge-text; label:"Merged result"; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
+            if root.selected && root.stale:ChoiceButton { text:"Reload changes · keep merged draft"; enabled:!root.busy; clicked => { root.reload(); } }
             if root.selected && root.section == "conflicts":HorizontalLayout {
                 spacing:6px;
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:root.remote-deleted ? "Accept deletion" : "Use remote"; enabled:!root.busy && !root.draft-closed && !root.stale; clicked => { root.apply-choice("remote"); } }
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:root.remote-deleted ? "Recreate local" : "Keep local"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("local"); } }
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Use merge"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("merge"); } }
+                ChoiceButton { text:root.remote-deleted ? "Accept deletion" : "Use remote"; enabled:!root.busy && !root.draft-closed && !root.stale; clicked => { root.apply-choice("remote"); } }
+                ChoiceButton { text:root.remote-deleted ? "Recreate local" : "Keep local"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("local"); } }
+                ChoiceButton { text:"Use merge"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("merge"); } }
             }
-            if root.selected && root.section != "conflicts":Text { text:"Restore destination · existing pages are preserved"; color:root.theme.ink; font-size:13px; wrap:word-wrap; }
+            if root.selected && root.section != "conflicts":Text { text:"Restore destination · existing pages are preserved"; color:Theme.palette.ink; font-size:Typography.body; wrap:word-wrap; }
             if root.selected && root.section != "conflicts":Rectangle {
-                height:34px; background:root.theme.surface; border-width:1px; border-color:root.theme.line; border-radius:5px;
-                TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:root.theme.ink; selection-background-color:root.theme.cursor; selection-foreground-color:root.theme.ink; font-size:12px; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
+                height:34px; background:Theme.palette.surface; border-width:1px; border-color:Theme.palette.line; border-radius:5px;
+                TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:Theme.palette.ink; selection-background-color:Theme.palette.cursor; selection-foreground-color:Theme.palette.ink; font-size:Typography.small; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
             }
-            if root.selected && root.section != "conflicts":ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }
-            if root.selected && root.section == "trash" && !root.confirming-purge:ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Delete this local Trash copy…"; enabled:!root.busy; clicked => { root.confirming-purge=true; } }
-            if root.selected && root.section == "trash" && root.confirming-purge:Text { text:"Permanently delete only this local Trash copy? This does not cancel pending remote deletion."; wrap:word-wrap; color:root.theme.ink; font-size:13px; }
+            if root.selected && root.section != "conflicts":ChoiceButton { text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }
+            if root.selected && root.section == "trash" && !root.confirming-purge:ChoiceButton { text:"Delete this local Trash copy…"; enabled:!root.busy; clicked => { root.confirming-purge=true; } }
+            if root.selected && root.section == "trash" && root.confirming-purge:Text { text:"Permanently delete only this local Trash copy? This does not cancel pending remote deletion."; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.body; }
             if root.selected && root.section == "trash" && root.confirming-purge:HorizontalLayout {
                 spacing:6px;
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Cancel"; enabled:!root.busy; clicked => { root.confirming-purge=false; } }
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Delete local copy"; enabled:!root.busy; clicked => { root.confirming-purge=false; root.purge-item(); } }
+                ChoiceButton { text:"Cancel"; enabled:!root.busy; clicked => { root.confirming-purge=false; } }
+                ChoiceButton { text:"Delete local copy"; enabled:!root.busy; clicked => { root.confirming-purge=false; root.purge-item(); } }
             }
         }
     }

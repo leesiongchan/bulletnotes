@@ -1,12 +1,11 @@
+import { Theme, Typography, Radius } from "theme.slint";
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { SettingsGroup, SettingsHeading, SettingToggle } from "settings-controls.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { UiTheme, ThemeOption, ThemePair } from "../types.slint";
+import { ThemeOption, ThemePair } from "../types.slint";
 import { ActionButton, ChoiceButton, ChoiceOption } from "action-button.slint";
 component ThemeAssignmentButton inherits FocusScope {
-    in property <UiTheme> theme;
-    in property <bool> high-contrast;
     in property <bool> light-selected;
     in property <bool> dark-selected;
     in property <string> name;
@@ -19,13 +18,13 @@ component ThemeAssignmentButton inherits FocusScope {
     accessible-action-default => { root.clicked(); }
     key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
     Rectangle {
-        border-radius:7px;
-        border-width:root.has-focus ? 3px : root.high-contrast ? 2px : 1px;
-        border-color:root.has-focus ? root.theme.ink : root.theme.line;
-        background:root.light-selected || root.dark-selected || touch.has-hover ? root.theme.selection : root.theme.paper;
+        border-radius:Radius.control;
+        border-width:root.has-focus ? 3px : Theme.high-contrast ? 2px : 1px;
+        border-color:root.has-focus ? Theme.palette.ink : Theme.palette.line;
+        background:root.light-selected || root.dark-selected || touch.has-hover ? Theme.palette.selection : Theme.palette.paper;
         Image {
             source:root.light-selected && root.dark-selected ? @image-url("../../assets/icons/sun-moon.svg") : root.dark-selected ? @image-url("../../assets/icons/moon.svg") : @image-url("../../assets/icons/sun.svg");
-            colorize:root.theme.ink;
+            colorize:Theme.palette.ink;
             x:8px; y:8px; width:16px; height:16px;
         }
         touch := TouchArea { clicked => { root.focus(); root.clicked(); } }
@@ -34,9 +33,6 @@ component ThemeAssignmentButton inherits FocusScope {
 }
 component ThemeCard inherits FocusScope {
     in property <ThemeOption> option;
-    in property <UiTheme> theme;
-    in property <bool> high-contrast;
-    in property <bool> material-effects;
     in property <string> paper-type;
     in property <string> paper-style;
     in property <float> font-size-px;
@@ -53,16 +49,15 @@ component ThemeCard inherits FocusScope {
     accessible-action-default => { root.clicked(); }
     key-pressed(event) => { if (event.text == Key.Return || event.text == " ") { root.clicked(); return accept; } return reject; }
     Rectangle {
-        border-radius:8px; clip:true;
+        border-radius:Radius.card; clip:true;
         PaperSurface {
             width:parent.width; height:parent.height; theme:root.option.palette;
             paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
-            material-effects:root.material-effects && !root.high-contrast;
         }
         TouchArea { clicked => { root.focus(); root.clicked(); } }
         Text {
             x:12px; y:12px; width:parent.width - 64px; height:42px;
-            text:root.option.name; font-family:"DM Mono"; font-size:12px;
+            text:root.option.name; font-family:Typography.mono; font-size:Typography.small;
             color:root.option.palette.ink; wrap:word-wrap; max-lines:2; overflow:elide;
         }
         Rectangle {
@@ -76,19 +71,19 @@ component ThemeCard inherits FocusScope {
             }
             Rectangle {
                 border-width:1px;
-                border-color:root.high-contrast ? (root.option.palette.dark ? white : black) : root.option.palette.line.with-alpha(0.4);
+                border-color:Theme.high-contrast ? (root.option.palette.dark ? white : black) : root.option.palette.line.with-alpha(0.4);
                 background:transparent; accessible-role:none;
             }
         }
         Rectangle {
-            border-radius:8px;
+            border-radius:Radius.card;
             border-width:root.light-selected || root.dark-selected || root.has-focus ? 2px : 1px;
-            border-color:root.high-contrast || root.has-focus ? (root.option.palette.dark ? white : black) : root.light-selected || root.dark-selected ? root.theme.accent : root.theme.line.with-alpha(0.3);
+            border-color:Theme.high-contrast || root.has-focus ? (root.option.palette.dark ? white : black) : root.light-selected || root.dark-selected ? Theme.palette.accent : Theme.palette.line.with-alpha(0.3);
             background:transparent; accessible-role:none;
         }
         ThemeAssignmentButton {
             x:parent.width - 44px; y:10px;
-            high-contrast:root.high-contrast; theme:root.theme; name:root.option.name;
+            name:root.option.name;
             light-selected:root.light-selected; dark-selected:root.dark-selected;
             clicked => { root.cycled(); }
         }
@@ -96,12 +91,9 @@ component ThemeCard inherits FocusScope {
 }
 
 export component AppearancePanel inherits Rectangle {
-    in property <bool> material-effects:true;
-    in property <bool> high-contrast:false;
     in property <string> light-theme;
     in property <string> dark-theme;
     in property <[ThemePair]> theme-pairs;
-    in property <UiTheme> theme;
     in property <bool> reduce-transparency:false;
     in-out property <string> category:"appearance";
     in-out property <string> mode:"system";
@@ -136,32 +128,31 @@ export component AppearancePanel inherits Rectangle {
     public function reveal-themes() { root.category = "appearance"; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
     changed category => { scroll.content-y = 0px; }
     background:transparent;
-    Text { x:root.inset; y:14px; text:"Settings"; font-size:21px; font-weight:600; color:root.theme.ink; }
+    Text { x:root.inset; y:14px; text:"Settings"; font-size:Typography.title; font-weight:600; color:Theme.palette.ink; }
     ActionButton {
         x:parent.width - 44px; y:9px;
-        theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
         icon:@image-url("../../assets/icons/close.svg"); label:"Return to note";
         clicked => { root.return-to-note(); }
     }
     Rectangle {
         x:root.inset; y:54px; width:parent.width - 2 * root.inset; height:38px;
-        background:root.theme.surface; border-radius:9px;
+        background:Theme.palette.surface; border-radius:9px;
         HorizontalLayout {
             padding:4px; spacing:4px;
             general-tab := ChoiceOption {
-                text:"General"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                text:"General"; material-effects:false;
                 selected:root.category == "general";
                 clicked => { root.category = "general"; }
             }
             appearance-tab := ChoiceOption {
-                text:"Appearance"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                text:"Appearance"; material-effects:false;
                 selected:root.category == "appearance";
                 clicked => { root.category = "appearance"; }
             }
         }
     }
     scroll := ThemeScrollView {
-        scrollbar-color:root.theme.scrollbar;
+        scrollbar-color:Theme.palette.scrollbar;
         x:root.inset; y:112px;
         width:parent.width - 2 * root.inset;
         height:max(1px,parent.height - 158px);
@@ -171,57 +162,52 @@ export component AppearancePanel inherits Rectangle {
             x:0px; width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:16px;
             if root.category == "general": VerticalBox {
                 padding:0px; spacing:16px;
-                SettingsHeading {theme:root.theme; text:"Startup";}
+                SettingsHeading {text:"Startup";}
                 SettingsGroup {
-                    theme:root.theme;
                     SettingToggle {
-                        theme:root.theme; high-contrast:root.high-contrast;
                         label:"Start with a new note";
                         description:"Open a fresh scratchpad on launch. Your previous notes stay saved.";
                         checked <=> root.start-with-new-note;
                         toggled => {root.changed();}
                     }
                 }
-                SettingsHeading {theme:root.theme; text:"Global shortcut";}
+                SettingsHeading {text:"Global shortcut";}
                 SettingsGroup {
-                    theme:root.theme;
-                    Text {text:"Show or hide Bulletnotes from any app."; font-size:13px; color:root.theme.ink; wrap:word-wrap;}
+                    Text {text:"Show or hide Bulletnotes from any app."; font-size:Typography.body; color:Theme.palette.ink; wrap:word-wrap;}
                     Rectangle {
-                        height:34px; background:root.theme.paper;
-                        border-width:1px; border-color:root.theme.line; border-radius:6px;
+                        height:34px; background:Theme.palette.paper;
+                        border-width:1px; border-color:Theme.palette.line; border-radius:Radius.tight;
                         TextInput {
                             x:8px; width:parent.width - 16px; height:parent.height;
                             text <=> root.hotkey-accelerator; single-line:true; vertical-alignment:center;
-                            color:root.theme.ink; font-size:13px;
-                            selection-background-color:root.theme.selection; selection-foreground-color:root.theme.ink;
+                            color:Theme.palette.ink; font-size:Typography.body;
+                            selection-background-color:Theme.palette.selection; selection-foreground-color:Theme.palette.ink;
                             read-only:root.hotkey-busy; accessible-label:"Global show and hide shortcut";
                         }
                     }
-                    Text {text:"For example, Option+A on macOS or Control+Shift+Space."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {text:"For example, Option+A on macOS or Control+Shift+Space."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                     ChoiceButton {
-                        theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                        material-effects:false;
                         text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut"; enabled:!root.hotkey-busy;
                         clicked => {root.apply-hotkey();}
                     }
-                    Text {visible:root.native-message != ""; text:root.native-message; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {visible:root.native-message != ""; text:root.native-message; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
-                SettingsHeading {theme:root.theme; text:"Sync";}
+                SettingsHeading {text:"Sync";}
                 SettingsGroup {
-                    theme:root.theme;
-                    Text {text:"SilverBullet connection"; font-size:13px; color:root.theme.ink;}
-                    Text {text:"Notes save locally and sync with your connected space. Manage the server and credentials here."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {text:"SilverBullet connection"; font-size:Typography.body; color:Theme.palette.ink;}
+                    Text {text:"Notes save locally and sync with your connected space. Manage the server and credentials here."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                     ChoiceButton {
-                        text:"Connection…"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                        text:"Connection…"; material-effects:false;
                         clicked => {root.show-connection();}
                     }
                 }
-                SettingsHeading {theme:root.theme; text:"Recovery";}
+                SettingsHeading {text:"Recovery";}
                 SettingsGroup {
-                    theme:root.theme;
-                    Text {text:"Restore deleted notes, review sync conflicts, or recover a kept version."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {text:"Restore deleted notes, review sync conflicts, or recover a kept version."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                     ChoiceButton {
                         text:"Open recovery…"; label:"Changes, Trash, and kept versions";
-                        theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                        material-effects:false;
                         clicked => {root.show-recovery();}
                     }
                 }
@@ -229,95 +215,90 @@ export component AppearancePanel inherits Rectangle {
             appearance-content := VerticalBox {
                 visible:root.category == "appearance";
                 padding:0px; spacing:16px;
-                SettingsHeading {theme:root.theme; text:"Text";}
+                SettingsHeading {text:"Text";}
                 SettingsGroup {
-                    theme:root.theme;
                     HorizontalLayout {
                         spacing:8px;
-                        Text {text:"Text size"; font-size:13px; color:root.theme.ink; vertical-alignment:center; horizontal-stretch:1;}
-                        ChoiceButton {text:"−"; label:"Decrease text size"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px > 11; clicked => {root.font-size-px = max(11,root.font-size-px - 1); root.changed();}}
-                        Text {text:root.font-size-px + " pt"; font-size:13px; color:root.theme.muted; width:40px; horizontal-alignment:center; vertical-alignment:center;}
-                        ChoiceButton {text:"+"; label:"Increase text size"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px < 24; clicked => {root.font-size-px = min(24,root.font-size-px + 1); root.changed();}}
+                        Text {text:"Text size"; font-size:Typography.body; color:Theme.palette.ink; vertical-alignment:center; horizontal-stretch:1;}
+                        ChoiceButton {text:"−"; label:"Decrease text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px > 11; clicked => {root.font-size-px = max(11,root.font-size-px - 1); root.changed();}}
+                        Text {text:root.font-size-px + " pt"; font-size:Typography.body; color:Theme.palette.muted; width:40px; horizontal-alignment:center; vertical-alignment:center;}
+                        ChoiceButton {text:"+"; label:"Increase text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px < 24; clicked => {root.font-size-px = min(24,root.font-size-px + 1); root.changed();}}
                     }
                 }
-                SettingsHeading {theme:root.theme; text:"Paper";}
+                SettingsHeading {text:"Paper";}
                 SettingsGroup {
-                    theme:root.theme;
-                    Text {text:"Paper type"; font-size:13px; font-weight:600; color:root.theme.ink;}
+                    Text {text:"Paper type"; font-size:Typography.body; font-weight:600; color:Theme.palette.ink;}
                     Rectangle {
-                        height:80px; background:root.theme.paper; border-radius:7px; clip:true;
+                        height:80px; background:Theme.palette.paper; border-radius:Radius.control; clip:true;
                         PaperSurface {
-                            width:parent.width; height:parent.height; theme:root.theme;
+                            width:parent.width; height:parent.height;
                             paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
-                            material-effects:root.material-effects && !root.high-contrast;
                         }
-                        Text {x:16px; y:14px; text:"A little space to think."; font-family:"DM Mono"; font-size:14px; color:root.theme.ink;}
-                        Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == "bone" ? "Bone · fine, understated grain" : root.paper-type == "eggshell" ? "Eggshell · soft, organic grain" : root.paper-type == "linen" ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:12px; color:root.theme.muted; overflow:elide;}
+                        Text {x:16px; y:14px; text:"A little space to think."; font-family:Typography.mono; font-size:Typography.heading; color:Theme.palette.ink;}
+                        Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == "bone" ? "Bone · fine, understated grain" : root.paper-type == "eggshell" ? "Eggshell · soft, organic grain" : root.paper-type == "linen" ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
                     }
                     HorizontalLayout {
                         spacing:6px;
                         for kind in ["smooth", "bone", "eggshell", "linen"]: ChoiceOption {
                             text:kind == "smooth" ? "Smooth" : kind == "bone" ? "Bone" : kind == "eggshell" ? "Eggshell" : "Linen";
-                            theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                            material-effects:false;
                             selected:root.paper-type == kind;
                             clicked => {root.paper-type = kind; root.changed();}
                         }
                     }
-                    Text {text:"Paper type changes the finish. Theme colors stay independent."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
-                    if root.paper-type != "smooth" && (root.high-contrast || root.reduce-transparency): Text {
-                        text:root.high-contrast ? "Paper texture is hidden while Increase Contrast is enabled. Your selected finish is saved." : "Paper texture is hidden while Reduce Transparency is enabled. Your selected finish is saved.";
-                        font-size:12px; color:root.theme.ink; wrap:word-wrap;
+                    Text {text:"Paper type changes the finish. Theme colors stay independent."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
+                    if root.paper-type != "smooth" && (Theme.high-contrast || root.reduce-transparency): Text {
+                        text:Theme.high-contrast ? "Paper texture is hidden while Increase Contrast is enabled. Your selected finish is saved." : "Paper texture is hidden while Reduce Transparency is enabled. Your selected finish is saved.";
+                        font-size:Typography.small; color:Theme.palette.ink; wrap:word-wrap;
                     }
-                    Rectangle {height:1px; background:root.theme.line.with-alpha(root.high-contrast ? 1 : 0.25);}
-                    Text {text:"Paper style"; font-size:13px; font-weight:600; color:root.theme.ink;}
+                    Rectangle {height:1px; background:Theme.palette.line.with-alpha(Theme.high-contrast ? 1 : 0.25);}
+                    Text {text:"Paper style"; font-size:Typography.body; font-weight:600; color:Theme.palette.ink;}
                     HorizontalLayout {
                         spacing:4px;
                         for style in ["plain", "dots", "ruled", "grid"]: ChoiceOption {
                             text:style == "plain" ? "Plain" : style == "dots" ? "Dots" : style == "ruled" ? "Ruled" : "Grid";
-                            theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                            material-effects:false;
                             selected:root.paper-style == style;
                             clicked => {root.paper-style = style; root.changed();}
                         }
                     }
-                    Text {text:"Paper intensity"; font-size:13px; color:root.theme.ink;}
+                    Text {text:"Paper intensity"; font-size:Typography.body; color:Theme.palette.ink;}
                     HorizontalLayout {
                         spacing:4px;
                         for intensity in ["subtle", "clear", "bold"]: ChoiceOption {
                             text:intensity == "subtle" ? "Subtle" : intensity == "clear" ? "Clear" : "Bold";
-                            theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                            material-effects:false;
                             enabled:root.paper-style != "plain";
                             selected:root.paper-intensity == intensity;
                             clicked => {root.paper-intensity = intensity; root.changed();}
                         }
                     }
-                    Text {text:"Controls the dots and lines. Choose a paper style to show them."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {text:"Controls the dots and lines. Choose a paper style to show them."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
-                SettingsHeading {theme:root.theme; text:"Window";}
+                SettingsHeading {text:"Window";}
                 SettingsGroup {
-                    theme:root.theme;
-                    SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Keep bottom bar visible"; description:"Keep navigation and note details in view while the note is active."; checked <=> root.keep-bottom-bar-visible; toggled => {root.changed();}}
-                    SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Show note count"; checked <=> root.show-note-count; toggled => {root.changed();}}
-                    SettingToggle {theme:root.theme; high-contrast:root.high-contrast; label:"Show note date"; checked <=> root.show-note-date; toggled => {root.changed();}}
+                    SettingToggle {label:"Keep bottom bar visible"; description:"Keep navigation and note details in view while the note is active."; checked <=> root.keep-bottom-bar-visible; toggled => {root.changed();}}
+                    SettingToggle {label:"Show note count"; checked <=> root.show-note-count; toggled => {root.changed();}}
+                    SettingToggle {label:"Show note date"; checked <=> root.show-note-date; toggled => {root.changed();}}
                 }
-                SettingsHeading {theme:root.theme; text:"Appearance";}
+                SettingsHeading {text:"Appearance";}
                 SettingsGroup {
-                    theme:root.theme;
                     HorizontalLayout {
                         spacing:4px;
                         for mode in ["light", "dark", "system"]: ChoiceOption {
                             text:mode == "light" ? "Light" : mode == "dark" ? "Dark" : "System";
-                            theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
+                            material-effects:false;
                             selected:root.mode == mode;
                             clicked => {root.mode = mode; root.changed();}
                         }
                     }
-                    Text {text:root.mode == "system" ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:12px; color:root.theme.muted; wrap:word-wrap;}
+                    Text {text:root.mode == "system" ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
             theme-heading := Text {
                 text: "Themes";
-                font-size: 13px;
+                font-size: Typography.body;
                 font-weight: 600;
-                color: root.theme.ink;
+                color: Theme.palette.ink;
             }
 
             gallery := Rectangle {
@@ -326,15 +307,14 @@ export component AppearancePanel inherits Rectangle {
                 private property <int> rows:ceil(root.theme-pairs.length * 2 / self.columns);
                 private property <length> left-inset:(self.width - self.columns * self.card-size - (self.columns - 1) * 16px) / 2;
                 height:32px + self.rows * self.card-size + max(0,self.rows - 1) * 16px;
-                background:root.theme.surface; border-radius:10px;
+                background:Theme.palette.surface; border-radius:Radius.group;
                 for pair[index] in root.theme-pairs: Rectangle {
                     width:parent.width; height:parent.height; accessible-role:none;
                     ThemeCard {
                         size:gallery.card-size;
                         x:gallery.left-inset + mod(index * 2,gallery.columns) * (gallery.card-size + 16px);
                         y:16px + floor(index * 2 / gallery.columns) * (gallery.card-size + 16px);
-                        high-contrast:root.high-contrast; material-effects:root.material-effects;
-                        theme:root.theme; paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+                        paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
                         focus-generation:index == 0 ? root.theme-focus-generation : 0;
                         option:pair.left; light-selected:root.light-theme == pair.left.id; dark-selected:root.dark-theme == pair.left.id;
                         clicked => { root.theme-selected(pair.left.id); }
@@ -344,8 +324,7 @@ export component AppearancePanel inherits Rectangle {
                         size:gallery.card-size;
                         x:gallery.left-inset + mod(index * 2 + 1,gallery.columns) * (gallery.card-size + 16px);
                         y:16px + floor((index * 2 + 1) / gallery.columns) * (gallery.card-size + 16px);
-                        high-contrast:root.high-contrast; material-effects:root.material-effects;
-                        theme:root.theme; paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+                        paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
                         option:pair.right; visible:pair.has-right;
                         light-selected:root.light-theme == pair.right.id; dark-selected:root.dark-theme == pair.right.id;
                         clicked => { root.theme-selected(pair.right.id); }
@@ -354,13 +333,13 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
             Rectangle {
-                height:68px; background:root.theme.surface; border-radius:10px;
-                Text {x:10px;y:10px;text:"Custom themes";font-size:13px;color:root.theme.ink;}
-                Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:13px;color:root.theme.muted;wrap:word-wrap;}
+                height:68px; background:Theme.palette.surface; border-radius:Radius.group;
+                Text {x:10px;y:10px;text:"Custom themes";font-size:Typography.body;color:Theme.palette.ink;}
+                Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:Typography.body;color:Theme.palette.muted;wrap:word-wrap;}
                 HorizontalBox {
                     x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:8px;
-                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;text:"Import…";label:"Import theme";theme:root.theme;clicked => {root.import-theme();}}
-                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;text:"Export…";label:"Export theme";theme:root.theme;clicked => {root.export-theme();}}
+                    ChoiceButton { text:"Import…";label:"Import theme";clicked => {root.import-theme();}}
+                    ChoiceButton { text:"Export…";label:"Export theme";clicked => {root.export-theme();}}
                 }
             }
             if root.low-contrast-warning:VerticalBox {
@@ -368,23 +347,21 @@ export component AppearancePanel inherits Rectangle {
                 spacing: 8px;
                 Text {
                     text: "This theme has low contrast. Text or controls may be difficult to see.";
-                    color: root.theme.ink;
-                    font-size: 13px;
+                    color: Theme.palette.ink;
+                    font-size: Typography.body;
                     wrap: word-wrap;
                 }
 
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
-                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+                    ChoiceButton {
                         text: "Cancel";
-                        theme: root.theme;
                         clicked => { root.cancel-theme-import(); }
                     }
 
-                    ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+                    ChoiceButton {
                         text: "Apply anyway";
-                        theme: root.theme;
                         clicked => { root.apply-low-contrast(); }
                     }
                 }
@@ -394,7 +371,7 @@ export component AppearancePanel inherits Rectangle {
     }
     Text {
         x:root.inset; y:parent.height - 37px; width:parent.width - 2 * root.inset; height:32px;
-        text:root.message; color:root.theme.muted; font-size:12px; wrap:word-wrap; overflow:elide;
+        text:root.message; color:Theme.palette.muted; font-size:Typography.small; wrap:word-wrap; overflow:elide;
         vertical-alignment:center;
     }
 }

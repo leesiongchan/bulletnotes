@@ -1,11 +1,12 @@
+import { Theme } from "theme.slint";
 import { UiTheme } from "../types.slint";
 import { PaperMaterial } from "paper-material.slint";
 export component PaperSurface inherits Rectangle {
-    in property <UiTheme> theme;
+    in property <UiTheme> theme: Theme.palette;
     in property <string> paper-type:"smooth";
     in property <string> paper-style:"plain";
     in property <float> font-size-px:15;
-    in property <bool> material-effects:true;
+    in property <bool> material-effects: Theme.material-effects;
     in property <length> content-y:0px;
     in property <length> top-clearance:16px;
     out property <length> line-height:root.font-size-px * (root.paper-style == "ruled" ? 1.8px : 1.6px);
