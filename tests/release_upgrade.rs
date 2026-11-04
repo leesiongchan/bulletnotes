@@ -183,3 +183,41 @@ async fn theme_choices_saved_by_earlier_releases_survive_the_bundled_id_rename()
         "upgrade must persist: {stored}"
     );
 }
+
+#[tokio::test]
+async fn unknown_theme_choices_fall_back_instead_of_blocking_startup() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("retired.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    let mut settings = store.load_settings().await.unwrap();
+    settings.appearance.font_size = 21.0;
+    settings.appearance.dark_theme = bulletnotes::theme::ThemeId("graphite".into());
+    store.save_settings(settings).await.unwrap();
+    store.shutdown().await.unwrap();
+    // A future release may retire a built-in theme that users still have selected.
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let json: String = db
+        .query_row("SELECT value FROM settings WHERE id=1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let mut stored: serde_json::Value = serde_json::from_str(&json).unwrap();
+    stored["appearance"]["light_theme"] = "retired-theme".into();
+    stored["appearance"]["previous_light_theme"] = "graphite".into();
+    stored["appearance"]["previous_dark_theme"] = "also-retired".into();
+    db.execute(
+        "UPDATE settings SET value=?1 WHERE id=1",
+        [stored.to_string()],
+    )
+    .unwrap();
+    drop(db);
+
+    let store = StoreHandle::open(&path).await.unwrap();
+    let appearance = store.load_settings().await.unwrap().appearance;
+    store.shutdown().await.unwrap();
+    assert_eq!(appearance.light_theme.0, "bulletnotes");
+    assert_eq!(appearance.dark_theme.0, "graphite");
+    assert_eq!(appearance.previous_light_theme.unwrap().0, "graphite");
+    assert_eq!(appearance.previous_dark_theme, None);
+    assert_eq!(appearance.font_size, 21.0);
+}

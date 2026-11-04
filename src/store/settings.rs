@@ -150,10 +150,13 @@ pub(super) fn load(db: &Connection) -> Result<AppSettings, StoreError> {
     Ok(settings)
 }
 /// Releases v1.0.0–v1.3.0 stored bundled theme IDs under this prefix; they are
-/// rewritten to `bundled-` once at startup so saved theme choices survive the rename.
+/// rewritten to `bundled-` so saved theme choices survive the rename.
 const LEGACY_THEME_PREFIX: &str = "antinote-";
 
-pub(super) fn upgrade_legacy_theme_ids(db: &mut Connection) -> Result<(), StoreError> {
+/// Startup repair for theme choices, saved once. Legacy IDs are renamed; IDs that
+/// match no built-in or imported theme fall back to the slot default (previous
+/// choices are cleared) instead of making the settings invalid and blocking startup.
+pub(super) fn repair_theme_ids(db: &mut Connection) -> Result<(), StoreError> {
     let json = db
         .query_row("SELECT value FROM settings WHERE id=1", [], |row| {
             row.get::<_, String>(0)
@@ -164,8 +167,13 @@ pub(super) fn upgrade_legacy_theme_ids(db: &mut Connection) -> Result<(), StoreE
     else {
         return Ok(());
     };
+    let Ok(themes) = settings.themes() else {
+        return Ok(());
+    };
+    let known = |id: &ThemeId| themes.iter().any(|entry| entry.id == *id);
+    let defaults = crate::theme::AppearanceSettings::default();
     let appearance = &mut settings.appearance;
-    let mut upgraded = 0;
+    let (mut upgraded, mut replaced) = (0, 0);
     for id in [&mut appearance.light_theme, &mut appearance.dark_theme]
         .into_iter()
         .chain(appearance.previous_light_theme.as_mut())
@@ -176,9 +184,35 @@ pub(super) fn upgrade_legacy_theme_ids(db: &mut Connection) -> Result<(), StoreE
             upgraded += 1;
         }
     }
-    if upgraded > 0 {
+    for (current, default) in [
+        (&mut appearance.light_theme, defaults.light_theme),
+        (&mut appearance.dark_theme, defaults.dark_theme),
+    ] {
+        if !known(current) {
+            *current = default;
+            replaced += 1;
+        }
+    }
+    for previous in [
+        &mut appearance.previous_light_theme,
+        &mut appearance.previous_dark_theme,
+    ] {
+        if previous.as_ref().is_some_and(|id| !known(id)) {
+            *previous = None;
+            replaced += 1;
+        }
+    }
+    if upgraded + replaced > 0 {
         save(db, settings)?;
+    }
+    if upgraded > 0 {
         tracing::info!(count = upgraded, "Upgraded legacy theme identifiers");
+    }
+    if replaced > 0 {
+        tracing::warn!(
+            count = replaced,
+            "Replaced unknown theme choices with defaults"
+        );
     }
     Ok(())
 }
