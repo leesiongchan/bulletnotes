@@ -128,10 +128,7 @@ pub struct ChromeMonitor {
     _lifetime: Rc<()>,
 }
 impl ChromeMonitor {
-    pub fn install<W: ChromeWindow + 'static>(
-        window: &W,
-        observer: Option<Box<dyn Fn(bool, isize)>>,
-    ) -> ProbeResult<Self> {
+    pub fn install<W: ChromeWindow + 'static>(window: &W) -> ProbeResult<Self> {
         configure(window.window())?;
         let native = native_window(window.window())?;
         let lifetime = Rc::new(());
@@ -198,9 +195,6 @@ impl ChromeMonitor {
                         window.hover_edges(header, footer);
                         if !W::FLOATING {
                             show_buttons(&native, header);
-                        }
-                        if let Some(observer) = &observer {
-                            observer(header, event_ref.eventNumber());
                         }
                     }
                 }

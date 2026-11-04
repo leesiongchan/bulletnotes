@@ -16,22 +16,19 @@ backend removal is authorized.
 
 Native traffic lights retain AppKit-owned geometry and remain in layout while
 alpha/enabled state changes on reveal. The 32 px note-header row aligns custom
-controls with the standard native controls. A reusable `chrome-check` example
-measures native frames through repeated reveals without opening notes or sync.
+controls with the standard native controls.
 
 ## Intent and approach
 
-Make Bulletnotes clean, calm and comfortable, using the installed AntiNote 2.1.3
-as a reference while preserving Bulletnotes' eggshell, persimmon and silver
-identity. Keep Rust/Slint, the source editor, existing Markdown semantics and
-the approved application icon. See the [reference study](../../antinote-editor-chrome-study.md)
-for observed evidence and inspection limits.
+Make Bulletnotes clean, calm and comfortable while preserving Bulletnotes'
+eggshell, persimmon and silver identity. Keep Rust/Slint, the source editor,
+existing Markdown semantics and the approved application icon.
 
 Three approaches were considered: native-editor polish with language highlighting
 (selected), the same visual work deferring language highlighting (smaller but
 incomplete), and replacing the editor (unnecessary selection, undo and input risk).
 This work includes all seven QOL requests, necessary settings/documentation updates,
-and verification. It does not add AntiNote's keyword modes, timers, extensions or
+and verification. It does not add keyword modes, timers, extensions or
 other unrelated product features.
 
 Specific dimensions, typography and interaction choices below are proposed builder
@@ -136,9 +133,7 @@ text in the footer when width permits; at 400 px prioritize actions and elide
 metadata/status rather than overlap or clip controls. Preserve persistent-bottom-
 bar and note-count/date preferences. No unlabeled icon changes meaning silently.
 
-The reference footer was not reliably captured in the initial study. Inspect it
-before finalizing bottom-bar implementation and record any material differences;
-the layout above is a Bulletnotes proposal, not an asserted AntiNote replica.
+Verify the bottom-bar layout in native captures before finalizing it.
 
 ## Code blocks
 

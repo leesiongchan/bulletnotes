@@ -43,7 +43,7 @@
 
 **Files:** `build.rs`, UI shared font definitions, `ui/components/{action-button,note-editor,appearance-panel}.slint`, `ui/app-window.slint`, `assets/icons/*.svg`, documentation.
 **Interfaces:** Shared DM Mono/DM Sans font family names; existing action callbacks unchanged.
-- [x] Capture baseline native/test-rendered UI and inspect AntiNote footer.
+- [x] Capture baseline native/test-rendered UI.
 - [x] Register bundled licensed fonts, update actual editor/measurement/preview typography. Flatten toolbar controls and redraw the SVG set on a 24 unit grid.
 - [x] Align header/footer and reserve sync target space. Remove obsolete latest-dot setting UI; preserve legacy deserialization and newest navigation.
 - [x] Check narrow/default layouts and keyboard reveal/navigation.

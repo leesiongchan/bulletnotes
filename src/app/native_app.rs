@@ -152,7 +152,7 @@ impl LocalApplication {
                     let result = (|| -> AppResult<()> {
                         #[cfg(target_os = "macos")]
                         {
-                            *owner.borrow_mut() = Some(ChromeMonitor::install(&window, None)?);
+                            *owner.borrow_mut() = Some(ChromeMonitor::install(&window)?);
                         }
                         restore_window(&window, placement.as_ref())?;
                         integration.attach(&settings)?;

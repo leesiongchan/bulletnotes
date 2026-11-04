@@ -6,9 +6,9 @@ and call the existing pattern choice Paper style.
 
 ## Approach
 
-Adapt AntiNote's categorized, grouped forms using existing Rust/Slint components.
-A cosmetic change alone would omit the requested paper types; full AntiNote
-parity would introduce unrelated product systems. Work stays in the existing
+Use categorized, grouped forms built from existing Rust/Slint components.
+A cosmetic change alone would omit the requested paper types; broader settings
+work would introduce unrelated product systems. Work stays in the existing
 settings view and the harness-managed worktree.
 
 ## General
