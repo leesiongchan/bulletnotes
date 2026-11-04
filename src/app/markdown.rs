@@ -11,7 +11,9 @@ use std::ops::Range;
 /// code panels and editing commands always agree on the document structure.
 const OPTIONS: Options = Options::ENABLE_TASKLISTS
     .union(Options::ENABLE_STRIKETHROUGH)
-    .union(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    .union(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS)
+    // SilverBullet links pages with `[[Page]]` and `[[Page|label]]`.
+    .union(Options::ENABLE_WIKILINKS);
 
 /// Parser events with their original byte ranges in `source`.
 pub(super) fn events(source: &str) -> impl Iterator<Item = (Event<'_>, Range<usize>)> {
@@ -405,6 +407,39 @@ mod tests {
             let span = spans.iter().find(|span| span.start <= at && at < span.end);
             assert_eq!(span.is_some_and(|span| span.bold), bold, "{needle}");
         }
+    }
+
+    #[test]
+    fn wikilinks_style_the_page_name_and_keep_brackets_quiet() {
+        let source = "See [[Daily Notes]] and [[Projects/Plan|the plan]].\n\n`[[not a link]]`";
+        let palette = UiTheme {
+            ink: slint::Color::from_rgb_u8(0x22, 0x22, 0x22),
+            paper: slint::Color::from_rgb_u8(0xff, 0xff, 0xff),
+            muted: slint::Color::from_rgb_u8(0x55, 0x55, 0x55),
+            accent: slint::Color::from_rgb_u8(0x8a, 0x2b, 0x0e),
+            ..UiTheme::default()
+        };
+        let spans = decorations(source, &palette, false);
+        let text = |span: &TextInputDecoration| &source[span.start as usize..span.end as usize];
+        let linked: Vec<_> = spans
+            .iter()
+            .filter(|span| span.underline)
+            .map(text)
+            .collect();
+        assert_eq!(linked, ["Daily Notes", "the plan"]);
+        for syntax in ["[[", "]]"] {
+            assert!(
+                spans
+                    .iter()
+                    .any(|span| !span.underline && text(span).contains(syntax)),
+                "{syntax} must stay visible as quiet syntax"
+            );
+        }
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.code && text(span) == "[[not a link]]")
+        );
     }
 
     #[test]
