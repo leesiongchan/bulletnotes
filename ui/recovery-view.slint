@@ -1,3 +1,4 @@
+import { PageTitle } from "components/settings-controls.slint";
 import { Theme, Typography, Radius, Spacing } from "components/theme.slint";
 import { ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
@@ -57,7 +58,7 @@ export component RecoveryPanel inherits Rectangle {
     callback reload();
     public function focus-panel() { back.focus(); }
     background:transparent;
-    Text { x:Spacing.page; y:14px; text:"Recovery"; font-size:Typography.title; color:Theme.palette.ink; }
+    PageTitle { x:Spacing.page; y:14px; text:"Recovery"; }
     back := ActionButton {
         x:parent.width - 44px; y:14px;
         icon:@image-url("../assets/icons/close.svg"); label:"Return to note";
@@ -69,7 +70,7 @@ export component RecoveryPanel inherits Rectangle {
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {
             x:0px;
-            width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:10px;
+            width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:Spacing.lg;
             HorizontalLayout {
                 spacing:Spacing.sm;
                 ChoiceOption { text:"Changes"; selected:root.section == UiRecoveryKind.conflict; enabled:!root.busy; clicked => { root.section=UiRecoveryKind.conflict; root.confirming-purge=false; root.section-changed(); } }
@@ -117,7 +118,7 @@ export component RecoveryPanel inherits Rectangle {
             }
             if root.selected && root.section != UiRecoveryKind.conflict:Text { text:"Restore destination · existing pages are preserved"; color:Theme.palette.ink; font-size:Typography.body; wrap:word-wrap; }
             if root.selected && root.section != UiRecoveryKind.conflict:Rectangle {
-                height:34px; background:Theme.palette.surface; border-width:1px; border-color:Theme.palette.line; border-radius:5px;
+                height:34px; background:Theme.palette.surface; border-width:1px; border-color:Theme.palette.line; border-radius:Radius.tight;
                 TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:Theme.palette.ink; selection-background-color:Theme.palette.cursor; selection-foreground-color:Theme.palette.ink; font-size:Typography.small; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
             }
             if root.selected && root.section != UiRecoveryKind.conflict:ChoiceButton { text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }

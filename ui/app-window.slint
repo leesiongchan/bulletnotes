@@ -306,7 +306,7 @@ export component AppWindow inherits Window {
     }
     Rectangle {
         background: root.theme.paper;
-        border-radius: 16px;
+        border-radius: Radius.window;
         clip: true;
         PaperSurface {
             width:parent.width; height:parent.height; visible:root.active-view != UiView.note;

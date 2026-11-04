@@ -1,6 +1,6 @@
 import { Theme, Typography, Radius, Spacing } from "theme.slint";
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { SettingsGroup, SettingsHeading, SettingToggle } from "settings-controls.slint";
+import { SettingsGroup, SettingsHeading, SettingToggle, PageTitle } from "settings-controls.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { ThemeOption, ThemePair, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType } from "../types.slint";
@@ -128,7 +128,7 @@ export component AppearancePanel inherits Rectangle {
     public function reveal-themes() { root.category = SettingsCategory.appearance; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
     changed category => { scroll.content-y = 0px; }
     background:transparent;
-    Text { x:root.inset; y:14px; text:"Settings"; font-size:Typography.title; font-weight:600; color:Theme.palette.ink; }
+    PageTitle { x:root.inset; y:14px; text:"Settings"; }
     ActionButton {
         x:parent.width - 44px; y:9px;
         icon:@image-url("../../assets/icons/close.svg"); label:"Return to note";
@@ -136,7 +136,7 @@ export component AppearancePanel inherits Rectangle {
     }
     Rectangle {
         x:root.inset; y:54px; width:parent.width - 2 * root.inset; height:38px;
-        background:Theme.palette.surface; border-radius:9px;
+        background:Theme.palette.surface; border-radius:Radius.group;
         HorizontalLayout {
             padding:Spacing.xs; spacing:Spacing.xs;
             general-tab := ChoiceOption {
@@ -343,7 +343,7 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
             if root.low-contrast-warning:VerticalBox {
-                padding: 10px;
+                padding: Spacing.lg;
                 spacing: Spacing.md;
                 Text {
                     text: "This theme has low contrast. Text or controls may be difficult to see.";

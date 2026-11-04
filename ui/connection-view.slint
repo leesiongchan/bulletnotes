@@ -1,7 +1,7 @@
 import { Theme, Typography, Radius, Spacing } from "components/theme.slint";
 import { VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
-import { SettingToggle } from "components/settings-controls.slint";
+import { SettingToggle, PageTitle } from "components/settings-controls.slint";
 import { ActionButton, ChoiceButton } from "components/action-button.slint";
 component ConnectionField inherits Rectangle {
     in-out property <string> text;
@@ -10,7 +10,7 @@ component ConnectionField inherits Rectangle {
     in property <bool> password: false;
     in property <bool> enabled: true;
     height: 36px;
-    border-radius: Radius.card;
+    border-radius: Radius.tight;
     background: Theme.palette.surface;
     border-width: 1px;
     border-color: input.has-focus ? Theme.palette.accent : Theme.palette.line;
@@ -45,7 +45,7 @@ export component ConnectionPanel inherits Rectangle {
     callback return-to-note();
     public function focus-panel() { url.focus-field(); }
     background: transparent;
-    Text { x:Spacing.page; y:14px; text:"Connection"; font-size:Typography.title; color:Theme.palette.ink; }
+    PageTitle { x:Spacing.page; y:14px; text:"Connection"; }
     ActionButton {
         x: parent.width - 44px; y: 14px;
         icon: @image-url("../assets/icons/close.svg"); label: "Return to note";

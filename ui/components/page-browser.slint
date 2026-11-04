@@ -262,8 +262,8 @@ export component PageBrowser inherits Rectangle {
         TouchArea { }
         Rectangle {
             x:16px;y:max(12px,(parent.height - self.height) / 2);width:parent.width - 32px;height:174px;
-            border-radius:14px;background:Theme.palette.surface;border-width:1px;border-color:Theme.palette.line;
-            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:15px;font-weight:550;color:Theme.palette.ink; }
+            border-radius:Radius.surface;background:Theme.palette.surface;border-width:1px;border-color:Theme.palette.line;
+            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:Typography.heading;font-weight:550;color:Theme.palette.ink; }
             Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:Typography.small;color:Theme.palette.muted; }
             ChoiceButton { height:28px; x:16px;y:128px;width:92px;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
             confirm-button := ChoiceButton { height:28px; x:parent.width - 154px;y:128px;width:138px;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }

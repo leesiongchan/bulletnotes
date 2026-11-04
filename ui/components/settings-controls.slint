@@ -6,6 +6,11 @@ export component SettingsGroup inherits Rectangle {
     preferred-height:content.preferred-height;
     content := VerticalLayout { padding:14px; spacing:Spacing.lg; @children }
 }
+export component PageTitle inherits Text {
+    color:Theme.palette.ink;
+    font-size:Typography.title;
+    font-weight:600;
+}
 export component SettingsHeading inherits Text {
     color:Theme.palette.ink;
     font-size:Typography.heading;
