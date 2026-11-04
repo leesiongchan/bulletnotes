@@ -33,3 +33,11 @@ export struct MarkdownEdit {
     handled: bool, changed: bool, start: int, end: int, replacement: string,
     anchor: int, caret: int, preserve-scroll: bool
 }
+
+export enum UiView { note, pages, appearance, connection, recovery }
+export enum SettingsCategory { general, appearance }
+export enum UiRecoveryKind { conflict, trash, copy }
+export enum UiAppearanceMode { light, dark, system }
+export enum UiPaperType { smooth, bone, eggshell, linen }
+export enum UiPaperStyle { plain, dots, ruled, grid }
+export enum UiPaperIntensity { subtle, clear, bold }

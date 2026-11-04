@@ -1,5 +1,6 @@
 use bulletnotes::{
-    AppWindow, app::ui::present_settings, store::settings::AppSettings, theme::SystemAppearance,
+    AppWindow, UiPaperStyle, app::ui::present_settings, store::settings::AppSettings,
+    theme::SystemAppearance,
 };
 use slint::{ComponentHandle, Model, platform::WindowEvent};
 use std::{cell::Cell, rc::Rc};
@@ -216,14 +217,14 @@ fn tasks_and_bullets_align_their_body_text_in_compact_slots() {
 fn editor_rows_follow_font_size_spacing() {
     let source = "MMMM\nMMMM\n";
     let window = setup(source);
-    for (paper, spacing) in [("plain", 1.6), ("ruled", 1.8)] {
-        window.set_paper_style(paper.into());
+    for (paper, spacing) in [(UiPaperStyle::Plain, 1.6), (UiPaperStyle::Ruled, 1.8)] {
+        window.set_paper_style(paper);
         for font in [11.0, 15.0, 24.0] {
             window.set_font_size_px(font);
             let _ = snapshot(&window);
             assert!(
                 (window.get_editor_line_height() - font * spacing).abs() < 0.1,
-                "{paper} {font}pt text must use {spacing}em rows; got {}",
+                "{paper:?} {font}pt text must use {spacing}em rows; got {}",
                 window.get_editor_line_height()
             );
         }
@@ -235,7 +236,7 @@ fn editor_rows_follow_font_size_spacing() {
 fn grid_pitch_and_text_inset_match_editor_geometry() {
     let window = setup("MMMM\nMMMM\n");
     window.set_font_size_px(14.0);
-    window.set_paper_style("grid".into());
+    window.set_paper_style(UiPaperStyle::Grid);
     let mut theme = window.get_theme();
     theme.paper = slint::Color::from_rgb_u8(255, 255, 255);
     theme.pattern = slint::Color::from_rgb_u8(0, 0, 255);

@@ -31,16 +31,7 @@ impl State {
         };
         window.set_lifecycle_pending(self.lifecycle.blocks_authoring());
         let app = self.coordinator.borrow();
-        window.set_active_view(
-            match app.view() {
-                View::Note => "note",
-                View::AllPages => "pages",
-                View::Appearance => "appearance",
-                View::Connection => "connection",
-                View::Recovery => "recovery",
-            }
-            .into(),
-        );
+        window.set_active_view(app.view().into());
         window.set_can_go_older(app.can_step_scratchpad(-1));
         window.set_can_go_newer(app.can_step_scratchpad(1));
         let current = app.editor().map(|editor| editor.key());

@@ -132,7 +132,7 @@ impl State {
             .window()
             .with_winit_window(|native| native.focus_window());
         self.local.set_active(true);
-        if window.get_active_view() == "note" {
+        if window.get_active_view() == crate::UiView::Note {
             window.invoke_focus_editor();
         }
         Ok(())

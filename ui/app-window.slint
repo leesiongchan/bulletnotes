@@ -7,14 +7,14 @@ import "../site/assets/fonts/dm-sans.ttf";
 import { RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
 import { Palette, AboutSlint } from "std-widgets.slint";
-import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel } from "types.slint";
+import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiRecoveryKind, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType, UiView } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
 import { NoteEditor } from "components/note-editor.slint";
 import { PageBrowser } from "components/page-browser.slint";
 import { PaperSurface } from "components/paper-surface.slint";
 import { AppearancePanel } from "components/appearance-panel.slint";
-export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel }
+export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
 
 export component AppWindow inherits Window {
     default-font-family: Typography.sans;
@@ -34,7 +34,7 @@ export component AppWindow inherits Window {
     changed prefers-reduced-transparency => { root.about-presentation-changed(); }
     callback search-palette-changed();
     changed system-high-contrast => { root.search-palette-changed(); root.about-presentation-changed(); }
-    in-out property <string> active-view:"note";
+    in-out property <UiView> active-view:UiView.note;
     in property <string> current-path;
     in-out property <string> note-text;
     pure callback edit-markdown(string, int, int, MarkdownCommand, int, int) -> MarkdownEdit;
@@ -63,12 +63,12 @@ export component AppWindow inherits Window {
     private property <bool> header-focused:pin.has-focus || browse.has-focus || appearance-button.has-focus || new-button.has-focus;
     private property <bool> footer-focused:trash-button.has-focus || newest.has-focus || back.has-focus || next.has-focus;
     private property <bool> header-needed:root.chrome-active && (root.header-hovered || root.pending-chrome-focus == 1 || root.header-focused || pin.pressed || browse.pressed || appearance-button.pressed || new-button.pressed);
-    private property <bool> footer-needed:root.chrome-active && root.active-view == "note" && (root.keep-bottom-bar-visible || root.footer-hovered || root.pending-chrome-focus == 2 || root.footer-focused || trash-button.pressed || newest.pressed || back.pressed || next.pressed);
+    private property <bool> footer-needed:root.chrome-active && root.active-view == UiView.note && (root.keep-bottom-bar-visible || root.footer-hovered || root.pending-chrome-focus == 2 || root.footer-focused || trash-button.pressed || newest.pressed || back.pressed || next.pressed);
     callback header-visibility-changed(bool, bool);
     changed header-needed => { if (root.header-needed) { root.header-revealed = true; } }
     changed footer-needed => { if (root.footer-needed) { root.footer-revealed = true; } }
     changed header-revealed => { root.header-visibility-changed(root.header-revealed,root.prefers-reduced-motion || !root.chrome-active); }
-    Timer { interval:root.active-view == "note" ? 300ms : 0ms; running:root.header-revealed && !root.header-needed; triggered => { root.header-revealed = false; } }
+    Timer { interval:root.active-view == UiView.note ? 300ms : 0ms; running:root.header-revealed && !root.header-needed; triggered => { root.header-revealed = false; } }
     Timer { interval:300ms; running:root.footer-revealed && !root.footer-needed; triggered => { root.footer-revealed = false; } }
     // Focus only after the reveal has a visible frame; Slint drops focus in hidden ancestors.
     Timer {
@@ -79,10 +79,10 @@ export component AppWindow inherits Window {
         }
     }
     function focus-active-view() {
-        if (root.active-view == "pages") { pages.focus-query(); }
-        else if (root.active-view == "appearance") { appearance.focus-panel(); }
-        else if (root.active-view == "recovery") { auxiliary.focus-panel(); }
-        else if (root.active-view == "connection") { connection.focus-panel(); }
+        if (root.active-view == UiView.pages) { pages.focus-query(); }
+        else if (root.active-view == UiView.appearance) { appearance.focus-panel(); }
+        else if (root.active-view == UiView.recovery) { auxiliary.focus-panel(); }
+        else if (root.active-view == UiView.connection) { connection.focus-panel(); }
         else { editor.focus-editor(); }
     }
     public function reset-chrome() {
@@ -97,22 +97,22 @@ export component AppWindow inherits Window {
     in property <bool> note-read-only:false;
     in property <bool> lifecycle-pending:false;
     in-out property <float> font-size-px:15;
-    in-out property <string> paper-style:"plain";
-    in-out property <string> paper-type:"smooth";
+    in-out property <UiPaperStyle> paper-style:UiPaperStyle.plain;
+    in-out property <UiPaperType> paper-type:UiPaperType.smooth;
     changed paper-type => { root.about-presentation-changed(); }
     changed paper-style => { root.about-presentation-changed(); }
     changed font-size-px => { root.about-presentation-changed(); }
-    private property <bool> paper-material-active:Theme.material-effects && root.paper-type != "smooth";
-    in-out property <string> paper-intensity:"clear";
+    private property <bool> paper-material-active:Theme.material-effects && root.paper-type != UiPaperType.smooth;
+    in-out property <UiPaperIntensity> paper-intensity:UiPaperIntensity.clear;
     in-out property <bool> start-with-new-note:false;
     in-out property <bool> keep-bottom-bar-visible:false;
     in-out property <bool> show-note-count:true;
     in-out property <bool> show-note-date:true;
     in-out property <bool> show-newest-indicator:true;
-    in-out property <string> settings-category:"appearance";
+    in-out property <SettingsCategory> settings-category:SettingsCategory.appearance;
     private property <string> visible-note-count:root.show-note-count ? root.note-counter : "";
     private property <string> visible-note-date:root.show-note-date ? root.note-date : "";
-    in-out property <string> appearance-mode:"system";
+    in-out property <UiAppearanceMode> appearance-mode:UiAppearanceMode.system;
     in property <string> selected-theme-id;
     in property <string> selected-light-theme-id;
     in property <string> selected-dark-theme-id;
@@ -164,7 +164,7 @@ export component AppWindow inherits Window {
     out property <float> editor-scroll-y:editor.scroll-y;
     out property <length> editor-line-height:editor.line-height;
     in property <[PageRow]> recovery-items;
-    in-out property <string> recovery-section:"conflicts";
+    in-out property <UiRecoveryKind> recovery-section:UiRecoveryKind.conflict;
     in property <string> recovery-selected-id;
     in property <string> recovery-path;
     in property <string> recovery-local;
@@ -198,7 +198,7 @@ export component AppWindow inherits Window {
     callback find-opened();
     callback find-query-changed(string);
     callback find-step(int);
-    public function show-find() { if (root.active-view != "note") { root.return-to-note(); } root.find-visible = true; find.focus-query(); root.find-opened(); }
+    public function show-find() { if (root.active-view != UiView.note) { root.return-to-note(); } root.find-visible = true; find.focus-query(); root.find-opened(); }
     public function close-find() { root.find-visible = false; editor.focus-editor(); }
     public function select-find-match(anchor:int, caret:int) { editor.select-match(anchor,caret); }
     callback native-window-ready();
@@ -255,7 +255,7 @@ export component AppWindow inherits Window {
     function shortcut(event: KeyEvent) -> EventResult {
         if (event.text == Key.F6) {
             root.chrome-active = true;
-            if ((root.header-focused || root.pending-chrome-focus == 1) && root.active-view == "note") {
+            if ((root.header-focused || root.pending-chrome-focus == 1) && root.active-view == UiView.note) {
                 root.pending-chrome-focus = 2; root.footer-revealed = true;
             } else if (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0) {
                 root.pending-chrome-focus = 0; root.focus-active-view();
@@ -269,7 +269,7 @@ export component AppWindow inherits Window {
         // Slint maps the macOS Command key to control.
         if (event.modifiers.control) {
             if (event.text == "f" || event.text == "F") { root.show-find(); return accept; }
-            if ((event.text == "g" || event.text == "G") && root.active-view == "note") { root.find-step(event.modifiers.shift ? -1 : 1); return accept; }
+            if ((event.text == "g" || event.text == "G") && root.active-view == UiView.note) { root.find-step(event.modifiers.shift ? -1 : 1); return accept; }
             if (event.text == "q" || event.text == "Q") { root.request-quit(); return accept; }
             if (event.text == "w" || event.text == "W") { root.request-hide(); return accept; }
             if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
@@ -281,12 +281,12 @@ export component AppWindow inherits Window {
             if (event.text == "[") { root.scratchpad-step(-1); return accept; }
             if (event.text == "]") { root.scratchpad-step(1); return accept; }
         }
-        if (event.text == Key.Escape && root.active-view == "note" && root.find-visible) { root.close-find(); return accept; }
-        if (event.text == Key.Escape && root.active-view == "pages") {
+        if (event.text == Key.Escape && root.active-view == UiView.note && root.find-visible) { root.close-find(); return accept; }
+        if (event.text == Key.Escape && root.active-view == UiView.pages) {
             if (!pages.escape-allowed) { return reject; }
             pages.cancel-or-close(); return accept;
         }
-        if (event.text == Key.Escape && root.active-view != "note") {
+        if (event.text == Key.Escape && root.active-view != UiView.note) {
             if (root.low-contrast-warning) { root.cancel-theme-import(); } else { root.return-to-note(); }
             return accept;
         }
@@ -297,33 +297,33 @@ export component AppWindow inherits Window {
         root.about-presentation-changed();
     }
     changed active-view => {
-        if (root.active-view == "pages") { pages.focus-query(); }
-        else if (root.active-view == "appearance") { appearance.focus-panel(); }
-        else if (root.active-view == "recovery") { auxiliary.focus-panel(); }
-        else if (root.active-view == "connection") { connection.focus-panel(); }
-        else if (root.active-view == "note") { editor.focus-editor(); }
-        if (root.active-view != "connection") { root.connection-token = ""; }
+        if (root.active-view == UiView.pages) { pages.focus-query(); }
+        else if (root.active-view == UiView.appearance) { appearance.focus-panel(); }
+        else if (root.active-view == UiView.recovery) { auxiliary.focus-panel(); }
+        else if (root.active-view == UiView.connection) { connection.focus-panel(); }
+        else if (root.active-view == UiView.note) { editor.focus-editor(); }
+        if (root.active-view != UiView.connection) { root.connection-token = ""; }
     }
     Rectangle {
         background: root.theme.paper;
         border-radius: 16px;
         clip: true;
         PaperSurface {
-            width:parent.width; height:parent.height; visible:root.active-view != "note";
+            width:parent.width; height:parent.height; visible:root.active-view != UiView.note;
             paper-type:root.paper-type; paper-style:root.paper-style;
             font-size-px:root.font-size-px;
         }
         keys := FocusScope {
             key-pressed(event) => { root.shortcut(event) }
             capture-key-pressed(event) => {
-                if (event.text == Key.F6 || (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0 || (root.active-view == "pages" && pages.escape-allowed)))) { return root.shortcut(event); }
+                if (event.text == Key.F6 || (event.text == Key.Escape && (root.header-focused || root.footer-focused || root.pending-chrome-focus != 0 || (root.active-view == UiView.pages && pages.escape-allowed)))) { return root.shortcut(event); }
                 return reject;
             }
             // Retain the editor instance while other views are shown, preserving its native editing state.
             note-view := Rectangle {
                 height: parent.height;
                 width: parent.width;
-                visible: root.active-view != "pages" && root.active-view != "appearance" && root.active-view != "connection" && root.active-view != "recovery";
+                visible: root.active-view != UiView.pages && root.active-view != UiView.appearance && root.active-view != UiView.connection && root.active-view != UiView.recovery;
                 editor := NoteEditor {
                     width: parent.width;
                     height: parent.height;
@@ -359,7 +359,7 @@ export component AppWindow inherits Window {
                 y: 20px;
                 height: parent.height - 20px;
                 width: parent.width;
-                visible: root.active-view == "pages";
+                visible: root.active-view == UiView.pages;
                 results: root.page-results;
                 scratchpads <=> root.search-scratchpads;
                 cards <=> root.search-cards;
@@ -403,7 +403,7 @@ export component AppWindow inherits Window {
                 y: 20px;
                 height: parent.height - 20px;
                 width: parent.width;
-                visible: root.active-view == "appearance";
+                visible: root.active-view == UiView.appearance;
                 theme-pairs: root.theme-options;
                 light-theme: root.selected-light-theme-id;
                 dark-theme: root.selected-dark-theme-id;
@@ -437,7 +437,7 @@ export component AppWindow inherits Window {
 
             connection := ConnectionPanel {
                 y:20px; height:parent.height - 20px; width:parent.width;
-                visible:root.active-view == "connection";
+                visible:root.active-view == UiView.connection;
                 server-url <=> root.connection-url;
                 token <=> root.connection-token; remember <=> root.connection-remember;
                 busy:root.connection-busy || root.lifecycle-pending; message:root.connection-message; automatic-mode:root.sync-available;
@@ -446,7 +446,7 @@ export component AppWindow inherits Window {
             }
             auxiliary := RecoveryPanel {
                 y:20px; height:parent.height - 20px; width:parent.width;
-                visible:root.active-view == "recovery";
+                visible:root.active-view == UiView.recovery;
                 section <=> root.recovery-section; items:root.recovery-items;
                 selected-id:root.recovery-selected-id; path:root.recovery-path;
                 local-text:root.recovery-local; remote-text:root.recovery-remote; base-text:root.recovery-base;
@@ -465,13 +465,13 @@ export component AppWindow inherits Window {
             }
             Rectangle {
                 x:20px; width:parent.width - 40px; height:48px; y:parent.height - 112px;
-                visible:root.status-attention && root.active-view == "note";
+                visible:root.status-attention && root.active-view == UiView.note;
                 background:root.theme.surface; border-radius:Radius.group; border-width:1px; border-color:root.theme.accent;
                 Text {x:12px; width:parent.width - 24px; height:parent.height; text:root.status-text; color:root.theme.ink; font-size:Typography.caption; wrap:word-wrap; vertical-alignment:center;}
             }
             header := Rectangle {
                 x:0px; y:root.prefers-reduced-motion || root.header-revealed ? 0px : -4px;
-                width:parent.width; height:root.active-view == "note" ? 32px : 34px;
+                width:parent.width; height:root.active-view == UiView.note ? 32px : 34px;
                 background:root.theme.paper;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.line;
                 opacity:root.header-revealed ? 1 : 0;
@@ -479,32 +479,32 @@ export component AppWindow inherits Window {
                 animate opacity, y { duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.header-revealed ? Motion.reveal : Motion.conceal); easing:ease-out; }
                 WindowMoveArea {x:160px; width:max(0px,parent.width - 248px); height:parent.height; enabled:root.header-revealed;}
                 appearance-button := ActionButton {
-                    x:82px; y:root.active-view == "note" ? 0px : 1px; circular:true;
+                    x:82px; y:root.active-view == UiView.note ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/appearance.svg"); label:"Settings, " + root.shortcut-modifier + " comma";
                     clicked => {root.show-appearance();}
                 }
                 browse := ActionButton {
-                    x:120px; y:root.active-view == "note" ? 0px : 1px; circular:true;
+                    x:120px; y:root.active-view == UiView.note ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/search.svg"); label:"Search all pages, " + root.shortcut-modifier + " K";
                     clicked => {root.browse-pages();}
                 }
                 Text {
                     x:164px; width:max(0px,parent.width - 252px); height:parent.height;
-                    text:root.active-view == "note" ? root.current-path : "Bulletnotes";
+                    text:root.active-view == UiView.note ? root.current-path : "Bulletnotes";
                     accessible-label:root.current-path;
                     color:root.theme.muted; font-size:Typography.caption; overflow:elide;
                     horizontal-alignment:center; vertical-alignment:center;
                 }
                 new-button := ActionButton {
-                    x:parent.width - 82px; y:root.active-view == "note" ? 0px : 1px; circular:true;
+                    x:parent.width - 82px; y:root.active-view == UiView.note ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0 && !root.lifecycle-pending;
                     icon:@image-url("../assets/icons/plus.svg"); label:"New scratchpad, " + root.shortcut-modifier + " N";
                     clicked => {root.new-note();}
                 }
                 pin := ActionButton {
-                    x:parent.width - 42px; y:root.active-view == "note" ? 0px : 1px; circular:true;
+                    x:parent.width - 42px; y:root.active-view == UiView.note ? 0px : 1px; circular:true;
                     enabled:root.header-revealed && header.opacity > 0;
                     icon:@image-url("../assets/icons/pin.svg");
                     label:root.is-pinned ? "Unpin note, " + root.shortcut-modifier + " P" : "Pin above other windows, " + root.shortcut-modifier + " P";
@@ -515,7 +515,7 @@ export component AppWindow inherits Window {
                 y:parent.height - 54px + (root.prefers-reduced-motion || root.footer-revealed ? 0px : 4px);
                 height:44px; x:10px; width:parent.width - 20px; border-radius:Radius.surface;
                 border-width:root.system-high-contrast ? 1px : 0px; border-color:root.theme.ink;
-                opacity:root.footer-revealed ? 1 : 0; visible:self.opacity > 0 && root.active-view == "note";
+                opacity:root.footer-revealed ? 1 : 0; visible:self.opacity > 0 && root.active-view == UiView.note;
                 animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? Motion.reveal : Motion.conceal); easing:ease-out;}
                 background:root.system-high-contrast ? root.theme.paper : transparent;
                 HorizontalLayout {
@@ -584,8 +584,8 @@ export component AboutWindow inherits Window {
     in property <string> app-version;
     in-out property <UiTheme> theme <=> Theme.palette;
     ThemeContext {}
-    in property <string> paper-type:"smooth";
-    in property <string> paper-style:"plain";
+    in property <UiPaperType> paper-type:UiPaperType.smooth;
+    in property <UiPaperStyle> paper-style:UiPaperStyle.plain;
     in property <float> font-size-px:15;
     in-out property <bool> high-contrast <=> Theme.high-contrast;
     in-out property <bool> reduce-transparency <=> Theme.reduce-transparency;

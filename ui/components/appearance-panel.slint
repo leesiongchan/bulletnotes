@@ -3,7 +3,7 @@ import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { SettingsGroup, SettingsHeading, SettingToggle } from "settings-controls.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { ThemeOption, ThemePair } from "../types.slint";
+import { ThemeOption, ThemePair, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType } from "../types.slint";
 import { ActionButton, ChoiceButton, ChoiceOption } from "action-button.slint";
 component ThemeAssignmentButton inherits FocusScope {
     in property <bool> light-selected;
@@ -33,8 +33,8 @@ component ThemeAssignmentButton inherits FocusScope {
 }
 component ThemeCard inherits FocusScope {
     in property <ThemeOption> option;
-    in property <string> paper-type;
-    in property <string> paper-style;
+    in property <UiPaperType> paper-type;
+    in property <UiPaperStyle> paper-style;
     in property <float> font-size-px;
     in property <bool> light-selected;
     in property <bool> dark-selected;
@@ -95,11 +95,11 @@ export component AppearancePanel inherits Rectangle {
     in property <string> dark-theme;
     in property <[ThemePair]> theme-pairs;
     in property <bool> reduce-transparency:false;
-    in-out property <string> category:"appearance";
-    in-out property <string> mode:"system";
-    in-out property <string> paper-style:"plain";
-    in-out property <string> paper-type:"smooth";
-    in-out property <string> paper-intensity:"clear";
+    in-out property <SettingsCategory> category:SettingsCategory.appearance;
+    in-out property <UiAppearanceMode> mode:UiAppearanceMode.system;
+    in-out property <UiPaperStyle> paper-style:UiPaperStyle.plain;
+    in-out property <UiPaperType> paper-type:UiPaperType.smooth;
+    in-out property <UiPaperIntensity> paper-intensity:UiPaperIntensity.clear;
     in-out property <float> font-size-px:15;
     in-out property <bool> start-with-new-note:false;
     in-out property <bool> keep-bottom-bar-visible:false;
@@ -123,9 +123,9 @@ export component AppearancePanel inherits Rectangle {
     callback apply-low-contrast();
     callback cancel-theme-import();
     private property <length> inset:root.width >= 696px ? 48px : 20px;
-    public function focus-panel() { if (root.category == "general") { general-tab.focus(); } else { appearance-tab.focus(); } }
+    public function focus-panel() { if (root.category == SettingsCategory.general) { general-tab.focus(); } else { appearance-tab.focus(); } }
     private property <int> theme-focus-generation:0;
-    public function reveal-themes() { root.category = "appearance"; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
+    public function reveal-themes() { root.category = SettingsCategory.appearance; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
     changed category => { scroll.content-y = 0px; }
     background:transparent;
     Text { x:root.inset; y:14px; text:"Settings"; font-size:Typography.title; font-weight:600; color:Theme.palette.ink; }
@@ -141,13 +141,13 @@ export component AppearancePanel inherits Rectangle {
             padding:4px; spacing:4px;
             general-tab := ChoiceOption {
                 text:"General"; material-effects:false;
-                selected:root.category == "general";
-                clicked => { root.category = "general"; }
+                selected:root.category == SettingsCategory.general;
+                clicked => { root.category = SettingsCategory.general; }
             }
             appearance-tab := ChoiceOption {
                 text:"Appearance"; material-effects:false;
-                selected:root.category == "appearance";
-                clicked => { root.category = "appearance"; }
+                selected:root.category == SettingsCategory.appearance;
+                clicked => { root.category = SettingsCategory.appearance; }
             }
         }
     }
@@ -160,7 +160,7 @@ export component AppearancePanel inherits Rectangle {
         content-height:content.preferred-height;
         content := VerticalBox {
             x:0px; width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:16px;
-            if root.category == "general": VerticalBox {
+            if root.category == SettingsCategory.general: VerticalBox {
                 padding:0px; spacing:16px;
                 SettingsHeading {text:"Startup";}
                 SettingsGroup {
@@ -213,7 +213,7 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
             appearance-content := VerticalBox {
-                visible:root.category == "appearance";
+                visible:root.category == SettingsCategory.appearance;
                 padding:0px; spacing:16px;
                 SettingsHeading {text:"Text";}
                 SettingsGroup {
@@ -235,19 +235,19 @@ export component AppearancePanel inherits Rectangle {
                             paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
                         }
                         Text {x:16px; y:14px; text:"A little space to think."; font-family:Typography.mono; font-size:Typography.heading; color:Theme.palette.ink;}
-                        Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == "bone" ? "Bone · fine, understated grain" : root.paper-type == "eggshell" ? "Eggshell · soft, organic grain" : root.paper-type == "linen" ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
+                        Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == UiPaperType.bone ? "Bone · fine, understated grain" : root.paper-type == UiPaperType.eggshell ? "Eggshell · soft, organic grain" : root.paper-type == UiPaperType.linen ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
                     }
                     HorizontalLayout {
                         spacing:6px;
-                        for kind in ["smooth", "bone", "eggshell", "linen"]: ChoiceOption {
-                            text:kind == "smooth" ? "Smooth" : kind == "bone" ? "Bone" : kind == "eggshell" ? "Eggshell" : "Linen";
+                        for kind in [UiPaperType.smooth, UiPaperType.bone, UiPaperType.eggshell, UiPaperType.linen]: ChoiceOption {
+                            text:kind == UiPaperType.smooth ? "Smooth" : kind == UiPaperType.bone ? "Bone" : kind == UiPaperType.eggshell ? "Eggshell" : "Linen";
                             material-effects:false;
                             selected:root.paper-type == kind;
                             clicked => {root.paper-type = kind; root.changed();}
                         }
                     }
                     Text {text:"Paper type changes the finish. Theme colors stay independent."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
-                    if root.paper-type != "smooth" && (Theme.high-contrast || root.reduce-transparency): Text {
+                    if root.paper-type != UiPaperType.smooth && (Theme.high-contrast || root.reduce-transparency): Text {
                         text:Theme.high-contrast ? "Paper texture is hidden while Increase Contrast is enabled. Your selected finish is saved." : "Paper texture is hidden while Reduce Transparency is enabled. Your selected finish is saved.";
                         font-size:Typography.small; color:Theme.palette.ink; wrap:word-wrap;
                     }
@@ -255,8 +255,8 @@ export component AppearancePanel inherits Rectangle {
                     Text {text:"Paper style"; font-size:Typography.body; font-weight:600; color:Theme.palette.ink;}
                     HorizontalLayout {
                         spacing:4px;
-                        for style in ["plain", "dots", "ruled", "grid"]: ChoiceOption {
-                            text:style == "plain" ? "Plain" : style == "dots" ? "Dots" : style == "ruled" ? "Ruled" : "Grid";
+                        for style in [UiPaperStyle.plain, UiPaperStyle.dots, UiPaperStyle.ruled, UiPaperStyle.grid]: ChoiceOption {
+                            text:style == UiPaperStyle.plain ? "Plain" : style == UiPaperStyle.dots ? "Dots" : style == UiPaperStyle.ruled ? "Ruled" : "Grid";
                             material-effects:false;
                             selected:root.paper-style == style;
                             clicked => {root.paper-style = style; root.changed();}
@@ -265,10 +265,10 @@ export component AppearancePanel inherits Rectangle {
                     Text {text:"Paper intensity"; font-size:Typography.body; color:Theme.palette.ink;}
                     HorizontalLayout {
                         spacing:4px;
-                        for intensity in ["subtle", "clear", "bold"]: ChoiceOption {
-                            text:intensity == "subtle" ? "Subtle" : intensity == "clear" ? "Clear" : "Bold";
+                        for intensity in [UiPaperIntensity.subtle, UiPaperIntensity.clear, UiPaperIntensity.bold]: ChoiceOption {
+                            text:intensity == UiPaperIntensity.subtle ? "Subtle" : intensity == UiPaperIntensity.clear ? "Clear" : "Bold";
                             material-effects:false;
-                            enabled:root.paper-style != "plain";
+                            enabled:root.paper-style != UiPaperStyle.plain;
                             selected:root.paper-intensity == intensity;
                             clicked => {root.paper-intensity = intensity; root.changed();}
                         }
@@ -285,14 +285,14 @@ export component AppearancePanel inherits Rectangle {
                 SettingsGroup {
                     HorizontalLayout {
                         spacing:4px;
-                        for mode in ["light", "dark", "system"]: ChoiceOption {
-                            text:mode == "light" ? "Light" : mode == "dark" ? "Dark" : "System";
+                        for mode in [UiAppearanceMode.light, UiAppearanceMode.dark, UiAppearanceMode.system]: ChoiceOption {
+                            text:mode == UiAppearanceMode.light ? "Light" : mode == UiAppearanceMode.dark ? "Dark" : "System";
                             material-effects:false;
                             selected:root.mode == mode;
                             clicked => {root.mode = mode; root.changed();}
                         }
                     }
-                    Text {text:root.mode == "system" ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
+                    Text {text:root.mode == UiAppearanceMode.system ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
             theme-heading := Text {
                 text: "Themes";

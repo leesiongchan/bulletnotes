@@ -7,10 +7,7 @@ use crate::{
     AppWindow,
     domain::error::StoreError,
     store::{StoreHandle, settings::AppSettings},
-    theme::{
-        AppearanceMode, PaperIntensity, PaperStyle, PaperType, SystemAppearance, Theme, ThemeError,
-        ThemeId,
-    },
+    theme::{SystemAppearance, Theme, ThemeError, ThemeId},
 };
 use slint::ComponentHandle;
 use std::{
@@ -275,30 +272,11 @@ pub fn bind(
         window.on_appearance_changed(move || {
             if let Some(window) = state.window.upgrade() {
                 let mut candidate = state.controller.borrow().displayed().clone();
-                candidate.appearance.mode = match window.get_appearance_mode().as_str() {
-                    "light" => AppearanceMode::Light,
-                    "dark" => AppearanceMode::Dark,
-                    _ => AppearanceMode::System,
-                };
-                candidate.appearance.paper = match window.get_paper_style().as_str() {
-                    "dots" => PaperStyle::Dots,
-                    "ruled" => PaperStyle::Ruled,
-                    "grid" => PaperStyle::Grid,
-                    _ => PaperStyle::Plain,
-                };
+                candidate.appearance.mode = window.get_appearance_mode().into();
+                candidate.appearance.paper = window.get_paper_style().into();
                 candidate.appearance.font_size = window.get_font_size_px();
-                candidate.appearance.paper_type = match window.get_paper_type().as_str() {
-                    "smooth" => PaperType::Smooth,
-                    "bone" => PaperType::Bone,
-                    "eggshell" => PaperType::Eggshell,
-                    "linen" => PaperType::Linen,
-                    _ => PaperType::Smooth,
-                };
-                candidate.appearance.paper_intensity = match window.get_paper_intensity().as_str() {
-                    "subtle" => PaperIntensity::Subtle,
-                    "bold" => PaperIntensity::Bold,
-                    _ => PaperIntensity::Clear,
-                };
+                candidate.appearance.paper_type = window.get_paper_type().into();
+                candidate.appearance.paper_intensity = window.get_paper_intensity().into();
                 candidate.start_with_new_note = window.get_start_with_new_note();
                 candidate.appearance.keep_bottom_bar_visible = window.get_keep_bottom_bar_visible();
                 candidate.appearance.show_note_count = window.get_show_note_count();

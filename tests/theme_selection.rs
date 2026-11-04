@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow,
+    AppWindow, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::{AppearanceMode, Color, SystemAppearance, palette::ThemeEntry},
@@ -97,11 +97,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             (AppearanceMode::System, SystemAppearance::Dark, true),
         ] {
             binding.set_system_appearance(system);
-            window.set_appearance_mode(match mode {
-                AppearanceMode::Light => "light",
-                AppearanceMode::Dark => "dark",
-                AppearanceMode::System => "system",
-            }.into());
+            window.set_appearance_mode(mode.into());
             window.invoke_appearance_changed();
             binding.flush().await.unwrap();
             for entry in &themes {
@@ -135,7 +131,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
                 assert!(window.get_theme_options() == cards, "theme changes must retain card instances and keyboard focus");
             }
         }
-        window.set_active_view("appearance".into());
+        window.set_active_view(UiView::Appearance);
         window.window().set_size(slint::LogicalSize::new(600.0, 850.0));
         window.window().dispatch_event(WindowEvent::WindowActiveChanged(true));
         let _ = window.window().take_snapshot().unwrap();

@@ -77,7 +77,7 @@ impl State {
         } else {
             self.native.activate();
         }
-        if window.get_active_view() == "note" {
+        if window.get_active_view() == crate::UiView::Note {
             window.invoke_focus_editor();
         }
         Ok(())

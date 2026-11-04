@@ -1,10 +1,10 @@
 import { Theme, Typography, Radius } from "theme.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { MarkdownCommand, MarkdownEdit, CodePanel } from "../types.slint";
+import { MarkdownCommand, MarkdownEdit, CodePanel, UiPaperStyle, UiPaperType } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <bool> paper-material:false;
-    in property <string> paper-type:"smooth";
+    in property <UiPaperType> paper-type:UiPaperType.smooth;
     in-out property <string> text;
     in property <[TextInputDecoration]> decorations;
     in property <[TextInputMarker]> markers;
@@ -25,7 +25,7 @@ export component NoteEditor inherits Rectangle {
     Timer {interval:16ms; running:root.layout-dirty; triggered => {root.layout-dirty = false; root.code-layout-changed();}}
     public function measure-offset(offset:int) -> float {mirror.set-selection-offsets(offset,offset); return root.measured-y;}
     in property <float> font-size-px:15;
-    in property <string> paper-style:"plain";
+    in property <UiPaperStyle> paper-style:UiPaperStyle.plain;
     in property <bool> read-only:false;
     in property <length> top-clearance:16px;
     out property <float> scroll-y:-scroll.content-y / 1px;

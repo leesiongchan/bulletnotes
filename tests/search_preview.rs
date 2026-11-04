@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, PageRow, app::ui::present_settings, store::settings::AppSettings,
+    AppWindow, PageRow, UiView, app::ui::present_settings, store::settings::AppSettings,
     theme::SystemAppearance,
 };
 use slint::{
@@ -24,7 +24,7 @@ fn setup() -> AppWindow {
     ui.show().unwrap();
     ui.window()
         .dispatch_event(WindowEvent::WindowActiveChanged(true));
-    ui.set_active_view("pages".into());
+    ui.set_active_view(UiView::Pages);
     ui.window().dispatch_event(WindowEvent::internal(
         i_slint_core::platform::InternalEvent::CompositionStatusChanged {
             context_id: 1,
@@ -97,7 +97,7 @@ fn keyboard_reveals_results_after_resize_and_replacement() {
 fn escape_returns_from_idle_query_but_preserves_composition() {
     let ui = setup();
     let weak = ui.as_weak();
-    ui.on_return_to_note(move || weak.upgrade().unwrap().set_active_view("note".into()));
+    ui.on_return_to_note(move || weak.upgrade().unwrap().set_active_view(UiView::Note));
     let status = |value| {
         ui.window().dispatch_event(WindowEvent::internal(
             i_slint_core::platform::InternalEvent::CompositionStatusChanged {
@@ -108,23 +108,23 @@ fn escape_returns_from_idle_query_but_preserves_composition() {
     };
     status(i_slint_core::input::CompositionStatus::Active);
     key(&ui, Key::Escape);
-    assert_eq!(ui.get_active_view(), "pages");
+    assert_eq!(ui.get_active_view(), UiView::Pages);
     status(i_slint_core::input::CompositionStatus::Idle);
     key(&ui, Key::Escape);
-    assert_eq!(ui.get_active_view(), "note");
+    assert_eq!(ui.get_active_view(), UiView::Note);
 }
 
 #[test]
 fn search_reentry_keeps_query_focused_after_result_replacement() {
     let ui = setup();
     let weak = ui.as_weak();
-    ui.on_open_page(move |_| weak.upgrade().unwrap().set_active_view("note".into()));
+    ui.on_open_page(move |_| weak.upgrade().unwrap().set_active_view(UiView::Note));
     for _ in 0..8 {
         key(&ui, Key::DownArrow);
     }
     key(&ui, Key::Return);
-    assert_eq!(ui.get_active_view(), "note");
-    ui.set_active_view("pages".into());
+    assert_eq!(ui.get_active_view(), UiView::Note);
+    ui.set_active_view(UiView::Pages);
     settle();
     ui.set_page_results(ModelRc::from(
         (0..12).map(row).collect::<Vec<_>>().as_slice(),
@@ -161,7 +161,7 @@ fn cards_navigate_columns_and_escape_exits_selection_before_closing() {
     ui.set_search_selecting(true);
     key(&ui, Key::Escape);
     assert!(!ui.get_search_selecting());
-    assert_eq!(ui.get_active_view(), "pages");
+    assert_eq!(ui.get_active_view(), UiView::Pages);
 }
 
 #[test]
@@ -384,7 +384,7 @@ fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
     assert!(ui.get_search_drag_active());
     key(&ui, Key::Escape);
     assert!(!ui.get_search_drag_active());
-    assert_eq!(ui.get_active_view(), "pages");
+    assert_eq!(ui.get_active_view(), UiView::Pages);
     ui.window().dispatch_event(WindowEvent::PointerReleased {
         position: to,
         button: slint::platform::PointerEventButton::Left,
@@ -443,8 +443,13 @@ fn utility_views_keep_neutral_background_when_writing_palette_changes() {
         let mut settings = AppSettings::default();
         settings.appearance.light_theme = bulletnotes::theme::ThemeId(id.into());
         present_settings(&ui, &settings, SystemAppearance::Light).unwrap();
-        for view in ["pages", "appearance", "connection", "recovery"] {
-            ui.set_active_view(view.into());
+        for view in [
+            UiView::Pages,
+            UiView::Appearance,
+            UiView::Connection,
+            UiView::Recovery,
+        ] {
+            ui.set_active_view(view);
             settle();
             let image = ui.window().take_snapshot().unwrap();
             let i = (100 * image.width() as usize + 5) * 4;
@@ -452,7 +457,7 @@ fn utility_views_keep_neutral_background_when_writing_palette_changes() {
             assert_eq!(
                 &image.as_bytes()[i..i + 3],
                 &[paper.red(), paper.green(), paper.blue()],
-                "{id}: {view}"
+                "{id}: {view:?}"
             );
         }
     }
@@ -461,13 +466,13 @@ fn utility_views_keep_neutral_background_when_writing_palette_changes() {
 #[test]
 fn opening_search_clears_a_legacy_hidden_folder_filter() {
     let ui = setup();
-    ui.set_active_view("note".into());
+    ui.set_active_view(UiView::Note);
     settle();
     ui.set_search_folder("old/folder".into());
     let cleared = Rc::new(RefCell::new(false));
     let observed = cleared.clone();
     ui.on_folder_changed(move |folder| *observed.borrow_mut() = folder.is_empty());
-    ui.set_active_view("pages".into());
+    ui.set_active_view(UiView::Pages);
     settle();
     assert!(ui.get_search_folder().is_empty());
     assert!(*cleared.borrow());
@@ -486,7 +491,7 @@ fn result_icons_show_hover_hints_above_the_drag_surface() {
 fn icon_hint_appears(toolbar: bool) {
     let ui = setup();
     if toolbar {
-        ui.set_active_view("note".into());
+        ui.set_active_view(UiView::Note);
         ui.set_header_hovered(true);
     } else {
         let mut item = row(0);

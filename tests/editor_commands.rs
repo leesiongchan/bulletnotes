@@ -1,5 +1,6 @@
 use bulletnotes::{
-    AppWindow, app::ui::present_settings, store::settings::AppSettings, theme::SystemAppearance,
+    AppWindow, UiView, app::ui::present_settings, store::settings::AppSettings,
+    theme::SystemAppearance,
 };
 use i_slint_core::{
     input::{CompositionStatus, InternalKeyEvent, KeyEventType},
@@ -108,7 +109,7 @@ fn task_shortcut_does_not_open_search() {
     window.on_browse_pages(move || count.set(count.get() + 1));
     shortcut(&window, &[Key::Control, Key::Shift], "k".into());
     assert_eq!(window.get_note_text(), "- [x] one");
-    assert_eq!(window.get_active_view(), "note");
+    assert_eq!(window.get_active_view(), UiView::Note);
     assert_eq!(searches.get(), 0);
     shortcut(&window, &[Key::Control, Key::Shift, Key::Alt], "k".into());
     assert_eq!(searches.get(), 0);
@@ -141,7 +142,7 @@ fn readonly_and_composition_do_not_edit() {
         shortcut(&window, &[Key::Control], "b".into());
         shortcut(&window, &[Key::Control, Key::Shift], "k".into());
         assert_eq!(window.get_note_text(), "- [ ] one");
-        assert_eq!(window.get_active_view(), "note");
+        assert_eq!(window.get_active_view(), UiView::Note);
     }
 }
 #[test]

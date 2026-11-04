@@ -1,7 +1,10 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
+use super::model::View;
 use crate::{
     AboutWindow, AppWindow, MarkdownCommand, MarkdownEdit, ThemeOption, ThemePair,
-    UiMarkdownColors, UiTheme, UiThemeSwatches,
+    UiAppearanceMode, UiMarkdownColors, UiPaperIntensity, UiPaperStyle, UiPaperType,
+    UiRecoveryKind, UiTheme, UiThemeSwatches, UiView,
+    domain::page::RecoveryKind,
     store::settings::AppSettings,
     theme::{
         self, AppearanceMode, PaperIntensity, PaperStyle, PaperType, ResolvedTheme,
@@ -9,6 +12,33 @@ use crate::{
     },
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
+
+/// Domain enums own persistence and behaviour; their generated UI mirrors only
+/// carry the choice. Both directions are exhaustive, so a variant added on either
+/// side fails to compile until it is mapped here.
+macro_rules! mirror_enum {
+    ($domain:ident <=> $ui:ident { $($d:ident <=> $u:ident),+ $(,)? }) => {
+        impl From<$domain> for $ui {
+            fn from(value: $domain) -> Self {
+                match value { $($domain::$d => Self::$u),+ }
+            }
+        }
+        impl From<$ui> for $domain {
+            fn from(value: $ui) -> Self {
+                match value { $($ui::$u => Self::$d),+ }
+            }
+        }
+    };
+}
+mirror_enum!(AppearanceMode <=> UiAppearanceMode { Light <=> Light, Dark <=> Dark, System <=> System });
+mirror_enum!(PaperType <=> UiPaperType { Smooth <=> Smooth, Bone <=> Bone, Eggshell <=> Eggshell, Linen <=> Linen });
+mirror_enum!(PaperStyle <=> UiPaperStyle { Plain <=> Plain, Dots <=> Dots, Ruled <=> Ruled, Grid <=> Grid });
+mirror_enum!(PaperIntensity <=> UiPaperIntensity { Subtle <=> Subtle, Clear <=> Clear, Bold <=> Bold });
+mirror_enum!(View <=> UiView {
+    Note <=> Note, AllPages <=> Pages, Appearance <=> Appearance,
+    Connection <=> Connection, Recovery <=> Recovery,
+});
+mirror_enum!(RecoveryKind <=> UiRecoveryKind { Conflict <=> Conflict, Trash <=> Trash, Copy <=> Copy });
 
 fn color(value: theme::Color) -> slint::Color {
     slint::Color::from_rgb_u8(value.r, value.g, value.b)
@@ -163,24 +193,8 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
         resolved.pattern,
     ));
     window.set_font_size_px(resolved.font_size);
-    window.set_paper_style(
-        match resolved.paper {
-            PaperStyle::Plain => "plain",
-            PaperStyle::Dots => "dots",
-            PaperStyle::Ruled => "ruled",
-            PaperStyle::Grid => "grid",
-        }
-        .into(),
-    );
-    window.set_paper_type(
-        match resolved.paper_type {
-            PaperType::Smooth => "smooth",
-            PaperType::Bone => "bone",
-            PaperType::Eggshell => "eggshell",
-            PaperType::Linen => "linen",
-        }
-        .into(),
-    );
+    window.set_paper_style(resolved.paper.into());
+    window.set_paper_type(resolved.paper_type.into());
     window.set_selected_theme_id(resolved.id.0.as_str().into());
 }
 fn apply_about_presentation(window: &AboutWindow, source: &AppWindow) {
@@ -301,23 +315,9 @@ pub fn present_settings(
     }
     window.set_selected_light_theme_id(settings.appearance.light_theme.0.as_str().into());
     window.set_selected_dark_theme_id(settings.appearance.dark_theme.0.as_str().into());
-    window.set_appearance_mode(
-        match settings.appearance.mode {
-            AppearanceMode::Light => "light",
-            AppearanceMode::Dark => "dark",
-            AppearanceMode::System => "system",
-        }
-        .into(),
-    );
+    window.set_appearance_mode(settings.appearance.mode.into());
     window.set_start_with_new_note(settings.start_with_new_note);
-    window.set_paper_intensity(
-        match settings.appearance.paper_intensity {
-            PaperIntensity::Subtle => "subtle",
-            PaperIntensity::Clear => "clear",
-            PaperIntensity::Bold => "bold",
-        }
-        .into(),
-    );
+    window.set_paper_intensity(settings.appearance.paper_intensity.into());
     window.set_keep_bottom_bar_visible(settings.appearance.keep_bottom_bar_visible);
     window.set_show_note_count(settings.appearance.show_note_count);
     window.set_show_note_date(settings.appearance.show_note_date);

@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow,
+    AppWindow, UiPaperType, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::SystemAppearance,
@@ -46,7 +46,7 @@ fn paper_choice_renders_immediately_and_survives_store_reopen() {
                 .collect::<Vec<_>>()
         };
         let flat = crop();
-        window.set_active_view("appearance".into());
+        window.set_active_view(UiView::Appearance);
         let _ = window.window().take_snapshot().unwrap();
         // Walk the real controls; Space activates each focused choice.
         for _ in 0..12 {
@@ -59,17 +59,17 @@ fn paper_choice_renders_immediately_and_survives_store_reopen() {
                     .dispatch_event(WindowEvent::KeyReleased { text });
             }
             binding.flush().await.unwrap();
-            if window.get_paper_type() == "bone" {
+            if window.get_paper_type() == UiPaperType::Bone {
                 break;
             }
         }
-        assert_eq!(window.get_paper_type(), "bone");
-        window.set_active_view("note".into());
+        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
+        window.set_active_view(UiView::Note);
         let grain = crop();
         assert_ne!(grain, flat);
         window.set_prefers_reduced_transparency(true);
         assert_eq!(crop(), flat);
-        assert_eq!(window.get_paper_type(), "bone");
+        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
         window.set_prefers_reduced_transparency(false);
         assert_eq!(crop(), grain);
         assert_eq!(window.get_note_text(), "A saved finish");

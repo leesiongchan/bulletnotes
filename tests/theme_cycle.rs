@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow,
+    AppWindow, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::{AppearanceMode, SystemAppearance, ThemeId},
@@ -37,7 +37,7 @@ fn assignment_cycle_is_atomic_durable_and_rolls_back_on_failure() {
     let complete = Rc::new(Cell::new(false));
     let done = complete.clone();
     slint::spawn_local(async move {
-        window.set_active_view("appearance".into());
+        window.set_active_view(UiView::Appearance);
         let _ = window.window().take_snapshot().unwrap();
         window.invoke_reveal_theme_choices();
         let key = |text: slint::SharedString| {

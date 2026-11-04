@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow,
+    AppWindow, UiPaperType, UiView,
     app::ui::present_settings,
     store::settings::AppSettings,
     theme::{
@@ -182,7 +182,7 @@ fn paper_intensity_changes_lines_independently_of_finish_and_text() {
             assert_ne!(&pixels, finish);
         }
         previous.push(pixels);
-        assert_eq!(window.get_paper_type(), "bone");
+        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
         assert_eq!(window.get_note_text(), "café\r\n👩🏽‍💻");
     }
 }
@@ -190,7 +190,7 @@ fn paper_intensity_changes_lines_independently_of_finish_and_text() {
 #[test]
 fn paper_preview_uses_the_explicit_finish_with_crossed_theme_assignments() {
     let window = window();
-    window.set_active_view("appearance".into());
+    window.set_active_view(UiView::Appearance);
     let mut settings = AppSettings::default();
     settings.appearance.paper_type = bulletnotes::theme::PaperType::Eggshell;
     for (light, dark, textured) in [
@@ -340,22 +340,23 @@ fn paper_finish_and_pattern_are_rendered_in_every_view_and_about() {
             })
             .collect::<Vec<_>>()
     };
+    // `None` renders the About window instead of an AppWindow view.
     for view in [
-        "note",
-        "pages",
-        "appearance",
-        "connection",
-        "recovery",
-        "about",
+        Some(UiView::Note),
+        Some(UiView::Pages),
+        Some(UiView::Appearance),
+        Some(UiView::Connection),
+        Some(UiView::Recovery),
+        None,
     ] {
         settings.appearance.paper_type = PaperType::Smooth;
         settings.appearance.paper = PaperStyle::Plain;
         present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        if view != "about" {
-            window.set_active_view(view.into());
+        if let Some(view) = view {
+            window.set_active_view(view);
         }
         let _ = window.window().take_snapshot().unwrap();
-        let target = if view == "about" {
+        let target = if view.is_none() {
             about.window()
         } else {
             window.window()
@@ -364,11 +365,11 @@ fn paper_finish_and_pattern_are_rendered_in_every_view_and_about() {
         settings.appearance.paper_type = PaperType::Bone;
         present_settings(&window, &settings, SystemAppearance::Light).unwrap();
         let _ = window.window().take_snapshot().unwrap();
-        assert_ne!(strip(target), flat, "paper finish must apply in {view}");
+        assert_ne!(strip(target), flat, "paper finish must apply in {view:?}");
         settings.appearance.paper_type = PaperType::Smooth;
         settings.appearance.paper = PaperStyle::Grid;
         present_settings(&window, &settings, SystemAppearance::Light).unwrap();
         let _ = window.window().take_snapshot().unwrap();
-        assert_ne!(strip(target), flat, "paper style must apply in {view}");
+        assert_ne!(strip(target), flat, "paper style must apply in {view:?}");
     }
 }

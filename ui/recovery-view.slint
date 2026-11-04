@@ -2,7 +2,7 @@ import { Theme, Typography, Radius } from "components/theme.slint";
 import { ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { ThemeScrollbar } from "components/theme-scrollbar.slint";
-import { PageRow } from "types.slint";
+import { PageRow, UiRecoveryKind } from "types.slint";
 import { ActionButton, ChoiceButton, ChoiceOption } from "components/action-button.slint";
 component SourcePane inherits Rectangle {
     in-out property <string> text;
@@ -29,7 +29,7 @@ component SourcePane inherits Rectangle {
     }
 }
 export component RecoveryPanel inherits Rectangle {
-    in-out property <string> section:"conflicts";
+    in-out property <UiRecoveryKind> section:UiRecoveryKind.conflict;
     in property <[PageRow]> items;
     in property <string> selected-id;
     in property <string> path;
@@ -72,12 +72,12 @@ export component RecoveryPanel inherits Rectangle {
             width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:10px;
             HorizontalLayout {
                 spacing:6px;
-                ChoiceOption { text:"Changes"; selected:root.section == "conflicts"; enabled:!root.busy; clicked => { root.section="conflicts"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceOption { text:"Trash"; selected:root.section == "trash"; enabled:!root.busy; clicked => { root.section="trash"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceOption { text:"Kept versions"; selected:root.section == "copies"; enabled:!root.busy; clicked => { root.section="copies"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Changes"; selected:root.section == UiRecoveryKind.conflict; enabled:!root.busy; clicked => { root.section=UiRecoveryKind.conflict; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Trash"; selected:root.section == UiRecoveryKind.trash; enabled:!root.busy; clicked => { root.section=UiRecoveryKind.trash; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { text:"Kept versions"; selected:root.section == UiRecoveryKind.copy; enabled:!root.busy; clicked => { root.section=UiRecoveryKind.copy; root.confirming-purge=false; root.section-changed(); } }
             }
             Text { text:root.message; wrap:word-wrap; color:Theme.palette.muted; font-size:Typography.body; }
-            if root.items.length == 0:Text { text:root.section == "conflicts" ? "No changes need review." : "No saved copies here."; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.items.length == 0:Text { text:root.section == UiRecoveryKind.conflict ? "No changes need review." : "No saved copies here."; color:Theme.palette.ink; font-size:Typography.small; }
             Rectangle {
                 visible:root.items.length > 0; height:min(92px,root.items.length * 30px);
                 item-scroll := ListView {
@@ -100,30 +100,30 @@ export component RecoveryPanel inherits Rectangle {
                 }
             }
             if root.selected:Text { text:root.path; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.small; }
-            if root.selected:Text { text:root.section == "conflicts" ? "Your local version" : "Saved source"; color:Theme.palette.ink; font-size:Typography.small; }
-            if root.selected:SourcePane { text:root.local-text; label:root.section == "conflicts" ? "Local version" : "Saved recovery source"; }
-            if root.selected && root.section == "conflicts":Text { text:root.remote-deleted ? "Remote page was deleted" : "Remote version"; color:Theme.palette.ink; font-size:Typography.small; }
-            if root.selected && root.section == "conflicts" && !root.remote-deleted:SourcePane { text:root.remote-text; label:"Remote version"; }
-            if root.selected && root.section == "conflicts" && root.has-base:Text { text:"Common base"; color:Theme.palette.ink; font-size:Typography.small; }
-            if root.selected && root.section == "conflicts" && root.has-base:SourcePane { text:root.base-text; label:"Common base"; }
-            if root.selected && root.section == "conflicts":Text { text:"Merged result"; color:Theme.palette.ink; font-size:Typography.small; }
-            if root.selected && root.section == "conflicts":SourcePane { text <=> root.merge-text; label:"Merged result"; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
+            if root.selected:Text { text:root.section == UiRecoveryKind.conflict ? "Your local version" : "Saved source"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected:SourcePane { text:root.local-text; label:root.section == UiRecoveryKind.conflict ? "Local version" : "Saved recovery source"; }
+            if root.selected && root.section == UiRecoveryKind.conflict:Text { text:root.remote-deleted ? "Remote page was deleted" : "Remote version"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == UiRecoveryKind.conflict && !root.remote-deleted:SourcePane { text:root.remote-text; label:"Remote version"; }
+            if root.selected && root.section == UiRecoveryKind.conflict && root.has-base:Text { text:"Common base"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == UiRecoveryKind.conflict && root.has-base:SourcePane { text:root.base-text; label:"Common base"; }
+            if root.selected && root.section == UiRecoveryKind.conflict:Text { text:"Merged result"; color:Theme.palette.ink; font-size:Typography.small; }
+            if root.selected && root.section == UiRecoveryKind.conflict:SourcePane { text <=> root.merge-text; label:"Merged result"; read-only:root.busy || root.draft-closed || root.stale; edited => { root.merge-edited(); } }
             if root.selected && root.stale:ChoiceButton { text:"Reload changes · keep merged draft"; enabled:!root.busy; clicked => { root.reload(); } }
-            if root.selected && root.section == "conflicts":HorizontalLayout {
+            if root.selected && root.section == UiRecoveryKind.conflict:HorizontalLayout {
                 spacing:6px;
                 ChoiceButton { text:root.remote-deleted ? "Accept deletion" : "Use remote"; enabled:!root.busy && !root.draft-closed && !root.stale; clicked => { root.apply-choice("remote"); } }
                 ChoiceButton { text:root.remote-deleted ? "Recreate local" : "Keep local"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("local"); } }
                 ChoiceButton { text:"Use merge"; enabled:!root.busy && !root.draft-closed && !root.stale && root.writable; clicked => { root.apply-choice("merge"); } }
             }
-            if root.selected && root.section != "conflicts":Text { text:"Restore destination · existing pages are preserved"; color:Theme.palette.ink; font-size:Typography.body; wrap:word-wrap; }
-            if root.selected && root.section != "conflicts":Rectangle {
+            if root.selected && root.section != UiRecoveryKind.conflict:Text { text:"Restore destination · existing pages are preserved"; color:Theme.palette.ink; font-size:Typography.body; wrap:word-wrap; }
+            if root.selected && root.section != UiRecoveryKind.conflict:Rectangle {
                 height:34px; background:Theme.palette.surface; border-width:1px; border-color:Theme.palette.line; border-radius:5px;
                 TextInput { x:8px; width:parent.width - 16px; height:parent.height; text <=> root.destination; single-line:true; color:Theme.palette.ink; selection-background-color:Theme.palette.cursor; selection-foreground-color:Theme.palette.ink; font-size:Typography.small; vertical-alignment:center; accessible-label:"Recovery destination path"; read-only:root.busy; }
             }
-            if root.selected && root.section != "conflicts":ChoiceButton { text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }
-            if root.selected && root.section == "trash" && !root.confirming-purge:ChoiceButton { text:"Delete this local Trash copy…"; enabled:!root.busy; clicked => { root.confirming-purge=true; } }
-            if root.selected && root.section == "trash" && root.confirming-purge:Text { text:"Permanently delete only this local Trash copy? This does not cancel pending remote deletion."; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.body; }
-            if root.selected && root.section == "trash" && root.confirming-purge:HorizontalLayout {
+            if root.selected && root.section != UiRecoveryKind.conflict:ChoiceButton { text:"Restore as a new page"; enabled:!root.busy; clicked => { root.restore-item(); } }
+            if root.selected && root.section == UiRecoveryKind.trash && !root.confirming-purge:ChoiceButton { text:"Delete this local Trash copy…"; enabled:!root.busy; clicked => { root.confirming-purge=true; } }
+            if root.selected && root.section == UiRecoveryKind.trash && root.confirming-purge:Text { text:"Permanently delete only this local Trash copy? This does not cancel pending remote deletion."; wrap:word-wrap; color:Theme.palette.ink; font-size:Typography.body; }
+            if root.selected && root.section == UiRecoveryKind.trash && root.confirming-purge:HorizontalLayout {
                 spacing:6px;
                 ChoiceButton { text:"Cancel"; enabled:!root.busy; clicked => { root.confirming-purge=false; } }
                 ChoiceButton { text:"Delete local copy"; enabled:!root.busy; clicked => { root.confirming-purge=false; root.purge-item(); } }

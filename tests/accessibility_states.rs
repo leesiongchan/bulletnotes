@@ -1,7 +1,7 @@
 //! Screen readers must hear the same on/off and chosen state that the visuals show.
 use bulletnotes::{
-    AppWindow, PageRow, app::ui::present_settings, store::settings::AppSettings,
-    theme::SystemAppearance,
+    AppWindow, PageRow, SettingsCategory, UiView, app::ui::present_settings,
+    store::settings::AppSettings, theme::SystemAppearance,
 };
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use slint::{ComponentHandle, ModelRc};
@@ -40,8 +40,8 @@ fn element(window: &AppWindow, label: &str) -> ElementHandle {
 #[test]
 fn accessible_states_match_visual_state() {
     let window = window();
-    window.set_active_view("appearance".into());
-    window.set_settings_category("appearance".into());
+    window.set_active_view(UiView::Appearance);
+    window.set_settings_category(SettingsCategory::Appearance);
 
     // Toggles report their switch state, and activation flips it.
     let count = element(&window, "Show note count");
@@ -92,7 +92,7 @@ fn accessible_states_match_visual_state() {
         }]
         .as_slice(),
     ));
-    window.set_active_view("pages".into());
+    window.set_active_view(UiView::Pages);
     let list = element(&window, "List view");
     assert_eq!(list.accessible_role(), Some(AccessibleRole::RadioButton));
     assert_eq!(list.accessible_checked(), Some(!window.get_search_cards()));

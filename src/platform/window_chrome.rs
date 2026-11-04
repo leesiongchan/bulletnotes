@@ -37,9 +37,9 @@ impl ChromeWindow for crate::AppWindow {
         )
     }
     fn header_hover_depth(&self, shown: bool) -> f64 {
-        match (self.get_active_view().as_str(), shown) {
-            ("note", true) => 72.0,
-            ("note", false) => 56.0,
+        match (self.get_active_view(), shown) {
+            (crate::UiView::Note, true) => 72.0,
+            (crate::UiView::Note, false) => 56.0,
             (_, true) => 34.0,
             (_, false) => 24.0,
         }

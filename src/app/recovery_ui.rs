@@ -68,11 +68,7 @@ fn item_key(item: &RecoveryItem) -> &PageKey {
     }
 }
 fn kind(window: &AppWindow) -> RecoveryKind {
-    match window.get_recovery_section().as_str() {
-        "trash" => RecoveryKind::Trash,
-        "copies" => RecoveryKind::Copy,
-        _ => RecoveryKind::Conflict,
-    }
+    window.get_recovery_section().into()
 }
 fn item_id(item: &RecoveryItem) -> uuid::Uuid {
     match item {
@@ -525,7 +521,7 @@ pub fn bind(
                 {
                     local.dispatch(AppAction::Navigate(View::Recovery));
                     if let Some(window) = state.window.upgrade() {
-                        window.set_recovery_section("trash".into());
+                        window.set_recovery_section(crate::UiRecoveryKind::Trash);
                     }
                     state.selected.borrow_mut().take();
                     state.begin(AppAction::MoveToTrash(key, revision));
