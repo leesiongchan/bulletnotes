@@ -1,4 +1,4 @@
-import { Theme, Typography, Radius } from "components/theme.slint";
+import { Theme, Typography, Radius, Spacing } from "components/theme.slint";
 import { VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { SettingToggle } from "components/settings-controls.slint";
@@ -45,7 +45,7 @@ export component ConnectionPanel inherits Rectangle {
     callback return-to-note();
     public function focus-panel() { url.focus-field(); }
     background: transparent;
-    Text { x:24px; y:14px; text:"Connection"; font-size:Typography.title; color:Theme.palette.ink; }
+    Text { x:Spacing.page; y:14px; text:"Connection"; font-size:Typography.title; color:Theme.palette.ink; }
     ActionButton {
         x: parent.width - 44px; y: 14px;
         icon: @image-url("../assets/icons/close.svg"); label: "Return to note";
@@ -53,11 +53,11 @@ export component ConnectionPanel inherits Rectangle {
     }
     scroll := ThemeScrollView {
         scrollbar-color: Theme.palette.scrollbar;
-        x:24px; y:54px; width:parent.width - 48px; height:parent.height - 78px;
+        x:Spacing.page; y:54px; width:parent.width - 2 * Spacing.page; height:parent.height - 78px;
         content-width:self.visible-width; content-height:form.preferred-height;
         form := VerticalBox {
             x:0px;
-            width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:12px;
+            width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:Spacing.lg;
             Text { text:"SilverBullet server"; color:Theme.palette.ink; font-size:Typography.small; }
             url := ConnectionField { text <=> root.server-url; label:"SilverBullet HTTPS server URL"; placeholder:"https://notes.example.com"; enabled: !root.busy; }
             Text { text:"Bearer token · optional"; color:Theme.palette.ink; font-size:Typography.small; }

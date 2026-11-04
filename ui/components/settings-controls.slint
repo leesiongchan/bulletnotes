@@ -1,10 +1,10 @@
-import { Theme, Typography, Radius } from "theme.slint";
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
 export component SettingsGroup inherits Rectangle {
     background:Theme.palette.surface;
     border-radius:Radius.group;
     min-height:content.min-height;
     preferred-height:content.preferred-height;
-    content := VerticalLayout { padding:14px; spacing:12px; @children }
+    content := VerticalLayout { padding:14px; spacing:Spacing.lg; @children }
 }
 export component SettingsHeading inherits Text {
     color:Theme.palette.ink;
@@ -34,7 +34,7 @@ export component SettingToggle inherits FocusScope {
         y:(root.height - self.preferred-height) / 2;
         width:max(1px,parent.width - 58px);
         height:self.preferred-height;
-        spacing:4px;
+        spacing:Spacing.xs;
         Text {text:root.label; font-size:Typography.body; color:Theme.palette.ink; wrap:word-wrap;}
         Text {visible:root.description != ""; text:root.description; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
     }

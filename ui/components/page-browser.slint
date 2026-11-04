@@ -1,4 +1,4 @@
-import { Theme, Typography, Radius } from "theme.slint";
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
 import { ListView } from "std-widgets.slint";
 import { ThemeScrollbar } from "theme-scrollbar.slint";
 import { PageRow } from "../types.slint";
@@ -132,7 +132,7 @@ export component PageBrowser inherits Rectangle {
     changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
     background:transparent;
     Rectangle {
-        x:24px;y:14px;width:parent.width - 48px;height:38px;border-radius:Radius.surface;
+        x:Spacing.page;y:14px;width:parent.width - 2 * Spacing.page;height:38px;border-radius:Radius.surface;
         background:Theme.palette.surface;border-width:query-input.has-focus ? 1px : 0px;border-color:Theme.palette.accent;
         Image { x:12px;y:12px;width:14px;height:14px;source:@image-url("../../assets/icons/search.svg");colorize:Theme.palette.muted; }
         query-input := TextInput {
@@ -236,14 +236,14 @@ export component PageBrowser inherits Rectangle {
     }
     ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:Theme.palette.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
     if root.results.length == 0: Rectangle {
-        x:24px;y:list.y + 38px;width:parent.width - 48px;height:100px;
+        x:Spacing.page;y:list.y + 38px;width:parent.width - 2 * Spacing.page;height:100px;
         Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:Theme.palette.muted;font-family:Typography.mono;font-size:Typography.body;horizontal-alignment:center; }
         if root.can-create: Rectangle {
             y:38px;width:parent.width;height:38px;border-radius:self.height / 2;background:Theme.palette.surface;
             ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
         }
     }
-    Text { x:24px;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 48px);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:Theme.palette.muted;font-size:Typography.small;wrap:word-wrap;max-lines:2;overflow:elide; }
+    Text { x:Spacing.page;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 2 * Spacing.page);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:Theme.palette.muted;font-size:Typography.small;wrap:word-wrap;max-lines:2;overflow:elide; }
     ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
     toolbar := SearchToolbar {
         width:parent.width;y:parent.height - self.height;

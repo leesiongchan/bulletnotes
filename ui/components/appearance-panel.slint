@@ -1,4 +1,4 @@
-import { Theme, Typography, Radius } from "theme.slint";
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { SettingsGroup, SettingsHeading, SettingToggle } from "settings-controls.slint";
 import { PaperSurface } from "paper-surface.slint";
@@ -138,7 +138,7 @@ export component AppearancePanel inherits Rectangle {
         x:root.inset; y:54px; width:parent.width - 2 * root.inset; height:38px;
         background:Theme.palette.surface; border-radius:9px;
         HorizontalLayout {
-            padding:4px; spacing:4px;
+            padding:Spacing.xs; spacing:Spacing.xs;
             general-tab := ChoiceOption {
                 text:"General"; material-effects:false;
                 selected:root.category == SettingsCategory.general;
@@ -159,9 +159,9 @@ export component AppearancePanel inherits Rectangle {
         content-width:self.visible-width;
         content-height:content.preferred-height;
         content := VerticalBox {
-            x:0px; width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:16px;
+            x:0px; width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:Spacing.xl;
             if root.category == SettingsCategory.general: VerticalBox {
-                padding:0px; spacing:16px;
+                padding:0px; spacing:Spacing.xl;
                 SettingsHeading {text:"Startup";}
                 SettingsGroup {
                     SettingToggle {
@@ -214,11 +214,11 @@ export component AppearancePanel inherits Rectangle {
             }
             appearance-content := VerticalBox {
                 visible:root.category == SettingsCategory.appearance;
-                padding:0px; spacing:16px;
+                padding:0px; spacing:Spacing.xl;
                 SettingsHeading {text:"Text";}
                 SettingsGroup {
                     HorizontalLayout {
-                        spacing:8px;
+                        spacing:Spacing.md;
                         Text {text:"Text size"; font-size:Typography.body; color:Theme.palette.ink; vertical-alignment:center; horizontal-stretch:1;}
                         ChoiceButton {text:"−"; label:"Decrease text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px > 11; clicked => {root.font-size-px = max(11,root.font-size-px - 1); root.changed();}}
                         Text {text:root.font-size-px + " pt"; font-size:Typography.body; color:Theme.palette.muted; width:40px; horizontal-alignment:center; vertical-alignment:center;}
@@ -238,7 +238,7 @@ export component AppearancePanel inherits Rectangle {
                         Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == UiPaperType.bone ? "Bone · fine, understated grain" : root.paper-type == UiPaperType.eggshell ? "Eggshell · soft, organic grain" : root.paper-type == UiPaperType.linen ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
                     }
                     HorizontalLayout {
-                        spacing:6px;
+                        spacing:Spacing.sm;
                         for kind in [UiPaperType.smooth, UiPaperType.bone, UiPaperType.eggshell, UiPaperType.linen]: ChoiceOption {
                             text:kind == UiPaperType.smooth ? "Smooth" : kind == UiPaperType.bone ? "Bone" : kind == UiPaperType.eggshell ? "Eggshell" : "Linen";
                             material-effects:false;
@@ -254,7 +254,7 @@ export component AppearancePanel inherits Rectangle {
                     Rectangle {height:1px; background:Theme.palette.line.with-alpha(Theme.high-contrast ? 1 : 0.25);}
                     Text {text:"Paper style"; font-size:Typography.body; font-weight:600; color:Theme.palette.ink;}
                     HorizontalLayout {
-                        spacing:4px;
+                        spacing:Spacing.xs;
                         for style in [UiPaperStyle.plain, UiPaperStyle.dots, UiPaperStyle.ruled, UiPaperStyle.grid]: ChoiceOption {
                             text:style == UiPaperStyle.plain ? "Plain" : style == UiPaperStyle.dots ? "Dots" : style == UiPaperStyle.ruled ? "Ruled" : "Grid";
                             material-effects:false;
@@ -264,7 +264,7 @@ export component AppearancePanel inherits Rectangle {
                     }
                     Text {text:"Paper intensity"; font-size:Typography.body; color:Theme.palette.ink;}
                     HorizontalLayout {
-                        spacing:4px;
+                        spacing:Spacing.xs;
                         for intensity in [UiPaperIntensity.subtle, UiPaperIntensity.clear, UiPaperIntensity.bold]: ChoiceOption {
                             text:intensity == UiPaperIntensity.subtle ? "Subtle" : intensity == UiPaperIntensity.clear ? "Clear" : "Bold";
                             material-effects:false;
@@ -284,7 +284,7 @@ export component AppearancePanel inherits Rectangle {
                 SettingsHeading {text:"Appearance";}
                 SettingsGroup {
                     HorizontalLayout {
-                        spacing:4px;
+                        spacing:Spacing.xs;
                         for mode in [UiAppearanceMode.light, UiAppearanceMode.dark, UiAppearanceMode.system]: ChoiceOption {
                             text:mode == UiAppearanceMode.light ? "Light" : mode == UiAppearanceMode.dark ? "Dark" : "System";
                             material-effects:false;
@@ -337,14 +337,14 @@ export component AppearancePanel inherits Rectangle {
                 Text {x:10px;y:10px;text:"Custom themes";font-size:Typography.body;color:Theme.palette.ink;}
                 Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:Typography.body;color:Theme.palette.muted;wrap:word-wrap;}
                 HorizontalBox {
-                    x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:8px;
+                    x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:Spacing.md;
                     ChoiceButton { text:"Import…";label:"Import theme";clicked => {root.import-theme();}}
                     ChoiceButton { text:"Export…";label:"Export theme";clicked => {root.export-theme();}}
                 }
             }
             if root.low-contrast-warning:VerticalBox {
                 padding: 10px;
-                spacing: 8px;
+                spacing: Spacing.md;
                 Text {
                     text: "This theme has low contrast. Text or controls may be difficult to see.";
                     color: Theme.palette.ink;
@@ -354,7 +354,7 @@ export component AppearancePanel inherits Rectangle {
 
                 HorizontalBox {
                     padding: 0px;
-                    spacing: 8px;
+                    spacing: Spacing.md;
                     ChoiceButton {
                         text: "Cancel";
                         clicked => { root.cancel-theme-import(); }

@@ -1,4 +1,4 @@
-import { Theme, ThemeContext, Typography, Radius, Motion } from "components/theme.slint";
+import { Theme, ThemeContext, Typography, Radius, Motion, Spacing } from "components/theme.slint";
 import "../site/assets/fonts/dm-mono-italic.ttf";
 import "../site/assets/fonts/dm-mono-medium.ttf";
 import "../site/assets/fonts/dm-mono-medium-italic.ttf";
@@ -519,7 +519,7 @@ export component AppWindow inherits Window {
                 animate opacity, y {duration:root.prefers-reduced-motion || !root.chrome-active ? 0ms : (root.footer-revealed ? Motion.reveal : Motion.conceal); easing:ease-out;}
                 background:root.system-high-contrast ? root.theme.paper : transparent;
                 HorizontalLayout {
-                    y:6px; width:parent.width; height:32px; padding-left:6px; padding-right:6px; spacing:6px;
+                    y:6px; width:parent.width; height:32px; padding-left:Spacing.sm; padding-right:Spacing.sm; spacing:Spacing.sm;
                     trash-button := ActionButton {
                         circular:true;
                         enabled:root.footer-revealed && footer.opacity > 0 && !root.note-read-only && !root.recovery-busy && !root.lifecycle-pending;
@@ -527,7 +527,7 @@ export component AppWindow inherits Window {
                         clicked => {root.trash-current-note();}
                     }
                     HorizontalLayout {
-                        horizontal-stretch:1; spacing:8px;
+                        horizontal-stretch:1; spacing:Spacing.md;
                         Text {text:root.visible-note-count.is-empty ? root.visible-note-date : (root.visible-note-date.is-empty ? root.visible-note-count : root.visible-note-date + " · " + root.visible-note-count); color:root.theme.muted; font-size:Typography.small; vertical-alignment:center; overflow:elide;}
                         Text {visible:root.width > 560px; text:root.status-text; color:root.theme.muted; font-size:Typography.small; vertical-alignment:center; overflow:elide;}
                     }
@@ -592,7 +592,7 @@ export component AboutWindow inherits Window {
     background:root.theme.paper;
     PaperSurface {width:parent.width; height:parent.height; paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px; }
     VerticalLayout {
-        padding:24px; spacing:12px;
+        padding:Spacing.page; spacing:Spacing.lg;
         Image { source:@image-url("../assets/bulletnotes-logo.png"); height:80px; image-fit:contain; horizontal-stretch:1; }
         Text { text:"Bulletnotes"; font-size:Typography.display; font-weight:600; color:root.theme.ink; horizontal-alignment:center; }
         Text { text:root.app-version; font-size:Typography.body; color:root.theme.muted; horizontal-alignment:center; }

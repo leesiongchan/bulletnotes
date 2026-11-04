@@ -1,4 +1,4 @@
-import { Theme, Typography, Radius } from "theme.slint";
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
 import { ActionOption, ChoiceButton } from "action-button.slint";
 
 export component SearchToolbar inherits Rectangle {
@@ -18,13 +18,13 @@ export component SearchToolbar inherits Rectangle {
     height:root.selecting ? 98px : 54px;
     background:Theme.palette.paper;
     if root.selecting: Rectangle {
-        x:24px;y:0px;width:parent.width - 48px;height:38px;border-radius:Radius.group;background:Theme.palette.surface;
+        x:Spacing.page;y:0px;width:parent.width - 2 * Spacing.page;height:38px;border-radius:Radius.group;background:Theme.palette.surface;
         Text { x:10px; width:66px;height:parent.height; text:root.selected-count + " selected";font-size:Typography.caption;color:Theme.palette.muted;vertical-alignment:center; }
         ChoiceButton { height:28px; x:76px;y:4px;width:112px;text:"Promote selected";visible:root.scratchpads;enabled:root.enabled && root.can-promote && !root.busy;clicked => { root.promote-selected(); } }
         ChoiceButton { height:28px; x:parent.width - 140px;y:4px;width:132px;text:"Move selected to Trash";enabled:root.enabled && root.can-trash && !root.busy;clicked => { root.trash-selected(); } }
     }
     Rectangle {
-        x:24px;y:root.selecting ? 44px : 0px;width:78px;height:38px;border-radius:self.height / 2;background:transparent;
+        x:Spacing.page;y:root.selecting ? 44px : 0px;width:78px;height:38px;border-radius:self.height / 2;background:transparent;
         ChoiceButton { height:28px; x:0px;y:5px;width:parent.width;text:root.selecting ? "Done" : "Select";selected:root.selecting;enabled:root.enabled && !root.busy;clicked => { root.select-toggled(); } }
     }
     Rectangle {
