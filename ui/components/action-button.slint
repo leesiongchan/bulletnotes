@@ -81,3 +81,16 @@ export component ChoiceButton inherits FocusScope {
     }
     Tooltip { text: @markdown("\{root.label}"); }
 }
+
+// One choice of a group (view, section, paper, mode): screen readers hear which is chosen.
+export component ActionOption inherits ActionButton {
+    accessible-role: radio-button;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+}
+
+export component ChoiceOption inherits ChoiceButton {
+    accessible-role: radio-button;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+}

@@ -22,7 +22,8 @@ export component SettingToggle inherits FocusScope {
     callback toggled();
     min-height:max(42px,copy.preferred-height + 12px);
     preferred-height:self.min-height;
-    accessible-role:checkbox;
+    accessible-role:switch;
+    accessible-checkable:true;
     accessible-label:root.label;
     accessible-description:root.description;
     accessible-checked:root.checked;

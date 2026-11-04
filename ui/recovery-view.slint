@@ -2,7 +2,7 @@ import { ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeScrollView } from "components/theme-scroll-view.slint";
 import { ThemeScrollbar } from "components/theme-scrollbar.slint";
 import { UiTheme, PageRow } from "types.slint";
-import { ActionButton, ChoiceButton } from "components/action-button.slint";
+import { ActionButton, ChoiceButton, ChoiceOption } from "components/action-button.slint";
 component SourcePane inherits Rectangle {
     in property <UiTheme> theme;
     in-out property <string> text;
@@ -75,9 +75,9 @@ export component RecoveryPanel inherits Rectangle {
             width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:10px;
             HorizontalLayout {
                 spacing:6px;
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Changes"; selected:root.section == "conflicts"; enabled:!root.busy; clicked => { root.section="conflicts"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Trash"; selected:root.section == "trash"; enabled:!root.busy; clicked => { root.section="trash"; root.confirming-purge=false; root.section-changed(); } }
-                ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Kept versions"; selected:root.section == "copies"; enabled:!root.busy; clicked => { root.section="copies"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Changes"; selected:root.section == "conflicts"; enabled:!root.busy; clicked => { root.section="conflicts"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Trash"; selected:root.section == "trash"; enabled:!root.busy; clicked => { root.section="trash"; root.confirming-purge=false; root.section-changed(); } }
+                ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects; theme:root.theme; text:"Kept versions"; selected:root.section == "copies"; enabled:!root.busy; clicked => { root.section="copies"; root.confirming-purge=false; root.section-changed(); } }
             }
             Text { text:root.message; wrap:word-wrap; color:root.theme.muted; font-size:13px; }
             if root.items.length == 0:Text { text:root.section == "conflicts" ? "No changes need review." : "No saved copies here."; color:root.theme.ink; font-size:12px; }
@@ -87,7 +87,7 @@ export component RecoveryPanel inherits Rectangle {
                     width:parent.width; height:parent.height;
                     vertical-scrollbar-policy:always-off;
                     content-width:self.visible-width;
-                    for item in root.items:ChoiceButton { high-contrast:root.high-contrast; material-effects:root.material-effects;
+                    for item in root.items:ChoiceOption { high-contrast:root.high-contrast; material-effects:root.material-effects;
                         width:item-scroll.visible-width; height:30px;
                         theme:root.theme; text:item.title; label:"Review " + item.title;
                         selected:item.key == root.selected-id; enabled:!root.busy;

@@ -19,6 +19,9 @@ export component SearchResult inherits FocusScope {
     callback trash();
     callback step(int);
     accessible-role: button;
+    // In select mode activation toggles the row, so it reports its checked state.
+    accessible-checkable: root.selecting;
+    accessible-checked: root.selecting && root.data.checked;
     accessible-label: root.data.title + ", " + root.data.path + ", " + root.data.availability;
     accessible-action-default => { if (root.selecting) { root.toggled(); } else { root.opened(); } }
     changed selected => { root.pending-focus = root.selected; if (root.selected) { root.focus(); } }

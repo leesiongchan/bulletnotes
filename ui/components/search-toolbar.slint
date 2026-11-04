@@ -1,5 +1,5 @@
 import { UiTheme } from "../types.slint";
-import { ActionButton, ChoiceButton } from "action-button.slint";
+import { ActionOption, ChoiceButton } from "action-button.slint";
 
 export component SearchToolbar inherits Rectangle {
     in property <UiTheme> theme;
@@ -36,7 +36,7 @@ export component SearchToolbar inherits Rectangle {
     }
     Rectangle {
         x:parent.width - 92px;y:root.selecting ? 44px : 0px;width:68px;height:38px;border-radius:19px;background:transparent;
-        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects; x:0px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/list.svg");label:"List view";enabled:root.enabled;selected:!root.cards;clicked => { root.view-changed(false); } }
-        ActionButton { high-contrast:root.high-contrast; material-effects:root.material-effects; x:40px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/grid.svg");label:"Card view";enabled:root.enabled;selected:root.cards;clicked => { root.view-changed(true); } }
+        ActionOption { high-contrast:root.high-contrast; material-effects:root.material-effects; x:0px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/list.svg");label:"List view";enabled:root.enabled;selected:!root.cards;clicked => { root.view-changed(false); } }
+        ActionOption { high-contrast:root.high-contrast; material-effects:root.material-effects; x:40px;y:5px;theme:root.theme;icon:@image-url("../../assets/icons/grid.svg");label:"Card view";enabled:root.enabled;selected:root.cards;clicked => { root.view-changed(true); } }
     }
 }

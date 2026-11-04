@@ -3,7 +3,7 @@ import { SettingsGroup, SettingsHeading, SettingToggle } from "settings-controls
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
 import { UiTheme, ThemeOption, ThemePair } from "../types.slint";
-import { ActionButton, ChoiceButton } from "action-button.slint";
+import { ActionButton, ChoiceButton, ChoiceOption } from "action-button.slint";
 component ThemeAssignmentButton inherits FocusScope {
     in property <UiTheme> theme;
     in property <bool> high-contrast;
@@ -148,12 +148,12 @@ export component AppearancePanel inherits Rectangle {
         background:root.theme.surface; border-radius:9px;
         HorizontalLayout {
             padding:4px; spacing:4px;
-            general-tab := ChoiceButton {
+            general-tab := ChoiceOption {
                 text:"General"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                 selected:root.category == "general";
                 clicked => { root.category = "general"; }
             }
-            appearance-tab := ChoiceButton {
+            appearance-tab := ChoiceOption {
                 text:"Appearance"; theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                 selected:root.category == "appearance";
                 clicked => { root.category = "appearance"; }
@@ -256,7 +256,7 @@ export component AppearancePanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing:6px;
-                        for kind in ["smooth", "bone", "eggshell", "linen"]: ChoiceButton {
+                        for kind in ["smooth", "bone", "eggshell", "linen"]: ChoiceOption {
                             text:kind == "smooth" ? "Smooth" : kind == "bone" ? "Bone" : kind == "eggshell" ? "Eggshell" : "Linen";
                             theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                             selected:root.paper-type == kind;
@@ -272,7 +272,7 @@ export component AppearancePanel inherits Rectangle {
                     Text {text:"Paper style"; font-size:13px; font-weight:600; color:root.theme.ink;}
                     HorizontalLayout {
                         spacing:4px;
-                        for style in ["plain", "dots", "ruled", "grid"]: ChoiceButton {
+                        for style in ["plain", "dots", "ruled", "grid"]: ChoiceOption {
                             text:style == "plain" ? "Plain" : style == "dots" ? "Dots" : style == "ruled" ? "Ruled" : "Grid";
                             theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                             selected:root.paper-style == style;
@@ -282,7 +282,7 @@ export component AppearancePanel inherits Rectangle {
                     Text {text:"Paper intensity"; font-size:13px; color:root.theme.ink;}
                     HorizontalLayout {
                         spacing:4px;
-                        for intensity in ["subtle", "clear", "bold"]: ChoiceButton {
+                        for intensity in ["subtle", "clear", "bold"]: ChoiceOption {
                             text:intensity == "subtle" ? "Subtle" : intensity == "clear" ? "Clear" : "Bold";
                             theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                             enabled:root.paper-style != "plain";
@@ -304,7 +304,7 @@ export component AppearancePanel inherits Rectangle {
                     theme:root.theme;
                     HorizontalLayout {
                         spacing:4px;
-                        for mode in ["light", "dark", "system"]: ChoiceButton {
+                        for mode in ["light", "dark", "system"]: ChoiceOption {
                             text:mode == "light" ? "Light" : mode == "dark" ? "Dark" : "System";
                             theme:root.theme; high-contrast:root.high-contrast; material-effects:false;
                             selected:root.mode == mode;
