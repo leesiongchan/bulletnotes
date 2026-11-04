@@ -439,7 +439,7 @@ fn reorder_hint_keeps_index_completeness_visible() {
 fn utility_views_keep_neutral_background_when_writing_palette_changes() {
     let ui = setup();
     ui.set_prefers_reduced_transparency(true);
-    for id in ["rose", "graphite", "antinote-vancouver"] {
+    for id in ["rose", "graphite", "bundled-vancouver"] {
         let mut settings = AppSettings::default();
         settings.appearance.light_theme = bulletnotes::theme::ThemeId(id.into());
         present_settings(&ui, &settings, SystemAppearance::Light).unwrap();

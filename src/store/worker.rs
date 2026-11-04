@@ -115,6 +115,7 @@ impl Worker {
             Some(&backup),
         )?;
         super::scratchpads::backfill(&mut db)?;
+        super::settings::upgrade_legacy_theme_ids(&mut db)?;
         db.execute("UPDATE outbox SET state='unknown' WHERE state='leased'", [])?;
         db.execute(
             "UPDATE recovery_uploads SET state='unknown' WHERE state='leased'",

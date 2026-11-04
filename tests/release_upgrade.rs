@@ -132,3 +132,54 @@ async fn upgrade_child_process() {
     );
     store.shutdown().await.unwrap();
 }
+#[tokio::test]
+async fn theme_choices_saved_by_earlier_releases_survive_the_bundled_id_rename() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.sqlite");
+    let store = StoreHandle::open(&path).await.unwrap();
+    store
+        .save_settings(store.load_settings().await.unwrap())
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    // Settings exactly as v1.0.0–v1.3.0 persisted them.
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let json: String = db
+        .query_row("SELECT value FROM settings WHERE id=1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let appearance = &mut legacy["appearance"];
+    appearance["light_theme"] = "antinote-vendetta".into();
+    appearance["dark_theme"] = "antinote-community-dracula".into();
+    appearance["previous_light_theme"] = "antinote-tokyo-drift".into();
+    appearance["previous_dark_theme"] = "graphite".into();
+    db.execute(
+        "UPDATE settings SET value=?1 WHERE id=1",
+        [legacy.to_string()],
+    )
+    .unwrap();
+    drop(db);
+
+    let store = StoreHandle::open(&path).await.unwrap();
+    let appearance = store.load_settings().await.unwrap().appearance;
+    store.shutdown().await.unwrap();
+    assert_eq!(appearance.light_theme.0, "bundled-vendetta");
+    assert_eq!(appearance.dark_theme.0, "bundled-community-dracula");
+    assert_eq!(
+        appearance.previous_light_theme.unwrap().0,
+        "bundled-tokyo-drift"
+    );
+    assert_eq!(appearance.previous_dark_theme.unwrap().0, "graphite");
+    let stored: String = rusqlite::Connection::open(&path)
+        .unwrap()
+        .query_row("SELECT value FROM settings WHERE id=1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert!(
+        !stored.contains("antinote-"),
+        "upgrade must persist: {stored}"
+    );
+}

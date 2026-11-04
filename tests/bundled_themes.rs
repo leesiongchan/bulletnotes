@@ -12,7 +12,7 @@ use bulletnotes::{
 fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
     let expected = [
         (
-            "antinote-vancouver",
+            "bundled-vancouver",
             "Vancouver",
             false,
             "#FFFFFF",
@@ -20,7 +20,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#FFEBCF",
         ),
         (
-            "antinote-tokyo-drift",
+            "bundled-tokyo-drift",
             "Tokyo Drift",
             true,
             "#2A2626",
@@ -28,7 +28,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#746550",
         ),
         (
-            "antinote-gundam-wing",
+            "bundled-gundam-wing",
             "Gundam Wing",
             false,
             "#F5F5F5",
@@ -36,7 +36,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#FFDF5A",
         ),
         (
-            "antinote-vendetta",
+            "bundled-vendetta",
             "Vendetta",
             true,
             "#141414",
@@ -44,7 +44,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#781414",
         ),
         (
-            "antinote-totoro",
+            "bundled-totoro",
             "Totoro",
             false,
             "#FAF5EB",
@@ -52,16 +52,16 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#FFE6A0",
         ),
         (
-            "antinote-mononoke",
+            "bundled-mononoke",
             "Mononoke",
             true,
             "#03180C",
             "#289A28",
             "#F06446",
         ),
-        ("antinote-a24", "A24", true, "#0F1612", "#4D7967", "#493B59"),
+        ("bundled-a24", "A24", true, "#0F1612", "#4D7967", "#493B59"),
         (
-            "antinote-agrabah",
+            "bundled-agrabah",
             "Agrabah",
             true,
             "#0A0A28",
@@ -69,7 +69,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#993055",
         ),
         (
-            "antinote-knight",
+            "bundled-knight",
             "Knight",
             true,
             "#0A0A0F",
@@ -77,7 +77,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#1C4B63",
         ),
         (
-            "antinote-shadow-moses",
+            "bundled-shadow-moses",
             "Shadow Moses",
             true,
             "#292D2D",
@@ -85,7 +85,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#7BC290",
         ),
         (
-            "antinote-piccolo",
+            "bundled-piccolo",
             "Piccolo",
             false,
             "#F5FFF5",
@@ -93,7 +93,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#B3F92C",
         ),
         (
-            "antinote-tartan",
+            "bundled-tartan",
             "Tartan",
             false,
             "#F3F1EB",
@@ -101,7 +101,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#F6BF9F",
         ),
         (
-            "antinote-muad-dib",
+            "bundled-muad-dib",
             "Muad'Dib",
             false,
             "#E1D2B4",
@@ -109,7 +109,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#EFD978",
         ),
         (
-            "antinote-sanrio",
+            "bundled-sanrio",
             "Sanrio",
             false,
             "#FFFFFF",
@@ -117,7 +117,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#CCE1D1",
         ),
         (
-            "antinote-community-flexoki-dark",
+            "bundled-community-flexoki-dark",
             "Flexoki Dark",
             true,
             "#100F0F",
@@ -125,7 +125,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#282726",
         ),
         (
-            "antinote-community-flexoki-light",
+            "bundled-community-flexoki-light",
             "Flexoki Light",
             false,
             "#FFFCF0",
@@ -133,7 +133,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#E6E4D9",
         ),
         (
-            "antinote-community-north-star",
+            "bundled-community-north-star",
             "North Star",
             false,
             "#FFFFFF",
@@ -141,7 +141,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#F2F2F2",
         ),
         (
-            "antinote-community-ayu-mirage",
+            "bundled-community-ayu-mirage",
             "Ayu Mirage",
             true,
             "#202734",
@@ -149,7 +149,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#1F2430",
         ),
         (
-            "antinote-community-catppuccin-frappe",
+            "bundled-community-catppuccin-frappe",
             "Catppuccin Frappé",
             true,
             "#303446",
@@ -157,7 +157,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#414559",
         ),
         (
-            "antinote-community-catppuccin-latte",
+            "bundled-community-catppuccin-latte",
             "Catppuccin Latte",
             false,
             "#EFF1F5",
@@ -165,7 +165,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#CCD0DA",
         ),
         (
-            "antinote-community-catppuccin-macchiato",
+            "bundled-community-catppuccin-macchiato",
             "Catppuccin Macchiato",
             true,
             "#24273A",
@@ -173,7 +173,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#363A4F",
         ),
         (
-            "antinote-community-catppuccin-mocha",
+            "bundled-community-catppuccin-mocha",
             "Catppuccin Mocha",
             true,
             "#1E1E2E",
@@ -181,7 +181,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#313244",
         ),
         (
-            "antinote-community-catpuccinmocha",
+            "bundled-community-catpuccinmocha",
             "Catppuccin Mocha",
             true,
             "#1E1E2E",
@@ -189,7 +189,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#45475A",
         ),
         (
-            "antinote-community-dotmatrix",
+            "bundled-community-dotmatrix",
             "Dot Matrix",
             true,
             "#9BBC0F",
@@ -197,7 +197,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#BCC787",
         ),
         (
-            "antinote-community-dracula",
+            "bundled-community-dracula",
             "Dracula",
             true,
             "#282A36",
@@ -205,7 +205,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#44475A",
         ),
         (
-            "antinote-community-gruvbox",
+            "bundled-community-gruvbox",
             "Gruvbox",
             true,
             "#282828",
@@ -213,7 +213,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#746550",
         ),
         (
-            "antinote-community-horizon",
+            "bundled-community-horizon",
             "Horizon (Warm)",
             true,
             "#1C1E26",
@@ -221,7 +221,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#2E303E",
         ),
         (
-            "antinote-community-icebergvim",
+            "bundled-community-icebergvim",
             "Iceberg",
             true,
             "#161821",
@@ -229,7 +229,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#2E313F",
         ),
         (
-            "antinote-community-material-deep-ocean",
+            "bundled-community-material-deep-ocean",
             "Material Deep Ocean",
             true,
             "#0D101A",
@@ -237,7 +237,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#1F2233",
         ),
         (
-            "antinote-community-monokai",
+            "bundled-community-monokai",
             "Monokai",
             true,
             "#272822",
@@ -245,7 +245,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#49483E",
         ),
         (
-            "antinote-community-neo",
+            "bundled-community-neo",
             "Neo",
             true,
             "#19002E",
@@ -253,7 +253,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#746550",
         ),
         (
-            "antinote-community-nord",
+            "bundled-community-nord",
             "Nord",
             true,
             "#2E3440",
@@ -261,7 +261,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#434C5E",
         ),
         (
-            "antinote-community-nordaurora",
+            "bundled-community-nordaurora",
             "Nord Aurora",
             true,
             "#2E3440",
@@ -269,7 +269,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#434C5E",
         ),
         (
-            "antinote-community-oceanicnext",
+            "bundled-community-oceanicnext",
             "Oceanic Next",
             true,
             "#1B2B34",
@@ -277,7 +277,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#4F5B66",
         ),
         (
-            "antinote-community-onedarkpro",
+            "bundled-community-onedarkpro",
             "One Dark Pro",
             true,
             "#282C34",
@@ -285,7 +285,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#3E4451",
         ),
         (
-            "antinote-community-solarized",
+            "bundled-community-solarized",
             "Solarized Dark",
             true,
             "#002B36",
@@ -293,7 +293,7 @@ fn all_bundled_palettes_resolve_with_cursor_and_scrollbar_colors() {
             "#073642",
         ),
         (
-            "antinote-community-wumpus",
+            "bundled-community-wumpus",
             "Wumpus",
             true,
             "#323339",

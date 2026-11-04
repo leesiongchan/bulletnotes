@@ -149,6 +149,39 @@ pub(super) fn load(db: &Connection) -> Result<AppSettings, StoreError> {
     settings.validate()?;
     Ok(settings)
 }
+/// Releases v1.0.0–v1.3.0 stored bundled theme IDs under this prefix; they are
+/// rewritten to `bundled-` once at startup so saved theme choices survive the rename.
+const LEGACY_THEME_PREFIX: &str = "antinote-";
+
+pub(super) fn upgrade_legacy_theme_ids(db: &mut Connection) -> Result<(), StoreError> {
+    let json = db
+        .query_row("SELECT value FROM settings WHERE id=1", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .optional()?;
+    // Unreadable settings are left for `load` to report unchanged.
+    let Some(mut settings) = json.and_then(|json| serde_json::from_str::<AppSettings>(&json).ok())
+    else {
+        return Ok(());
+    };
+    let appearance = &mut settings.appearance;
+    let mut upgraded = 0;
+    for id in [&mut appearance.light_theme, &mut appearance.dark_theme]
+        .into_iter()
+        .chain(appearance.previous_light_theme.as_mut())
+        .chain(appearance.previous_dark_theme.as_mut())
+    {
+        if let Some(name) = id.0.strip_prefix(LEGACY_THEME_PREFIX) {
+            id.0 = format!("bundled-{name}");
+            upgraded += 1;
+        }
+    }
+    if upgraded > 0 {
+        save(db, settings)?;
+        tracing::info!(count = upgraded, "Upgraded legacy theme identifiers");
+    }
+    Ok(())
+}
 pub(super) fn save(db: &mut Connection, settings: AppSettings) -> Result<(), StoreError> {
     settings.validate()?;
     let json = serde_json::to_string(&settings).map_err(|_| StoreError::InvalidSettings)?;

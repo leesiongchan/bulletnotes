@@ -68,14 +68,14 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
     );
     assert_eq!(cards.row_data(0).unwrap().left.id, "bulletnotes");
     assert_eq!(cards.row_data(0).unwrap().right.id, "bulletnotes-dark");
-    assert_eq!(cards.row_data(1).unwrap().left.id, "antinote-vancouver");
-    assert_eq!(cards.row_data(4).unwrap().left.id, "antinote-piccolo");
+    assert_eq!(cards.row_data(1).unwrap().left.id, "bundled-vancouver");
+    assert_eq!(cards.row_data(4).unwrap().left.id, "bundled-piccolo");
     let tartan = cards
         .iter()
         .flat_map(|pair| [pair.left, pair.right])
-        .find(|card| card.id == "antinote-tartan")
+        .find(|card| card.id == "bundled-tartan")
         .unwrap();
-    assert_eq!(tartan.id, "antinote-tartan");
+    assert_eq!(tartan.id, "bundled-tartan");
     assert_eq!(
         tartan.swatches.accent2,
         slint::Color::from_rgb_u8(80, 170, 80)
@@ -141,7 +141,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         let _ = window.window().take_snapshot().unwrap();
         window.invoke_reveal_theme_choices();
         binding.flush().await.unwrap();
-        for (index, (id, activation)) in [("bulletnotes", slint::SharedString::from(Key::Space)), ("bulletnotes-dark", Key::Space.into()), ("antinote-vancouver", Key::Return.into())].into_iter().enumerate() {
+        for (index, (id, activation)) in [("bulletnotes", slint::SharedString::from(Key::Space)), ("bulletnotes-dark", Key::Space.into()), ("bundled-vancouver", Key::Return.into())].into_iter().enumerate() {
             for _ in 0..if index == 0 { 0 } else { 2 } {
                 window.window().dispatch_event(WindowEvent::KeyPressed { text: Key::Tab.into() });
                 window.window().dispatch_event(WindowEvent::KeyReleased { text: Key::Tab.into() });
@@ -156,24 +156,24 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             window.window().dispatch_event(WindowEvent::KeyReleased { text });
         }
         binding.flush().await.unwrap();
-        assert_eq!(store.load_settings().await.unwrap().appearance.light_theme.0, "antinote-vancouver");
-        window.invoke_theme_assigned("antinote-tartan".into(), true);
+        assert_eq!(store.load_settings().await.unwrap().appearance.light_theme.0, "bundled-vancouver");
+        window.invoke_theme_assigned("bundled-tartan".into(), true);
         binding.flush().await.unwrap();
         window.window().dispatch_event(WindowEvent::KeyPressed { text:Key::Space.into() });
         window.window().dispatch_event(WindowEvent::KeyReleased { text:Key::Space.into() });
         binding.flush().await.unwrap();
-        assert_eq!(store.load_settings().await.unwrap().appearance.dark_theme.0, "antinote-vancouver");
+        assert_eq!(store.load_settings().await.unwrap().appearance.dark_theme.0, "bundled-vancouver");
         let before = store.load_settings().await.unwrap();
-        window.invoke_theme_assigned("antinote-tartan".into(), false);
+        window.invoke_theme_assigned("bundled-tartan".into(), false);
         binding.flush().await.unwrap();
-        window.invoke_theme_assigned("antinote-mononoke".into(), true);
+        window.invoke_theme_assigned("bundled-mononoke".into(), true);
         binding.flush().await.unwrap();
         let assigned = store.load_settings().await.unwrap();
-        assert_eq!(assigned.appearance.light_theme.0, "antinote-tartan");
-        assert_eq!(assigned.appearance.dark_theme.0, "antinote-mononoke");
+        assert_eq!(assigned.appearance.light_theme.0, "bundled-tartan");
+        assert_eq!(assigned.appearance.dark_theme.0, "bundled-mononoke");
         assert_eq!(assigned.appearance.mode, before.appearance.mode);
-        assert_eq!(window.get_selected_light_theme_id(), "antinote-tartan");
-        assert_eq!(window.get_selected_dark_theme_id(), "antinote-mononoke");
+        assert_eq!(window.get_selected_light_theme_id(), "bundled-tartan");
+        assert_eq!(window.get_selected_dark_theme_id(), "bundled-mononoke");
         assert_eq!(window.get_theme_options(), cards);
         assert_eq!(window.get_note_text().as_bytes(), source.as_bytes());
         window.invoke_theme_assigned("missing-theme".into(), true);
@@ -192,7 +192,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         let selected = window.get_selected_theme_id();
         let injector = rusqlite::Connection::open(&path).unwrap();
         injector.execute_batch("CREATE TRIGGER fail_theme BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT,'fixture failure'); END;").unwrap();
-        window.invoke_theme_assigned("antinote-sanrio".into(), true);
+        window.invoke_theme_assigned("bundled-sanrio".into(), true);
         binding.flush().await.unwrap();
         assert_eq!(window.get_selected_theme_id(), selected);
         assert_eq!(store.load_settings().await.unwrap(), saved);

@@ -16,7 +16,7 @@ fn original_builtins_meet_contrast() {
     let themes: Vec<_> = builtin_themes()
         .unwrap()
         .into_iter()
-        .filter(|entry| !entry.id.0.starts_with("antinote-"))
+        .filter(|entry| !entry.id.0.starts_with("bundled-"))
         .collect();
     assert_eq!(themes.len(), 6);
     for entry in themes {

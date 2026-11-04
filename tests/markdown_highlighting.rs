@@ -328,7 +328,7 @@ fn tartan_preserves_native_palette_components() {
     let source = "# First\n## Second\n### Third\n*Italic*\n~~Done~~\n[link](https://example.com)";
     let window = setup(source);
     let mut settings = AppSettings::default();
-    settings.appearance.light_theme = ThemeId("antinote-tartan".into());
+    settings.appearance.light_theme = ThemeId("bundled-tartan".into());
     present_settings(&window, &settings, SystemAppearance::Light).unwrap();
     let theme = window.get_theme();
     assert_eq!(theme.paper, slint::Color::from_rgb_u8(243, 241, 235));
