@@ -1,5 +1,6 @@
 //! Pure UTF-8 source commands; native input owns mutation, history and permission.
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use super::markdown::events;
+use pulldown_cmark::{Event, Tag, TagEnd};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 mod format;
@@ -139,10 +140,7 @@ impl<'a> Context<'a> {
         let mut containers = Vec::new();
         let mut item_stack = Vec::new();
         let mut serial = 0;
-        let options = Options::ENABLE_TASKLISTS
-            | Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
-        for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+        for (event, range) in events(source) {
             match event {
                 Event::Start(Tag::List(_)) => {
                     serial += 1;
@@ -635,5 +633,48 @@ mod tests {
             compute("same\nsame", sel(1, 1), MoveDown),
             CommandResult::NoChange
         );
+    }
+    mod properties {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn command() -> impl Strategy<Value = SourceCommand> {
+            prop_oneof![
+                Just(ToggleTask),
+                (any::<prop::sample::Index>(), any::<prop::sample::Index>())
+                    .prop_map(|(start, end)| task_at(start.index(64), end.index(64))),
+                Just(ContinueList),
+                Just(IndentList),
+                Just(OutdentList),
+                Just(Bold),
+                Just(Italic),
+                Just(Strikethrough),
+                Just(CycleHeading),
+                Just(MoveUp),
+                Just(MoveDown),
+            ]
+        }
+
+        proptest! {
+            #[test]
+            fn edits_stay_on_utf8_boundaries(
+                source in super::super::super::markdown::markdown_source(),
+                anchor: prop::sample::Index,
+                caret: prop::sample::Index,
+                command in command(),
+            ) {
+                let selection = sel(anchor.index(source.len() + 1), caret.index(source.len() + 1));
+                if let CommandResult::Edit(edit) = compute(&source, selection, command) {
+                    prop_assert!(edit.range.start <= edit.range.end && edit.range.end <= source.len());
+                    prop_assert!(source.is_char_boundary(edit.range.start));
+                    prop_assert!(source.is_char_boundary(edit.range.end));
+                    let mut edited = source.clone();
+                    edited.replace_range(edit.range, &edit.replacement);
+                    for offset in [edit.selection.anchor, edit.selection.caret] {
+                        prop_assert!(edited.is_char_boundary(offset), "{offset} in {edited:?}");
+                    }
+                }
+            }
+        }
     }
 }

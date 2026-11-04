@@ -1,9 +1,10 @@
 //! Bounded, local syntax coloring. Markdown remains the source of truth.
+use super::markdown::events;
 use crate::{
     UiTheme,
     theme::{Color, contrast::contrast_ratio},
 };
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
 use slint::language::TextInputDecoration;
 use syntect::{
     easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet, util::LinesWithEndings,
@@ -128,12 +129,7 @@ pub(super) fn tokens(
     }
     let mut block: Option<Block> = None;
     let mut result = Vec::new();
-    for (event, range) in Parser::new_ext(
-        source,
-        pulldown_cmark::Options::ENABLE_YAML_STYLE_METADATA_BLOCKS,
-    )
-    .into_offset_iter()
-    {
+    for (event, range) in events(source) {
         match event {
             Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) => {
                 block = info
@@ -172,13 +168,11 @@ pub(super) fn tokens(
 }
 
 pub(super) fn block_ranges(source: &str) -> Vec<std::ops::Range<usize>> {
-    Parser::new_ext(
-        source,
-        pulldown_cmark::Options::ENABLE_YAML_STYLE_METADATA_BLOCKS,
-    )
-    .into_offset_iter()
-    .filter_map(|(event, range)| matches!(event, Event::Start(Tag::CodeBlock(_))).then_some(range))
-    .collect()
+    events(source)
+        .filter_map(|(event, range)| {
+            matches!(event, Event::Start(Tag::CodeBlock(_))).then_some(range)
+        })
+        .collect()
 }
 
 pub(super) fn layout_end(source: &str, end: usize) -> usize {

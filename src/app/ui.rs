@@ -13,7 +13,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 fn color(value: theme::Color) -> slint::Color {
     slint::Color::from_rgb_u8(value.r, value.g, value.b)
 }
-fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
+pub(super) fn palette(theme: &Theme, pattern: theme::Color) -> UiTheme {
     UiTheme {
         paper: color(theme.paper),
         surface: color(theme.surface),

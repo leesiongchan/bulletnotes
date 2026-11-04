@@ -5,6 +5,18 @@ use crate::{
 };
 use pulldown_cmark::{Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 use slint::language::TextInputDecoration;
+use std::ops::Range;
+
+/// Every consumer parses with the same extensions so highlighting, list markers,
+/// code panels and editing commands always agree on the document structure.
+const OPTIONS: Options = Options::ENABLE_TASKLISTS
+    .union(Options::ENABLE_STRIKETHROUGH)
+    .union(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+
+/// Parser events with their original byte ranges in `source`.
+pub(super) fn events(source: &str) -> impl Iterator<Item = (Event<'_>, Range<usize>)> {
+    Parser::new_ext(source, OPTIONS).into_offset_iter()
+}
 
 #[derive(Clone, Copy, PartialEq)]
 struct SourceStyle {
@@ -16,49 +28,100 @@ struct SourceStyle {
     code: bool,
 }
 
+/// Palette roles resolved once per call, keeping contrast policy out of the parse loop.
+struct Styles {
+    plain: SourceStyle,
+    /// Markdown delimiters such as `**`, backticks and link brackets.
+    quiet: SourceStyle,
+    link: slint::Color,
+    headings: [slint::Color; 3],
+}
+impl Styles {
+    fn new(palette: &UiTheme, high_contrast: bool) -> Self {
+        let rgb = |color: slint::Color| theme::Color {
+            r: color.red(),
+            g: color.green(),
+            b: color.blue(),
+        };
+        let readable = |color| {
+            if high_contrast || contrast_ratio(rgb(color), rgb(palette.paper)) < 4.5 {
+                palette.ink
+            } else {
+                color
+            }
+        };
+        let accent = readable(palette.accent);
+        let role_color = |configured: slint::Color, fallback| {
+            if high_contrast {
+                palette.ink
+            } else if configured.alpha() != 0 {
+                configured
+            } else {
+                fallback
+            }
+        };
+        let lighter = accent.mix(&palette.paper, 0.95);
+        let heading3_fallback = if contrast_ratio(rgb(lighter), rgb(palette.paper)) >= 4.5 {
+            readable(lighter)
+        } else {
+            accent
+        };
+        let plain = SourceStyle {
+            foreground: palette.ink,
+            bold: false,
+            italic: false,
+            strikethrough: false,
+            underline: false,
+            code: false,
+        };
+        Self {
+            plain,
+            quiet: SourceStyle {
+                foreground: role_color(palette.markdown.syntax, readable(palette.muted)),
+                ..plain
+            },
+            link: role_color(palette.markdown.link, accent),
+            headings: [
+                role_color(palette.markdown.heading1, accent),
+                role_color(
+                    palette.markdown.heading2,
+                    readable(accent.mix(&palette.ink, 0.8)),
+                ),
+                role_color(palette.markdown.heading3, heading3_fallback),
+            ],
+        }
+    }
+    fn heading(&self, level: HeadingLevel, body: SourceStyle) -> SourceStyle {
+        let (index, bold) = match level {
+            HeadingLevel::H1 => (0, true),
+            HeadingLevel::H2 => (1, true),
+            _ => (2, false),
+        };
+        SourceStyle {
+            foreground: self.headings[index],
+            bold,
+            ..body
+        }
+    }
+    fn link(&self) -> SourceStyle {
+        SourceStyle {
+            foreground: self.link,
+            underline: true,
+            ..self.plain
+        }
+    }
+}
+
 pub(super) fn decorations(
     source: &str,
     palette: &UiTheme,
     high_contrast: bool,
 ) -> Vec<TextInputDecoration> {
-    let rgb = |color: slint::Color| theme::Color {
-        r: color.red(),
-        g: color.green(),
-        b: color.blue(),
-    };
-    let readable = |color| {
-        if high_contrast || contrast_ratio(rgb(color), rgb(palette.paper)) < 4.5 {
-            palette.ink
-        } else {
-            color
-        }
-    };
-    let accent = readable(palette.accent);
-    let role_color = |configured: slint::Color, fallback| {
-        if high_contrast {
-            palette.ink
-        } else if configured.alpha() != 0 {
-            configured
-        } else {
-            fallback
-        }
-    };
-    let link_color = role_color(palette.markdown.link, accent);
-    let plain = SourceStyle {
-        foreground: palette.ink,
-        bold: false,
-        italic: false,
-        strikethrough: false,
-        underline: false,
-        code: false,
-    };
-    let quiet = SourceStyle {
-        foreground: role_color(palette.markdown.syntax, readable(palette.muted)),
-        ..plain
-    };
+    let styles = Styles::new(palette, high_contrast);
+    let (plain, quiet) = (styles.plain, styles.quiet);
     let mut spans: Vec<TextInputDecoration> = Vec::new();
     let mut last_style = plain;
-    let mut emit = |range: std::ops::Range<usize>, style: SourceStyle| {
+    let mut emit = |range: Range<usize>, style: SourceStyle| {
         if range.start >= range.end || style == plain {
             return;
         }
@@ -92,8 +155,7 @@ pub(super) fn decorations(
     // keeps the renderer's source ranges sorted and disjoint.
     let mut stack = vec![(plain, plain)];
     let mut cursor = 0;
-    let options = Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_STRIKETHROUGH;
-    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+    for (event, range) in events(source) {
         let (mut body, mut syntax) = *stack.last().unwrap_or(&(plain, plain));
         match event {
             Event::Start(tag) => {
@@ -101,22 +163,7 @@ pub(super) fn decorations(
                 cursor = cursor.max(range.start);
                 match tag {
                     Tag::Heading { level, .. } => {
-                        body.foreground = match level {
-                            HeadingLevel::H1 => role_color(palette.markdown.heading1, accent),
-                            HeadingLevel::H2 => role_color(
-                                palette.markdown.heading2,
-                                readable(accent.mix(&palette.ink, 0.8)),
-                            ),
-                            _ => {
-                                let lighter = accent.mix(&palette.paper, 0.95);
-                                if contrast_ratio(rgb(lighter), rgb(palette.paper)) >= 4.5 {
-                                    role_color(palette.markdown.heading3, readable(lighter))
-                                } else {
-                                    role_color(palette.markdown.heading3, accent)
-                                }
-                            }
-                        };
-                        body.bold = matches!(level, HeadingLevel::H1 | HeadingLevel::H2);
+                        body = styles.heading(level, body);
                         syntax = body;
                     }
                     Tag::Strong => {
@@ -137,7 +184,7 @@ pub(super) fn decorations(
                             emit(range.start..range.start + 1, quiet);
                             cursor = range.start + 1;
                         } else {
-                            body.foreground = link_color;
+                            body.foreground = styles.link;
                             body.underline = true;
                         }
                         syntax = quiet;
@@ -158,14 +205,7 @@ pub(super) fn decorations(
                 let tail = source.get(cursor..range.end).unwrap_or_default();
                 if tag == TagEnd::Link && tail.starts_with("](") && tail.ends_with(')') {
                     emit(cursor..cursor + 2, quiet);
-                    emit(
-                        cursor + 2..range.end - 1,
-                        SourceStyle {
-                            foreground: link_color,
-                            underline: true,
-                            ..plain
-                        },
-                    );
+                    emit(cursor + 2..range.end - 1, styles.link());
                     emit(range.end - 1..range.end, quiet);
                 } else {
                     emit(cursor..range.end, syntax);
@@ -204,7 +244,6 @@ pub(super) fn decorations(
 }
 
 pub(super) fn markers(source: &str, palette: &UiTheme) -> Vec<slint::language::TextInputMarker> {
-    use pulldown_cmark::{Options, TagEnd};
     use slint::language::{TextInputMarker, TextInputMarkerKind as Kind};
     let whitespace_end = |start: usize| {
         start
@@ -224,8 +263,7 @@ pub(super) fn markers(source: &str, palette: &UiTheme) -> Vec<slint::language::T
     };
     let mut markers: Vec<TextInputMarker> = Vec::new();
     let mut items: Vec<Option<usize>> = Vec::new();
-    let options = Options::ENABLE_TASKLISTS | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
-    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+    for (event, range) in events(source) {
         match event {
             Event::Start(Tag::Item) => {
                 let index =
@@ -375,5 +413,116 @@ mod tests {
         let spans = decorations(source, &UiTheme::default(), false);
         assert!(spans.iter().any(|span| span.underline
             && &source[span.start as usize..span.end as usize] == "https://example.com"));
+    }
+}
+
+/// Structure-aware generator shared by parser-facing property tests.
+#[cfg(test)]
+pub(super) fn markdown_source() -> impl proptest::strategy::Strategy<Value = String> {
+    use proptest::{collection::vec, sample::select, strategy::Strategy};
+    let fragments = vec![
+        "- ",
+        "* ",
+        "+ ",
+        "1. ",
+        "[ ] ",
+        "[x] ",
+        "> ",
+        "# ",
+        "## ",
+        "### ",
+        "**",
+        "*",
+        "_",
+        "~~",
+        "~",
+        "`",
+        "```rust\n",
+        "```\n",
+        "~~~\n",
+        "    ",
+        "[",
+        "](",
+        ")",
+        "[[",
+        "]]",
+        "https://a.b",
+        "---\n",
+        "\n",
+        "\r\n",
+        "  ",
+        "\t",
+        "\\",
+        "café",
+        "日本",
+        "👩🏽‍💻",
+        "x",
+        "<b>",
+        "|",
+    ];
+    vec(select(fragments), 0..64).prop_map(|parts| parts.concat())
+}
+
+#[cfg(test)]
+mod properties {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// The renderer's contract (`decoration_range` in the patched Slint core):
+    /// sorted, disjoint, non-empty ranges on UTF-8 boundaries. Anything else is dropped.
+    fn assert_ranges(source: &str, ranges: &[Range<usize>]) {
+        for range in ranges {
+            assert!(
+                range.start < range.end && range.end <= source.len(),
+                "{range:?}"
+            );
+            assert!(source.is_char_boundary(range.start) && source.is_char_boundary(range.end));
+        }
+        assert!(ranges.windows(2).all(|pair| pair[0].end <= pair[1].start));
+    }
+
+    proptest! {
+        #[test]
+        fn decorations_are_sorted_disjoint_source_ranges(
+            source in markdown_source(),
+            theme: prop::sample::Index,
+            high_contrast: bool,
+        ) {
+            // Real palettes keep delimiter, link and heading roles distinct from body text.
+            let themes = crate::theme::palette::builtin_themes().unwrap();
+            let theme = &themes[theme.index(themes.len())].theme;
+            let palette = super::super::ui::palette(theme, theme.ink);
+            let spans = decorations(&source, &palette, high_contrast);
+            let ranges: Vec<_> = spans.iter().map(|span| span.start as usize..span.end as usize).collect();
+            assert_ranges(&source, &ranges);
+            for (span, range) in spans.iter().zip(ranges) {
+                // Shaped styles must not split a grapheme, or the renderer drops them.
+                if span.bold || span.italic || span.code {
+                    for offset in [range.start, range.end] {
+                        let mut cursor = unicode_segmentation::GraphemeCursor::new(offset, source.len(), true);
+                        prop_assert_eq!(cursor.is_boundary(&source, 0), Ok(true), "{:?}", range);
+                    }
+                }
+                // Line breaks stay unstyled so a line's style never bleeds into the next.
+                prop_assert!(!source[range].ends_with(['\r', '\n']));
+            }
+        }
+
+        #[test]
+        fn markers_are_sorted_disjoint_source_ranges(source in markdown_source()) {
+            let ranges: Vec<_> = markers(&source, &UiTheme::default())
+                .iter()
+                .map(|marker| marker.start as usize..marker.end as usize)
+                .collect();
+            assert_ranges(&source, &ranges);
+        }
+
+        #[test]
+        fn code_blocks_stay_inside_the_source(source in markdown_source()) {
+            for range in super::super::code_highlighting::block_ranges(&source) {
+                prop_assert!(range.end <= source.len());
+                prop_assert!(source.is_char_boundary(range.start) && source.is_char_boundary(range.end));
+            }
+        }
     }
 }
