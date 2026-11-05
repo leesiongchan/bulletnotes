@@ -9,6 +9,7 @@ use super::{
 use crate::{AboutWindow, AppWindow, LocalTray, platform::application::NativeApplication};
 #[cfg(target_os = "macos")]
 use crate::{
+    AppearanceAdapter,
     app::window_placement::{self, ScreenFrame},
     platform::window_chrome::{ChromeMonitor, native_window},
     store::settings::WindowPlacement,
@@ -95,7 +96,9 @@ impl LocalApplication {
                 if result.is_err()
                     && let Some(window) = weak.upgrade()
                 {
-                    window.set_native_message("About could not be shown. Try again.".into());
+                    window
+                        .global::<AppearanceAdapter>()
+                        .set_native_message("About could not be shown. Try again.".into());
                     window.set_native_warning(true);
                 }
             });
@@ -114,7 +117,9 @@ impl LocalApplication {
                 if integration.show().is_err()
                     && let Some(window) = weak.upgrade()
                 {
-                    window.set_native_message("Window could not be shown. Try again.".into());
+                    window
+                        .global::<AppearanceAdapter>()
+                        .set_native_message("Window could not be shown. Try again.".into());
                     window.set_native_warning(true);
                 }
             });
@@ -230,9 +235,11 @@ impl LocalApplication {
                         capability: crate::diagnostics::DesktopCapability::Tray,
                     },
                 );
-                self.window.set_native_message(
-                    "Tray unavailable. Closing exits Bulletnotes after saving.".into(),
-                );
+                self.window
+                    .global::<AppearanceAdapter>()
+                    .set_native_message(
+                        "Tray unavailable. Closing exits Bulletnotes after saving.".into(),
+                    );
                 self.window.set_native_warning(true);
             }
         }

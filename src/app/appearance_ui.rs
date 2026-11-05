@@ -4,7 +4,7 @@ use super::{
     ui::present_settings,
 };
 use crate::{
-    AppWindow,
+    AppWindow, AppearanceAdapter,
     domain::error::StoreError,
     store::{StoreHandle, settings::AppSettings},
     theme::{SystemAppearance, Theme, ThemeError, ThemeId},
@@ -89,7 +89,9 @@ impl AppearanceUi {
 impl State {
     fn message(&self, message: &str) {
         if let Some(window) = self.window.upgrade() {
-            window.set_appearance_message(message.into());
+            window
+                .global::<AppearanceAdapter>()
+                .set_message(message.into());
         }
     }
     fn present(&self) {
@@ -106,7 +108,9 @@ impl State {
     fn clear_pending(&self) {
         self.pending.borrow_mut().take();
         if let Some(window) = self.window.upgrade() {
-            window.set_low_contrast_warning(false);
+            window
+                .global::<AppearanceAdapter>()
+                .set_low_contrast_warning(false);
         }
     }
     fn submit(&self, candidate: AppSettings, allow: bool) {
@@ -152,7 +156,9 @@ impl State {
             Err(ThemeError::LowContrast) => {
                 *self.pending.borrow_mut() = Some(pending);
                 if let Some(window) = self.window.upgrade() {
-                    window.set_low_contrast_warning(true);
+                    window
+                        .global::<AppearanceAdapter>()
+                        .set_low_contrast_warning(true);
                 }
                 self.message("This theme has insufficient text or control contrast. Apply anyway?");
             }
@@ -224,10 +230,12 @@ pub fn bind(
     })?;
     {
         let state = state.clone();
-        window.on_theme_selected(move |id| {
-            // Choosing an existing theme accepts its palette; only new imports need review.
-            state.choose(Pending::Selection(ThemeId(id.to_string())), true);
-        });
+        window
+            .global::<AppearanceAdapter>()
+            .on_theme_selected(move |id| {
+                // Choosing an existing theme accepts its palette; only new imports need review.
+                state.choose(Pending::Selection(ThemeId(id.to_string())), true);
+            });
     }
     {
         let state = state.clone();
@@ -253,35 +261,53 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_cycle_theme_assignment(move |id| {
-            let candidate = state
-                .controller
-                .borrow()
-                .cycle_assignment_candidate(ThemeId(id.to_string()));
-            match candidate {
-                Ok(candidate) => {
-                    state.clear_pending();
-                    state.submit(candidate, true);
+        window
+            .global::<AppearanceAdapter>()
+            .on_cycle_theme_assignment(move |id| {
+                let candidate = state
+                    .controller
+                    .borrow()
+                    .cycle_assignment_candidate(ThemeId(id.to_string()));
+                match candidate {
+                    Ok(candidate) => {
+                        state.clear_pending();
+                        state.submit(candidate, true);
+                    }
+                    Err(error) => state.message(&error.to_string()),
                 }
-                Err(error) => state.message(&error.to_string()),
-            }
-        });
+            });
     }
     {
         let state = state.clone();
-        window.on_appearance_changed(move || {
+        window.global::<AppearanceAdapter>().on_changed(move || {
             if let Some(window) = state.window.upgrade() {
                 let mut candidate = state.controller.borrow().displayed().clone();
-                candidate.appearance.mode = window.get_appearance_mode().into();
-                candidate.appearance.paper = window.get_paper_style().into();
-                candidate.appearance.font_size = window.get_font_size_px();
-                candidate.appearance.paper_type = window.get_paper_type().into();
-                candidate.appearance.paper_intensity = window.get_paper_intensity().into();
-                candidate.start_with_new_note = window.get_start_with_new_note();
-                candidate.appearance.keep_bottom_bar_visible = window.get_keep_bottom_bar_visible();
-                candidate.appearance.show_note_count = window.get_show_note_count();
-                candidate.appearance.show_note_date = window.get_show_note_date();
-                candidate.appearance.show_newest_indicator = window.get_show_newest_indicator();
+                candidate.appearance.mode = window.global::<AppearanceAdapter>().get_mode().into();
+                candidate.appearance.paper = window
+                    .global::<AppearanceAdapter>()
+                    .get_paper_style()
+                    .into();
+                candidate.appearance.font_size =
+                    window.global::<AppearanceAdapter>().get_font_size_px();
+                candidate.appearance.paper_type =
+                    window.global::<AppearanceAdapter>().get_paper_type().into();
+                candidate.appearance.paper_intensity = window
+                    .global::<AppearanceAdapter>()
+                    .get_paper_intensity()
+                    .into();
+                candidate.start_with_new_note = window
+                    .global::<AppearanceAdapter>()
+                    .get_start_with_new_note();
+                candidate.appearance.keep_bottom_bar_visible = window
+                    .global::<AppearanceAdapter>()
+                    .get_keep_bottom_bar_visible();
+                candidate.appearance.show_note_count =
+                    window.global::<AppearanceAdapter>().get_show_note_count();
+                candidate.appearance.show_note_date =
+                    window.global::<AppearanceAdapter>().get_show_note_date();
+                candidate.appearance.show_newest_indicator = window
+                    .global::<AppearanceAdapter>()
+                    .get_show_newest_indicator();
                 state.clear_pending();
                 state.submit(candidate, true);
             }
@@ -289,19 +315,23 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_apply_low_contrast(move || {
-            let pending = state.pending.borrow_mut().take();
-            if let Some(pending) = pending {
-                state.choose(pending, true);
-            }
-        });
+        window
+            .global::<AppearanceAdapter>()
+            .on_apply_low_contrast(move || {
+                let pending = state.pending.borrow_mut().take();
+                if let Some(pending) = pending {
+                    state.choose(pending, true);
+                }
+            });
     }
     {
         let state = state.clone();
-        window.on_cancel_theme_import(move || {
-            state.clear_pending();
-            state.message("Theme import cancelled");
-        });
+        window
+            .global::<AppearanceAdapter>()
+            .on_cancel_theme_import(move || {
+                state.clear_pending();
+                state.message("Theme import cancelled");
+            });
     }
     bind_dialogs(window, &state);
     Ok(AppearanceUi(state))
@@ -323,74 +353,80 @@ async fn blocking_file<T: Send + 'static>(
 fn bind_dialogs(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
-        window.on_import_theme(move || {
-            if state.dialog_open.replace(true) {
-                return;
-            }
-            let task = state.clone();
-            if slint::spawn_local(async move {
-                let file = rfd::AsyncFileDialog::new()
-                    .set_title("Import Bulletnotes theme")
-                    .add_filter("Bulletnotes theme", &["json"])
-                    .pick_file()
-                    .await;
-                if let Some(file) = file {
-                    let path = file.path().to_owned();
-                    match blocking_file(move || super::theme_files::load_theme_file(&path)).await {
-                        Ok(theme) => task.choose(Pending::Import(theme), false),
-                        Err(error) => task.message(&error.to_string()),
-                    }
+        window
+            .global::<AppearanceAdapter>()
+            .on_import_theme(move || {
+                if state.dialog_open.replace(true) {
+                    return;
                 }
-                task.dialog_open.set(false);
-            })
-            .is_err()
-            {
-                state.dialog_open.set(false);
-                state.message("The theme dialog could not be opened. Try again.");
-            }
-        });
+                let task = state.clone();
+                if slint::spawn_local(async move {
+                    let file = rfd::AsyncFileDialog::new()
+                        .set_title("Import Bulletnotes theme")
+                        .add_filter("Bulletnotes theme", &["json"])
+                        .pick_file()
+                        .await;
+                    if let Some(file) = file {
+                        let path = file.path().to_owned();
+                        match blocking_file(move || super::theme_files::load_theme_file(&path))
+                            .await
+                        {
+                            Ok(theme) => task.choose(Pending::Import(theme), false),
+                            Err(error) => task.message(&error.to_string()),
+                        }
+                    }
+                    task.dialog_open.set(false);
+                })
+                .is_err()
+                {
+                    state.dialog_open.set(false);
+                    state.message("The theme dialog could not be opened. Try again.");
+                }
+            });
     }
     {
         let state = state.clone();
-        window.on_export_theme(move || {
-            if state.dialog_open.replace(true) {
-                return;
-            }
-            let palette = match state.controller.borrow().resolved() {
-                Ok(resolved) => resolved.palette,
-                Err(error) => {
-                    state.dialog_open.set(false);
-                    state.message(&error.to_string());
+        window
+            .global::<AppearanceAdapter>()
+            .on_export_theme(move || {
+                if state.dialog_open.replace(true) {
                     return;
                 }
-            };
-            let task = state.clone();
-            if slint::spawn_local(async move {
-                // Theme names are untrusted data, never default filenames or paths.
-                let file = rfd::AsyncFileDialog::new()
-                    .set_title("Export Bulletnotes theme")
-                    .set_file_name("Bulletnotes Theme.json")
-                    .add_filter("Bulletnotes theme", &["json"])
-                    .save_file()
-                    .await;
-                if let Some(file) = file {
-                    let path = file.path().to_owned();
-                    match blocking_file(move || {
-                        super::theme_files::save_theme_file(&path, &palette)
-                    })
-                    .await
-                    {
-                        Ok(()) => task.message("Theme exported"),
-                        Err(error) => task.message(&error.to_string()),
+                let palette = match state.controller.borrow().resolved() {
+                    Ok(resolved) => resolved.palette,
+                    Err(error) => {
+                        state.dialog_open.set(false);
+                        state.message(&error.to_string());
+                        return;
                     }
+                };
+                let task = state.clone();
+                if slint::spawn_local(async move {
+                    // Theme names are untrusted data, never default filenames or paths.
+                    let file = rfd::AsyncFileDialog::new()
+                        .set_title("Export Bulletnotes theme")
+                        .set_file_name("Bulletnotes Theme.json")
+                        .add_filter("Bulletnotes theme", &["json"])
+                        .save_file()
+                        .await;
+                    if let Some(file) = file {
+                        let path = file.path().to_owned();
+                        match blocking_file(move || {
+                            super::theme_files::save_theme_file(&path, &palette)
+                        })
+                        .await
+                        {
+                            Ok(()) => task.message("Theme exported"),
+                            Err(error) => task.message(&error.to_string()),
+                        }
+                    }
+                    task.dialog_open.set(false);
+                })
+                .is_err()
+                {
+                    state.dialog_open.set(false);
+                    state.message("The theme dialog could not be opened. Try again.");
                 }
-                task.dialog_open.set(false);
-            })
-            .is_err()
-            {
-                state.dialog_open.set(false);
-                state.message("The theme dialog could not be opened. Try again.");
-            }
-        });
+            });
     }
 }

@@ -1,7 +1,7 @@
 //! Screen readers must hear the same on/off and chosen state that the visuals show.
 use bulletnotes::{
-    AppWindow, PageRow, SearchAdapter, SettingsCategory, UiView, app::ui::present_settings,
-    store::settings::AppSettings, theme::SystemAppearance,
+    AppWindow, AppearanceAdapter, PageRow, SearchAdapter, SettingsCategory, UiView,
+    app::ui::present_settings, store::settings::AppSettings, theme::SystemAppearance,
 };
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use slint::{ComponentHandle, ModelRc};
@@ -41,13 +41,15 @@ fn element(window: &AppWindow, label: &str) -> ElementHandle {
 fn accessible_states_match_visual_state() {
     let window = window();
     window.set_active_view(UiView::Appearance);
-    window.set_settings_category(SettingsCategory::Appearance);
+    window
+        .global::<AppearanceAdapter>()
+        .set_category(SettingsCategory::Appearance);
 
     // Toggles report their switch state, and activation flips it.
     let count = element(&window, "Show note count");
     assert_eq!(count.accessible_role(), Some(AccessibleRole::Switch));
     assert_eq!(count.accessible_checkable(), Some(true));
-    let before = window.get_show_note_count();
+    let before = window.global::<AppearanceAdapter>().get_show_note_count();
     assert_eq!(count.accessible_checked(), Some(before));
     count.invoke_accessible_default_action();
     assert_eq!(

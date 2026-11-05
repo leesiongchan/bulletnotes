@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, UiPaperType, UiView,
+    AppWindow, AppearanceAdapter, UiPaperType, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::SystemAppearance,
@@ -59,17 +59,23 @@ fn paper_choice_renders_immediately_and_survives_store_reopen() {
                     .dispatch_event(WindowEvent::KeyReleased { text });
             }
             binding.flush().await.unwrap();
-            if window.get_paper_type() == UiPaperType::Bone {
+            if window.global::<AppearanceAdapter>().get_paper_type() == UiPaperType::Bone {
                 break;
             }
         }
-        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
+        assert_eq!(
+            window.global::<AppearanceAdapter>().get_paper_type(),
+            UiPaperType::Bone
+        );
         window.set_active_view(UiView::Note);
         let grain = crop();
         assert_ne!(grain, flat);
         window.set_prefers_reduced_transparency(true);
         assert_eq!(crop(), flat);
-        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
+        assert_eq!(
+            window.global::<AppearanceAdapter>().get_paper_type(),
+            UiPaperType::Bone
+        );
         window.set_prefers_reduced_transparency(false);
         assert_eq!(crop(), grain);
         assert_eq!(window.get_note_text(), "A saved finish");

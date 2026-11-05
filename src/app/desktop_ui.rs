@@ -1,7 +1,7 @@
 //! Desktop events and shortcuts; durable transitions remain owned by LocalUi.
 use super::{appearance_ui::AppearanceUi, local_ui::LocalUi};
 use crate::{
-    AppWindow,
+    AppWindow, AppearanceAdapter,
     platform::{
         desktop,
         hotkey::{HotkeyBackend, HotkeyError, HotkeyRegistration},
@@ -121,7 +121,9 @@ impl NativeUi {
 impl State {
     fn message(&self, message: &str, warning: bool) {
         if let Some(window) = self.window.upgrade() {
-            window.set_native_message(message.into());
+            window
+                .global::<AppearanceAdapter>()
+                .set_native_message(message.into());
             window.set_native_warning(warning);
         }
     }
@@ -179,10 +181,13 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        if window.get_hotkey_busy() {
+        if window.global::<AppearanceAdapter>().get_hotkey_busy() {
             return;
         }
-        let parsed = window.get_hotkey_accelerator().parse::<HotKey>();
+        let parsed = window
+            .global::<AppearanceAdapter>()
+            .get_hotkey_accelerator()
+            .parse::<HotKey>();
         let Ok(key) = parsed else {
             self.message("Shortcut is invalid. The current shortcut is kept.", true);
             return;
@@ -204,7 +209,7 @@ impl State {
             command: key.mods.contains(Modifiers::META),
         };
         let old = self.settings.borrow().clone();
-        window.set_hotkey_busy(true);
+        window.global::<AppearanceAdapter>().set_hotkey_busy(true);
         let state = self.clone();
         if slint::spawn_local(async move {
             if state
@@ -227,7 +232,9 @@ impl State {
                 if committed {
                     state.settings.replace(settings.clone());
                     if let Some(window) = state.window.upgrade() {
-                        window.set_hotkey_accelerator(accelerator(&settings).into());
+                        window
+                            .global::<AppearanceAdapter>()
+                            .set_hotkey_accelerator(accelerator(&settings).into());
                     }
                     state.message("Shortcut saved.", false);
                 } else {
@@ -239,12 +246,12 @@ impl State {
                 }
             }
             if let Some(window) = state.window.upgrade() {
-                window.set_hotkey_busy(false);
+                window.global::<AppearanceAdapter>().set_hotkey_busy(false);
             }
         })
         .is_err()
         {
-            window.set_hotkey_busy(false);
+            window.global::<AppearanceAdapter>().set_hotkey_busy(false);
         }
     }
 }
@@ -283,7 +290,9 @@ pub fn bind(
         events: slint::Timer::default(),
         geometry: slint::Timer::default(),
     });
-    window.set_hotkey_accelerator(accelerator(&settings.hotkey).into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_hotkey_accelerator(accelerator(&settings.hotkey).into());
     let events = state.clone();
     window.window().on_winit_window_event(move |_, event| {
         match event {
@@ -307,6 +316,8 @@ pub fn bind(
         let _ = current.show();
     });
     let current = state.clone();
-    window.on_apply_hotkey(move || current.apply_hotkey());
+    window
+        .global::<AppearanceAdapter>()
+        .on_apply_hotkey(move || current.apply_hotkey());
     NativeUi(state)
 }

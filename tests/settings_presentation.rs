@@ -1,6 +1,6 @@
 use bulletnotes::{
-    AppWindow, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType,
-    UiView,
+    AppWindow, AppearanceAdapter, SettingsCategory, UiAppearanceMode, UiPaperIntensity,
+    UiPaperStyle, UiPaperType, UiView,
     app::{appearance_ui, ui::present_settings},
     store::{StoreHandle, settings::AppSettings},
     theme::{AppearanceMode, Color, SystemAppearance, ThemeId, contrast::contrast_ratio},
@@ -29,7 +29,9 @@ fn recovery_is_keyboard_accessible_from_general_settings_at_minimum_size() {
     let window = window(false);
     present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
     window.window().set_size(LogicalSize::new(400.0, 440.0));
-    window.set_settings_category(SettingsCategory::General);
+    window
+        .global::<AppearanceAdapter>()
+        .set_category(SettingsCategory::General);
     window.set_active_view(UiView::Appearance);
     let opened = Rc::new(Cell::new(false));
     let observed = opened.clone();
@@ -130,19 +132,22 @@ fn high_contrast_import_assignment_has_visible_keyboard_focus() {
     window.set_system_high_contrast(true);
     present_settings(&window, &settings, SystemAppearance::Light).unwrap();
     let option = window
-        .get_theme_options()
+        .global::<AppearanceAdapter>()
+        .get_theme_pairs()
         .iter()
         .flat_map(|p| [p.left, p.right])
         .find(|t| t.id == id)
         .unwrap();
-    window.set_theme_options(slint::ModelRc::from(
-        [ThemePair {
-            left: option.clone(),
-            right: option,
-            has_right: false,
-        }]
-        .as_slice(),
-    ));
+    window
+        .global::<AppearanceAdapter>()
+        .set_theme_pairs(slint::ModelRc::from(
+            [ThemePair {
+                left: option.clone(),
+                right: option,
+                has_right: false,
+            }]
+            .as_slice(),
+        ));
     window.show().unwrap();
     window.set_active_view(UiView::Appearance);
     let _ = window.window().take_snapshot().unwrap();
@@ -212,14 +217,18 @@ fn settings_minimum_size_keeps_actions_reachable() {
     let applied = Rc::new(Cell::new(false));
     let connected = Rc::new(Cell::new(false));
     let observed = applied.clone();
-    window.on_apply_hotkey(move || observed.set(true));
+    window
+        .global::<AppearanceAdapter>()
+        .on_apply_hotkey(move || observed.set(true));
     let observed = connected.clone();
     window.on_show_connection(move || observed.set(true));
     window.show().unwrap();
     window
         .window()
         .set_size(slint::LogicalSize::new(400.0, 440.0));
-    window.set_settings_category(SettingsCategory::General);
+    window
+        .global::<AppearanceAdapter>()
+        .set_category(SettingsCategory::General);
     window.set_active_view(UiView::Appearance);
     let key = |text: slint::SharedString| {
         window
@@ -283,13 +292,16 @@ fn selected_scheme_and_palette_apply_to_all_settings() {
             .unwrap();
         assert_eq!(rgb(window.get_theme().paper), expected.theme.paper);
         assert_eq!(window.get_note_text().as_bytes(), source.as_bytes());
-        let catalog = window.get_theme_options();
+        let catalog = window.global::<AppearanceAdapter>().get_theme_pairs();
         let before = settings.clone();
         window.set_system_high_contrast(true);
         present_settings(&window, &settings, system).unwrap();
         let palette = window.get_theme();
         assert!(contrast_ratio(rgb(palette.ink), rgb(palette.paper)) >= 7.0);
-        assert_eq!(window.get_theme_options(), catalog);
+        assert_eq!(
+            window.global::<AppearanceAdapter>().get_theme_pairs(),
+            catalog
+        );
         assert_eq!(settings, before);
         assert_eq!(window.get_note_text().as_bytes(), source.as_bytes());
         window.set_system_high_contrast(false);
@@ -316,16 +328,16 @@ fn settings_callbacks_and_failed_save_restore_palette_and_preferences() {
     let completed = Rc::new(Cell::new(false));
     let done = completed.clone();
     slint::spawn_local(async move {
-        window.set_appearance_mode(UiAppearanceMode::Light);
-        window.set_paper_type(UiPaperType::Bone);
-        window.set_paper_style(UiPaperStyle::Grid);
-        window.set_paper_intensity(UiPaperIntensity::Bold);
-        window.set_start_with_new_note(true);
-        window.set_keep_bottom_bar_visible(true);
-        window.set_show_note_count(false);
-        window.set_show_note_date(false);
-        window.set_show_newest_indicator(false);
-        window.invoke_appearance_changed();
+        window.global::<AppearanceAdapter>().set_mode(UiAppearanceMode::Light);
+        window.global::<AppearanceAdapter>().set_paper_type(UiPaperType::Bone);
+        window.global::<AppearanceAdapter>().set_paper_style(UiPaperStyle::Grid);
+        window.global::<AppearanceAdapter>().set_paper_intensity(UiPaperIntensity::Bold);
+        window.global::<AppearanceAdapter>().set_start_with_new_note(true);
+        window.global::<AppearanceAdapter>().set_keep_bottom_bar_visible(true);
+        window.global::<AppearanceAdapter>().set_show_note_count(false);
+        window.global::<AppearanceAdapter>().set_show_note_date(false);
+        window.global::<AppearanceAdapter>().set_show_newest_indicator(false);
+        window.global::<AppearanceAdapter>().invoke_changed();
         binding.flush().await.unwrap();
         assert!(!window.get_theme().dark);
         binding.set_system_appearance(SystemAppearance::Dark);
@@ -336,30 +348,30 @@ fn settings_callbacks_and_failed_save_restore_palette_and_preferences() {
         assert_eq!(saved.appearance.paper_intensity, bulletnotes::theme::PaperIntensity::Bold);
         assert!(saved.start_with_new_note && saved.appearance.keep_bottom_bar_visible);
         assert!(!saved.appearance.show_note_count && !saved.appearance.show_note_date && !saved.appearance.show_newest_indicator);
-        let catalog:Vec<_> = window.get_theme_options().iter().collect();
+        let catalog:Vec<_> = window.global::<AppearanceAdapter>().get_theme_pairs().iter().collect();
         let injector = rusqlite::Connection::open(path).unwrap();
         injector.execute_batch("CREATE TRIGGER fail_settings BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT,'fixture failure'); END;").unwrap();
-        window.set_appearance_mode(UiAppearanceMode::Dark);
-        window.set_paper_type(UiPaperType::Linen);
-        window.set_paper_style(UiPaperStyle::Dots);
-        window.set_paper_intensity(UiPaperIntensity::Subtle);
-        window.set_start_with_new_note(false);
-        window.set_keep_bottom_bar_visible(false);
-        window.set_show_note_count(true);
-        window.set_show_note_date(true);
-        window.set_show_newest_indicator(true);
-        window.invoke_appearance_changed();
+        window.global::<AppearanceAdapter>().set_mode(UiAppearanceMode::Dark);
+        window.global::<AppearanceAdapter>().set_paper_type(UiPaperType::Linen);
+        window.global::<AppearanceAdapter>().set_paper_style(UiPaperStyle::Dots);
+        window.global::<AppearanceAdapter>().set_paper_intensity(UiPaperIntensity::Subtle);
+        window.global::<AppearanceAdapter>().set_start_with_new_note(false);
+        window.global::<AppearanceAdapter>().set_keep_bottom_bar_visible(false);
+        window.global::<AppearanceAdapter>().set_show_note_count(true);
+        window.global::<AppearanceAdapter>().set_show_note_date(true);
+        window.global::<AppearanceAdapter>().set_show_newest_indicator(true);
+        window.global::<AppearanceAdapter>().invoke_changed();
         binding.flush().await.unwrap();
         assert!(!window.get_theme().dark);
         assert_eq!(store.load_settings().await.unwrap(), saved);
-        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
-        assert_eq!(window.get_paper_style(), UiPaperStyle::Grid);
-        assert_eq!(window.get_paper_intensity(), UiPaperIntensity::Bold);
-        assert!(window.get_start_with_new_note() && window.get_keep_bottom_bar_visible());
-        assert!(!window.get_show_note_count() && !window.get_show_note_date() && !window.get_show_newest_indicator());
-        assert_eq!(window.get_theme_options().iter().collect::<Vec<_>>(), catalog);
+        assert_eq!(window.global::<AppearanceAdapter>().get_paper_type(), UiPaperType::Bone);
+        assert_eq!(window.global::<AppearanceAdapter>().get_paper_style(), UiPaperStyle::Grid);
+        assert_eq!(window.global::<AppearanceAdapter>().get_paper_intensity(), UiPaperIntensity::Bold);
+        assert!(window.global::<AppearanceAdapter>().get_start_with_new_note() && window.global::<AppearanceAdapter>().get_keep_bottom_bar_visible());
+        assert!(!window.global::<AppearanceAdapter>().get_show_note_count() && !window.global::<AppearanceAdapter>().get_show_note_date() && !window.global::<AppearanceAdapter>().get_show_newest_indicator());
+        assert_eq!(window.global::<AppearanceAdapter>().get_theme_pairs().iter().collect::<Vec<_>>(), catalog);
         assert_eq!(window.get_note_text(), "unsaved café\r\n👩🏽‍💻");
-        assert!(window.get_appearance_message().contains("could not be saved"));
+        assert!(window.global::<AppearanceAdapter>().get_message().contains("could not be saved"));
         store.shutdown().await.unwrap();
         done.set(true);
         slint::quit_event_loop().unwrap();
@@ -422,7 +434,9 @@ fn minimum_size_paper_controls_are_keyboard_reachable_and_visible() {
         key(Key::Tab.into());
         let focused = window.window().take_snapshot().unwrap();
         key(Key::Space.into());
-        if window.get_paper_type() == UiPaperType::Bone && !reached_bone {
+        if window.global::<AppearanceAdapter>().get_paper_type() == UiPaperType::Bone
+            && !reached_bone
+        {
             assert_ne!(
                 before.as_bytes(),
                 focused.as_bytes(),
@@ -430,8 +444,10 @@ fn minimum_size_paper_controls_are_keyboard_reachable_and_visible() {
             );
             reached_bone = true;
         }
-        reached_grid |= window.get_paper_style() == UiPaperStyle::Grid;
-        reached_bold |= window.get_paper_intensity() == UiPaperIntensity::Bold;
+        reached_grid |=
+            window.global::<AppearanceAdapter>().get_paper_style() == UiPaperStyle::Grid;
+        reached_bold |=
+            window.global::<AppearanceAdapter>().get_paper_intensity() == UiPaperIntensity::Bold;
         if reached_bone && reached_grid && reached_bold {
             break;
         }
@@ -591,7 +607,8 @@ fn theme_tiles_are_square_and_the_palette_strip_is_contiguous() {
     let window = window(false);
     present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
     let option = window
-        .get_theme_options()
+        .global::<AppearanceAdapter>()
+        .get_theme_pairs()
         .iter()
         .flat_map(|pair| [pair.left, pair.right])
         .find(|item| item.id == "paper")
@@ -608,14 +625,16 @@ fn theme_tiles_are_square_and_the_palette_strip_is_contiguous() {
         swatches.highlight,
     ]
     .map(|c| [c.red(), c.green(), c.blue()]);
-    window.set_theme_options(slint::ModelRc::from(
-        [ThemePair {
-            left: option.clone(),
-            right: option,
-            has_right: false,
-        }]
-        .as_slice(),
-    ));
+    window
+        .global::<AppearanceAdapter>()
+        .set_theme_pairs(slint::ModelRc::from(
+            [ThemePair {
+                left: option.clone(),
+                right: option,
+                has_right: false,
+            }]
+            .as_slice(),
+        ));
     window.set_prefers_reduced_motion(true);
     window.show().unwrap();
     window.set_active_view(UiView::Appearance);
@@ -687,19 +706,22 @@ fn theme_card_patterns_follow_the_shared_paper_intensity() {
         settings.appearance.paper_intensity = intensity;
         present_settings(&window, &settings, SystemAppearance::Light).unwrap();
         let option = window
-            .get_theme_options()
+            .global::<AppearanceAdapter>()
+            .get_theme_pairs()
             .iter()
             .flat_map(|pair| [pair.left, pair.right])
             .find(|item| item.id == "paper")
             .unwrap();
-        window.set_theme_options(slint::ModelRc::from(
-            [ThemePair {
-                left: option.clone(),
-                right: option,
-                has_right: false,
-            }]
-            .as_slice(),
-        ));
+        window
+            .global::<AppearanceAdapter>()
+            .set_theme_pairs(slint::ModelRc::from(
+                [ThemePair {
+                    left: option.clone(),
+                    right: option,
+                    has_right: false,
+                }]
+                .as_slice(),
+            ));
         let _ = window.window().take_snapshot().unwrap();
         window.invoke_reveal_theme_choices();
         let image = window.window().take_snapshot().unwrap();
@@ -744,4 +766,97 @@ fn system_preference_changes_notify_dependent_presentations() {
     window.set_prefers_reduced_transparency(true);
     i_slint_core::properties::ChangeTracker::run_change_handlers();
     assert_eq!((search.get(), about.get()), (1, 2));
+}
+
+/// Each footer detail follows its own preference.
+#[test]
+fn note_count_and_date_are_hidden_independently() {
+    use i_slint_backend_testing::ElementHandle;
+    let window = window(false);
+    let mut settings = AppSettings::default();
+    settings.appearance.keep_bottom_bar_visible = true;
+    window.set_note_counter("2 of 5".into());
+    window.set_note_date("31 Oct 2026".into());
+    window.set_prefers_reduced_motion(true);
+    window.show().unwrap();
+    let footer = |settings: &AppSettings| {
+        present_settings(&window, settings, SystemAppearance::Light).unwrap();
+        let _ = window.window().take_snapshot().unwrap();
+        ["31 Oct 2026 · 2 of 5", "31 Oct 2026", "2 of 5"]
+            .into_iter()
+            .find(|text| {
+                ElementHandle::find_by_accessible_label(&window, text)
+                    .next()
+                    .is_some()
+            })
+    };
+    assert_eq!(footer(&settings), Some("31 Oct 2026 · 2 of 5"));
+    settings.appearance.show_note_count = false;
+    assert_eq!(footer(&settings), Some("31 Oct 2026"));
+    settings.appearance.show_note_count = true;
+    settings.appearance.show_note_date = false;
+    assert_eq!(footer(&settings), Some("2 of 5"));
+}
+
+#[test]
+fn escape_cancels_a_pending_low_contrast_theme_before_leaving_settings() {
+    use slint::platform::{Key, WindowEvent};
+    let window = window(false);
+    present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
+    window.set_active_view(UiView::Appearance);
+    window.show().unwrap();
+    let cancelled = Rc::new(Cell::new(0));
+    let left = Rc::new(Cell::new(0));
+    let observed = cancelled.clone();
+    let appearance = window.global::<AppearanceAdapter>();
+    appearance.on_cancel_theme_import(move || observed.set(observed.get() + 1));
+    let observed = left.clone();
+    window.on_return_to_note(move || observed.set(observed.get() + 1));
+    let escape = || {
+        let _ = window.window().take_snapshot().unwrap();
+        for event in [
+            WindowEvent::KeyPressed {
+                text: Key::Escape.into(),
+            },
+            WindowEvent::KeyReleased {
+                text: Key::Escape.into(),
+            },
+        ] {
+            window.window().dispatch_event(event);
+        }
+    };
+    appearance.set_low_contrast_warning(true);
+    escape();
+    assert_eq!((cancelled.get(), left.get()), (1, 0));
+    appearance.set_low_contrast_warning(false);
+    escape();
+    assert_eq!((cancelled.get(), left.get()), (1, 1));
+}
+
+#[test]
+fn switching_settings_category_starts_at_the_top() {
+    use i_slint_backend_testing::{AccessibleRole, ElementHandle};
+    let window = window(false);
+    present_settings(&window, &AppSettings::default(), SystemAppearance::Light).unwrap();
+    window
+        .window()
+        .set_size(slint::LogicalSize::new(400.0, 440.0));
+    window.set_active_view(UiView::Appearance);
+    window.show().unwrap();
+    // Elements scrolled out of the viewport are not found, so `None` means scrolled away.
+    let control_y = || {
+        let _ = window.window().take_snapshot().unwrap();
+        ElementHandle::find_by_accessible_label(&window, "Decrease text size")
+            .find(|element| element.accessible_role() != Some(AccessibleRole::Text))
+            .map(|element| element.absolute_position().y)
+    };
+    let top = control_y();
+    assert!(top.is_some(), "text size controls start in view");
+    window.invoke_reveal_theme_choices();
+    assert_ne!(control_y(), top, "revealing themes scrolls the panel");
+    let appearance = window.global::<AppearanceAdapter>();
+    appearance.set_category(SettingsCategory::General);
+    let _ = window.window().take_snapshot().unwrap();
+    appearance.set_category(SettingsCategory::Appearance);
+    assert_eq!(control_y(), top);
 }

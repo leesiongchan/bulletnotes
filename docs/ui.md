@@ -45,8 +45,11 @@ to the view, instead of passing each value through `AppWindow`.
 `RecoveryAdapter` in `ui/recovery-view.slint` holds the review list, the
 selected item's sources, the merge draft and the actions the panel raises.
 `SearchAdapter` in `ui/components/page-browser.slint` holds results, the query
-and folder, selection and drag state, and the page actions. `app-window.slint`
-re-exports both, and Rust uses them through the window:
+and folder, selection and drag state, and the page actions.
+`AppearanceAdapter` in `ui/components/appearance-panel.slint` holds the
+appearance and general preferences and the panel's actions; the window also
+reads its font size, paper and footer preferences. `app-window.slint`
+re-exports all three, and Rust uses them through the window:
 
 ```rust
 let recovery = window.global::<RecoveryAdapter>();
@@ -63,8 +66,8 @@ Slint's `changed` handlers only watch a component's own properties. A view that
 reacts to adapter state declares a private mirror, such as
 `private property <string> query: SearchAdapter.query;`, and keeps its
 `changed query => …` handler. `tests/recovery_panel.rs` and
-`tests/search_preview.rs` check that view actions reach the adapters and that
-adapter changes reach the views.
+`tests/search_preview.rs` and `tests/settings_presentation.rs` check that view
+actions reach the adapters and that adapter changes reach the views.
 
 ## Enums shared with Rust
 

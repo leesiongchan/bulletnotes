@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, UiView,
+    AppWindow, AppearanceAdapter, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::{AppearanceMode, Color, SystemAppearance, palette::ThemeEntry},
@@ -58,7 +58,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
     window.on_note_edited(move |_| observed.set(observed.get() + 1));
     let binding =
         appearance_ui::bind(&window, store.clone(), settings, SystemAppearance::Light).unwrap();
-    let cards = window.get_theme_options();
+    let cards = window.global::<AppearanceAdapter>().get_theme_pairs();
     assert_eq!(
         cards
             .iter()
@@ -97,14 +97,14 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
             (AppearanceMode::System, SystemAppearance::Dark, true),
         ] {
             binding.set_system_appearance(system);
-            window.set_appearance_mode(mode.into());
-            window.invoke_appearance_changed();
+            window.global::<AppearanceAdapter>().set_mode(mode.into());
+            window.global::<AppearanceAdapter>().invoke_changed();
             binding.flush().await.unwrap();
             for entry in &themes {
                 let previous = store.load_settings().await.unwrap();
-                window.invoke_theme_selected(entry.id.0.as_str().into());
+                window.global::<AppearanceAdapter>().invoke_theme_selected(entry.id.0.as_str().into());
                 assert_eq!(window.get_selected_theme_id(), entry.id.0.as_str(), "{} in {mode:?}/{system:?}", entry.theme.name);
-                assert!(!window.get_low_contrast_warning(), "existing themes must apply directly");
+                assert!(!window.global::<AppearanceAdapter>().get_low_contrast_warning(), "existing themes must apply directly");
                 binding.flush().await.unwrap();
                 let saved = store.load_settings().await.unwrap();
                 assert_eq!(saved.appearance.mode, mode);
@@ -128,7 +128,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
                 assert_eq!(edits.get(), 0);
                 assert_eq!(saved.appearance.paper, previous.appearance.paper);
                 assert_eq!(saved.appearance.font_size, previous.appearance.font_size);
-                assert!(window.get_theme_options() == cards, "theme changes must retain card instances and keyboard focus");
+                assert!(window.global::<AppearanceAdapter>().get_theme_pairs() == cards, "theme changes must retain card instances and keyboard focus");
             }
         }
         window.set_active_view(UiView::Appearance);
@@ -168,9 +168,9 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         assert_eq!(assigned.appearance.light_theme.0, "bundled-tartan");
         assert_eq!(assigned.appearance.dark_theme.0, "bundled-mononoke");
         assert_eq!(assigned.appearance.mode, before.appearance.mode);
-        assert_eq!(window.get_selected_light_theme_id(), "bundled-tartan");
-        assert_eq!(window.get_selected_dark_theme_id(), "bundled-mononoke");
-        assert_eq!(window.get_theme_options(), cards);
+        assert_eq!(window.global::<AppearanceAdapter>().get_light_theme(), "bundled-tartan");
+        assert_eq!(window.global::<AppearanceAdapter>().get_dark_theme(), "bundled-mononoke");
+        assert_eq!(window.global::<AppearanceAdapter>().get_theme_pairs(), cards);
         assert_eq!(window.get_note_text().as_bytes(), source.as_bytes());
         window.invoke_theme_assigned("missing-theme".into(), true);
         binding.flush().await.unwrap();
@@ -192,7 +192,7 @@ fn every_theme_card_selects_saves_and_preserves_the_editor() {
         binding.flush().await.unwrap();
         assert_eq!(window.get_selected_theme_id(), selected);
         assert_eq!(store.load_settings().await.unwrap(), saved);
-        assert!(window.get_appearance_message().contains("could not be saved"));
+        assert!(window.global::<AppearanceAdapter>().get_message().contains("could not be saved"));
         drop(injector);
         store.shutdown().await.unwrap();
         let reopened = StoreHandle::open(&path).await.unwrap();

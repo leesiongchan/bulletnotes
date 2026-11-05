@@ -1,5 +1,6 @@
 use bulletnotes::{
-    AppWindow, app::ui::present_settings, store::settings::AppSettings, theme::SystemAppearance,
+    AppWindow, AppearanceAdapter, app::ui::present_settings, store::settings::AppSettings,
+    theme::SystemAppearance,
 };
 use slint::{ComponentHandle, platform::WindowEvent};
 use std::time::Duration;
@@ -166,7 +167,7 @@ fn code_panels_follow_wrapping_empty_lines_and_eof_without_moving_selection() {
         "narrower viewport must remeasure wrapped rows"
     );
     let previous_height = window.get_code_panels().row_data(0).unwrap().bottom;
-    window.set_font_size_px(24.0);
+    window.global::<AppearanceAdapter>().set_font_size_px(24.0);
     let _ = window.window().take_snapshot().unwrap();
     i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(20));
     let _ = window.window().take_snapshot().unwrap();

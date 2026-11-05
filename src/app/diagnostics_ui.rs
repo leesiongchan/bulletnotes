@@ -1,5 +1,6 @@
 //! Explicit local export only; file work does not block Slint's UI thread.
 use crate::AppWindow;
+use crate::AppearanceAdapter;
 use slint::ComponentHandle;
 use std::{cell::Cell, rc::Rc};
 pub fn bind(window: &AppWindow) {
@@ -28,7 +29,7 @@ pub fn bind(window: &AppWindow) {
                     });
                 let success = started.is_ok() && matches!(rx.await, Ok(Ok(())));
                 if let Some(window) = weak.upgrade() {
-                    window.set_native_message(
+                    window.global::<AppearanceAdapter>().set_native_message(
                         if success {
                             "Diagnostics exported."
                         } else {

@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, UiView,
+    AppWindow, AppearanceAdapter, UiView,
     app::appearance_ui,
     store::{StoreHandle, settings::AppSettings},
     theme::{AppearanceMode, SystemAppearance, ThemeId},
@@ -53,10 +53,10 @@ fn assignment_cycle_is_atomic_durable_and_rolls_back_on_failure() {
         }
         let both=store.load_settings().await.unwrap();
         injector.execute_batch("CREATE TRIGGER fail_cycle BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT,'fixture failure'); END;").unwrap();
-        window.invoke_cycle_theme_assignment("bulletnotes".into());binding.flush().await.unwrap();
+        window.global::<AppearanceAdapter>().invoke_cycle_theme_assignment("bulletnotes".into());binding.flush().await.unwrap();
         assert_eq!(store.load_settings().await.unwrap(),both);
-        assert_eq!(window.get_selected_light_theme_id(),"bulletnotes");assert_eq!(window.get_selected_dark_theme_id(),"bulletnotes");
-        assert!(window.get_appearance_message().contains("could not be saved"));
+        assert_eq!(window.global::<AppearanceAdapter>().get_light_theme(),"bulletnotes");assert_eq!(window.global::<AppearanceAdapter>().get_dark_theme(),"bulletnotes");
+        assert!(window.global::<AppearanceAdapter>().get_message().contains("could not be saved"));
         assert_eq!(window.get_note_text(),"unsaved café 👩🏽‍💻");
         injector.execute_batch("DROP TRIGGER fail_cycle").unwrap();drop(injector);
         store.shutdown().await.unwrap();let reopened=StoreHandle::open(&path).await.unwrap();

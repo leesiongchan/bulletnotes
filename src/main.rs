@@ -5,6 +5,7 @@
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     use bulletnotes::{
+        AppearanceAdapter,
         app::{
             connection::ConnectionController, connection_ui, native_app::LocalApplication, startup,
             sync_ui,
@@ -49,6 +50,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     bulletnotes::app::diagnostics_ui::bind(app.window());
     if diagnostics_unavailable {
         app.window()
+            .global::<AppearanceAdapter>()
             .set_native_message("Diagnostics unavailable; notes can still be saved.".into());
         app.window().set_native_warning(true);
     }

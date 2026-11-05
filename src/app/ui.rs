@@ -1,9 +1,9 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
 use super::model::View;
 use crate::{
-    AboutWindow, AppWindow, MarkdownCommand, MarkdownEdit, SearchAdapter, ThemeOption, ThemePair,
-    UiAppearanceMode, UiMarkdownColors, UiPaperIntensity, UiPaperStyle, UiPaperType,
-    UiRecoveryKind, UiTheme, UiThemeSwatches, UiView,
+    AboutWindow, AppWindow, AppearanceAdapter, MarkdownCommand, MarkdownEdit, SearchAdapter,
+    ThemeOption, ThemePair, UiAppearanceMode, UiMarkdownColors, UiPaperIntensity, UiPaperStyle,
+    UiPaperType, UiRecoveryKind, UiTheme, UiThemeSwatches, UiView,
     domain::page::RecoveryKind,
     store::settings::AppSettings,
     theme::{
@@ -192,16 +192,22 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
         adjusted.as_ref().unwrap_or(&resolved.palette),
         resolved.pattern,
     ));
-    window.set_font_size_px(resolved.font_size);
-    window.set_paper_style(resolved.paper.into());
-    window.set_paper_type(resolved.paper_type.into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_font_size_px(resolved.font_size);
+    window
+        .global::<AppearanceAdapter>()
+        .set_paper_style(resolved.paper.into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_paper_type(resolved.paper_type.into());
     window.set_selected_theme_id(resolved.id.0.as_str().into());
 }
 fn apply_about_presentation(window: &AboutWindow, source: &AppWindow) {
     window.set_theme(source.get_theme());
-    window.set_paper_type(source.get_paper_type());
-    window.set_paper_style(source.get_paper_style());
-    window.set_font_size_px(source.get_font_size_px());
+    window.set_paper_type(source.global::<AppearanceAdapter>().get_paper_type());
+    window.set_paper_style(source.global::<AppearanceAdapter>().get_paper_style());
+    window.set_font_size_px(source.global::<AppearanceAdapter>().get_font_size_px());
     window.set_high_contrast(source.get_system_high_contrast());
     window.set_reduce_transparency(source.get_prefers_reduced_transparency());
 }
@@ -312,18 +318,43 @@ pub fn present_settings(
         })
         .collect::<Vec<_>>();
     // Replacing an unchanged catalog destroys the focused theme card.
-    if !window.get_theme_options().iter().eq(pairs.iter().cloned()) {
-        window.set_theme_options(ModelRc::new(VecModel::from(pairs)));
+    if !window
+        .global::<AppearanceAdapter>()
+        .get_theme_pairs()
+        .iter()
+        .eq(pairs.iter().cloned())
+    {
+        window
+            .global::<AppearanceAdapter>()
+            .set_theme_pairs(ModelRc::new(VecModel::from(pairs)));
     }
-    window.set_selected_light_theme_id(settings.appearance.light_theme.0.as_str().into());
-    window.set_selected_dark_theme_id(settings.appearance.dark_theme.0.as_str().into());
-    window.set_appearance_mode(settings.appearance.mode.into());
-    window.set_start_with_new_note(settings.start_with_new_note);
-    window.set_paper_intensity(settings.appearance.paper_intensity.into());
-    window.set_keep_bottom_bar_visible(settings.appearance.keep_bottom_bar_visible);
-    window.set_show_note_count(settings.appearance.show_note_count);
-    window.set_show_note_date(settings.appearance.show_note_date);
-    window.set_show_newest_indicator(settings.appearance.show_newest_indicator);
+    window
+        .global::<AppearanceAdapter>()
+        .set_light_theme(settings.appearance.light_theme.0.as_str().into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_dark_theme(settings.appearance.dark_theme.0.as_str().into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_mode(settings.appearance.mode.into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_start_with_new_note(settings.start_with_new_note);
+    window
+        .global::<AppearanceAdapter>()
+        .set_paper_intensity(settings.appearance.paper_intensity.into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_keep_bottom_bar_visible(settings.appearance.keep_bottom_bar_visible);
+    window
+        .global::<AppearanceAdapter>()
+        .set_show_note_count(settings.appearance.show_note_count);
+    window
+        .global::<AppearanceAdapter>()
+        .set_show_note_date(settings.appearance.show_note_date);
+    window
+        .global::<AppearanceAdapter>()
+        .set_show_newest_indicator(settings.appearance.show_newest_indicator);
     apply_theme(window, &resolved);
     Ok(())
 }

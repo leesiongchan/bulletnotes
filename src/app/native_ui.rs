@@ -5,7 +5,7 @@ use super::{
     native_app::{capture, restore_window},
 };
 use crate::{
-    AppWindow,
+    AppWindow, AppearanceAdapter,
     platform::{
         application::NativeApplication,
         hotkey::{NativeHotkeyBackend, PendingHotkey},
@@ -63,7 +63,9 @@ impl NativeUi {
 impl State {
     fn message(&self, message: &str, warning: bool) {
         if let Some(window) = self.window.upgrade() {
-            window.set_native_message(message.into());
+            window
+                .global::<AppearanceAdapter>()
+                .set_native_message(message.into());
             window.set_native_warning(warning);
         }
     }
@@ -129,14 +131,16 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        if window.get_hotkey_busy() {
+        if window.global::<AppearanceAdapter>().get_hotkey_busy() {
             return;
         }
-        let prepared = self
-            .integration
-            .borrow()
-            .as_ref()
-            .map(|native| native.prepare_hotkey(&window.get_hotkey_accelerator()));
+        let prepared = self.integration.borrow().as_ref().map(|native| {
+            native.prepare_hotkey(
+                &window
+                    .global::<AppearanceAdapter>()
+                    .get_hotkey_accelerator(),
+            )
+        });
         let Some(Ok((settings, pending))) = prepared else {
             self.message(
                 "Shortcut unavailable or invalid. Choose another; the current shortcut is kept.",
@@ -144,13 +148,13 @@ impl State {
             );
             return;
         };
-        window.set_hotkey_busy(true);
+        window.global::<AppearanceAdapter>().set_hotkey_busy(true);
         let old = self.settings.borrow().clone();
         let weak = Rc::downgrade(self);
         let appearance = self.appearance.clone();
         if slint::spawn_local(Self::save_hotkey(weak, appearance, settings, pending, old)).is_err()
         {
-            window.set_hotkey_busy(false);
+            window.global::<AppearanceAdapter>().set_hotkey_busy(false);
             self.message(
                 "Shortcut change could not start. The current shortcut is kept.",
                 true,
@@ -185,7 +189,9 @@ impl State {
                 .is_some_and(|native| native.commit_hotkey(pending).is_ok());
             if committed {
                 state.settings.replace(settings.clone());
-                window.set_hotkey_accelerator(integration::accelerator(&settings).into());
+                window
+                    .global::<AppearanceAdapter>()
+                    .set_hotkey_accelerator(integration::accelerator(&settings).into());
                 state.message("Shortcut saved.", false);
             } else {
                 let rollback = appearance.save_hotkey(old).await;
@@ -196,7 +202,7 @@ impl State {
                 }, true);
             }
         }
-        window.set_hotkey_busy(false);
+        window.global::<AppearanceAdapter>().set_hotkey_busy(false);
     }
 }
 pub fn bind(
@@ -206,7 +212,9 @@ pub fn bind(
     native: Rc<NativeApplication>,
     settings: &AppSettings,
 ) -> NativeUi {
-    window.set_hotkey_accelerator(integration::accelerator(&settings.hotkey).into());
+    window
+        .global::<AppearanceAdapter>()
+        .set_hotkey_accelerator(integration::accelerator(&settings.hotkey).into());
     let state = Rc::new(State {
         window: window.as_weak(),
         local,
@@ -293,7 +301,9 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_apply_hotkey(move || state.hotkey());
+        window
+            .global::<AppearanceAdapter>()
+            .on_apply_hotkey(move || state.hotkey());
     }
     NativeUi(state)
 }

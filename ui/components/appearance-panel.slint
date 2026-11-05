@@ -90,11 +90,12 @@ component ThemeCard inherits FocusScope {
     }
 }
 
-export component AppearancePanel inherits Rectangle {
+// Appearance and general preferences: values shared with the rest of the window, the
+// panel's messages, and the actions it raises.
+export global AppearanceAdapter {
+    in property <[ThemePair]> theme-pairs;
     in property <string> light-theme;
     in property <string> dark-theme;
-    in property <[ThemePair]> theme-pairs;
-    in property <bool> reduce-transparency:false;
     in-out property <SettingsCategory> category:SettingsCategory.appearance;
     in-out property <UiAppearanceMode> mode:UiAppearanceMode.system;
     in-out property <UiPaperStyle> paper-style:UiPaperStyle.plain;
@@ -108,13 +109,9 @@ export component AppearancePanel inherits Rectangle {
     in-out property <bool> show-newest-indicator:true;
     in property <string> message;
     in property <bool> low-contrast-warning:false;
-    in-out property <string> hotkey-accelerator;
+    in-out property <string> hotkey-accelerator:"Option+A";
     in property <string> native-message;
     in property <bool> hotkey-busy:false;
-    callback return-to-note();
-    callback show-connection();
-    callback show-recovery();
-    callback apply-hotkey();
     callback changed();
     callback theme-selected(string);
     callback cycle-theme-assignment(string);
@@ -122,10 +119,19 @@ export component AppearancePanel inherits Rectangle {
     callback export-theme();
     callback apply-low-contrast();
     callback cancel-theme-import();
+    callback apply-hotkey();
+}
+export component AppearancePanel inherits Rectangle {
+    // Mirror of adapter state this view reacts to; `changed` needs its own property.
+    private property <SettingsCategory> category: AppearanceAdapter.category;
+    in property <bool> reduce-transparency:false;
+    callback return-to-note();
+    callback show-connection();
+    callback show-recovery();
     private property <length> inset:root.width >= 696px ? 48px : 20px;
-    public function focus-panel() { if (root.category == SettingsCategory.general) { general-tab.focus(); } else { appearance-tab.focus(); } }
+    public function focus-panel() { if (AppearanceAdapter.category == SettingsCategory.general) { general-tab.focus(); } else { appearance-tab.focus(); } }
     private property <int> theme-focus-generation:0;
-    public function reveal-themes() { root.category = SettingsCategory.appearance; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
+    public function reveal-themes() { AppearanceAdapter.category = SettingsCategory.appearance; scroll.content-y = -max(0px,theme-heading.y - 12px); root.theme-focus-generation += 1; }
     changed category => { scroll.content-y = 0px; }
     background:transparent;
     PageTitle { x:root.inset; y:14px; text:"Settings"; }
@@ -141,13 +147,13 @@ export component AppearancePanel inherits Rectangle {
             padding:Spacing.xs; spacing:Spacing.xs;
             general-tab := ChoiceOption {
                 text:"General"; material-effects:false;
-                selected:root.category == SettingsCategory.general;
-                clicked => { root.category = SettingsCategory.general; }
+                selected:AppearanceAdapter.category == SettingsCategory.general;
+                clicked => { AppearanceAdapter.category = SettingsCategory.general; }
             }
             appearance-tab := ChoiceOption {
                 text:"Appearance"; material-effects:false;
-                selected:root.category == SettingsCategory.appearance;
-                clicked => { root.category = SettingsCategory.appearance; }
+                selected:AppearanceAdapter.category == SettingsCategory.appearance;
+                clicked => { AppearanceAdapter.category = SettingsCategory.appearance; }
             }
         }
     }
@@ -160,15 +166,15 @@ export component AppearancePanel inherits Rectangle {
         content-height:content.preferred-height;
         content := VerticalBox {
             x:0px; width:max(1px,scroll.visible-width - 12px); padding:0px; spacing:Spacing.xl;
-            if root.category == SettingsCategory.general: VerticalBox {
+            if AppearanceAdapter.category == SettingsCategory.general: VerticalBox {
                 padding:0px; spacing:Spacing.xl;
                 SettingsHeading {text:"Startup";}
                 SettingsGroup {
                     SettingToggle {
                         label:"Start with a new note";
                         description:"Open a fresh scratchpad on launch. Your previous notes stay saved.";
-                        checked <=> root.start-with-new-note;
-                        toggled => {root.changed();}
+                        checked <=> AppearanceAdapter.start-with-new-note;
+                        toggled => {AppearanceAdapter.changed();}
                     }
                 }
                 SettingsHeading {text:"Global shortcut";}
@@ -179,19 +185,19 @@ export component AppearancePanel inherits Rectangle {
                         border-width:1px; border-color:Theme.palette.line; border-radius:Radius.tight;
                         TextInput {
                             x:8px; width:parent.width - 16px; height:parent.height;
-                            text <=> root.hotkey-accelerator; single-line:true; vertical-alignment:center;
+                            text <=> AppearanceAdapter.hotkey-accelerator; single-line:true; vertical-alignment:center;
                             color:Theme.palette.ink; font-size:Typography.body;
                             selection-background-color:Theme.palette.selection; selection-foreground-color:Theme.palette.ink;
-                            read-only:root.hotkey-busy; accessible-label:"Global show and hide shortcut";
+                            read-only:AppearanceAdapter.hotkey-busy; accessible-label:"Global show and hide shortcut";
                         }
                     }
                     Text {text:"For example, Option+A on macOS or Control+Shift+Space."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                     ChoiceButton {
                         material-effects:false;
-                        text:root.hotkey-busy ? "Saving shortcut…" : "Apply shortcut"; enabled:!root.hotkey-busy;
-                        clicked => {root.apply-hotkey();}
+                        text:AppearanceAdapter.hotkey-busy ? "Saving shortcut…" : "Apply shortcut"; enabled:!AppearanceAdapter.hotkey-busy;
+                        clicked => {AppearanceAdapter.apply-hotkey();}
                     }
-                    Text {visible:root.native-message != ""; text:root.native-message; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
+                    Text {visible:AppearanceAdapter.native-message != ""; text:AppearanceAdapter.native-message; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
                 SettingsHeading {text:"Sync";}
                 SettingsGroup {
@@ -213,16 +219,16 @@ export component AppearancePanel inherits Rectangle {
                 }
             }
             appearance-content := VerticalBox {
-                visible:root.category == SettingsCategory.appearance;
+                visible:AppearanceAdapter.category == SettingsCategory.appearance;
                 padding:0px; spacing:Spacing.xl;
                 SettingsHeading {text:"Text";}
                 SettingsGroup {
                     HorizontalLayout {
                         spacing:Spacing.md;
                         Text {text:"Text size"; font-size:Typography.body; color:Theme.palette.ink; vertical-alignment:center; horizontal-stretch:1;}
-                        ChoiceButton {text:"−"; label:"Decrease text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px > 11; clicked => {root.font-size-px = max(11,root.font-size-px - 1); root.changed();}}
-                        Text {text:root.font-size-px + " pt"; font-size:Typography.body; color:Theme.palette.muted; width:40px; horizontal-alignment:center; vertical-alignment:center;}
-                        ChoiceButton {text:"+"; label:"Increase text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:root.font-size-px < 24; clicked => {root.font-size-px = min(24,root.font-size-px + 1); root.changed();}}
+                        ChoiceButton {text:"−"; label:"Decrease text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:AppearanceAdapter.font-size-px > 11; clicked => {AppearanceAdapter.font-size-px = max(11,AppearanceAdapter.font-size-px - 1); AppearanceAdapter.changed();}}
+                        Text {text:AppearanceAdapter.font-size-px + " pt"; font-size:Typography.body; color:Theme.palette.muted; width:40px; horizontal-alignment:center; vertical-alignment:center;}
+                        ChoiceButton {text:"+"; label:"Increase text size"; material-effects:false; width:32px; horizontal-stretch:0; enabled:AppearanceAdapter.font-size-px < 24; clicked => {AppearanceAdapter.font-size-px = min(24,AppearanceAdapter.font-size-px + 1); AppearanceAdapter.changed();}}
                     }
                 }
                 SettingsHeading {text:"Paper";}
@@ -232,22 +238,22 @@ export component AppearancePanel inherits Rectangle {
                         height:80px; background:Theme.palette.paper; border-radius:Radius.control; clip:true;
                         PaperSurface {
                             width:parent.width; height:parent.height;
-                            paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+                            paper-type:AppearanceAdapter.paper-type; paper-style:AppearanceAdapter.paper-style; font-size-px:AppearanceAdapter.font-size-px;
                         }
                         Text {x:16px; y:14px; text:"A little space to think."; font-family:Typography.mono; font-size:Typography.heading; color:Theme.palette.ink;}
-                        Text {x:16px; y:43px; width:parent.width - 32px; text:root.paper-type == UiPaperType.bone ? "Bone · fine, understated grain" : root.paper-type == UiPaperType.eggshell ? "Eggshell · soft, organic grain" : root.paper-type == UiPaperType.linen ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
+                        Text {x:16px; y:43px; width:parent.width - 32px; text:AppearanceAdapter.paper-type == UiPaperType.bone ? "Bone · fine, understated grain" : AppearanceAdapter.paper-type == UiPaperType.eggshell ? "Eggshell · soft, organic grain" : AppearanceAdapter.paper-type == UiPaperType.linen ? "Linen · a woven finish" : "Smooth · an even surface"; font-size:Typography.small; color:Theme.palette.muted; overflow:elide;}
                     }
                     HorizontalLayout {
                         spacing:Spacing.sm;
                         for kind in [UiPaperType.smooth, UiPaperType.bone, UiPaperType.eggshell, UiPaperType.linen]: ChoiceOption {
                             text:kind == UiPaperType.smooth ? "Smooth" : kind == UiPaperType.bone ? "Bone" : kind == UiPaperType.eggshell ? "Eggshell" : "Linen";
                             material-effects:false;
-                            selected:root.paper-type == kind;
-                            clicked => {root.paper-type = kind; root.changed();}
+                            selected:AppearanceAdapter.paper-type == kind;
+                            clicked => {AppearanceAdapter.paper-type = kind; AppearanceAdapter.changed();}
                         }
                     }
                     Text {text:"Paper type changes the finish. Theme colors stay independent."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
-                    if root.paper-type != UiPaperType.smooth && (Theme.high-contrast || root.reduce-transparency): Text {
+                    if AppearanceAdapter.paper-type != UiPaperType.smooth && (Theme.high-contrast || root.reduce-transparency): Text {
                         text:Theme.high-contrast ? "Paper texture is hidden while Increase Contrast is enabled. Your selected finish is saved." : "Paper texture is hidden while Reduce Transparency is enabled. Your selected finish is saved.";
                         font-size:Typography.small; color:Theme.palette.ink; wrap:word-wrap;
                     }
@@ -258,8 +264,8 @@ export component AppearancePanel inherits Rectangle {
                         for style in [UiPaperStyle.plain, UiPaperStyle.dots, UiPaperStyle.ruled, UiPaperStyle.grid]: ChoiceOption {
                             text:style == UiPaperStyle.plain ? "Plain" : style == UiPaperStyle.dots ? "Dots" : style == UiPaperStyle.ruled ? "Ruled" : "Grid";
                             material-effects:false;
-                            selected:root.paper-style == style;
-                            clicked => {root.paper-style = style; root.changed();}
+                            selected:AppearanceAdapter.paper-style == style;
+                            clicked => {AppearanceAdapter.paper-style = style; AppearanceAdapter.changed();}
                         }
                     }
                     Text {text:"Paper intensity"; font-size:Typography.body; color:Theme.palette.ink;}
@@ -268,18 +274,18 @@ export component AppearancePanel inherits Rectangle {
                         for intensity in [UiPaperIntensity.subtle, UiPaperIntensity.clear, UiPaperIntensity.bold]: ChoiceOption {
                             text:intensity == UiPaperIntensity.subtle ? "Subtle" : intensity == UiPaperIntensity.clear ? "Clear" : "Bold";
                             material-effects:false;
-                            enabled:root.paper-style != UiPaperStyle.plain;
-                            selected:root.paper-intensity == intensity;
-                            clicked => {root.paper-intensity = intensity; root.changed();}
+                            enabled:AppearanceAdapter.paper-style != UiPaperStyle.plain;
+                            selected:AppearanceAdapter.paper-intensity == intensity;
+                            clicked => {AppearanceAdapter.paper-intensity = intensity; AppearanceAdapter.changed();}
                         }
                     }
                     Text {text:"Controls the dots and lines. Choose a paper style to show them."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
                 SettingsHeading {text:"Window";}
                 SettingsGroup {
-                    SettingToggle {label:"Keep bottom bar visible"; description:"Keep navigation and note details in view while the note is active."; checked <=> root.keep-bottom-bar-visible; toggled => {root.changed();}}
-                    SettingToggle {label:"Show note count"; checked <=> root.show-note-count; toggled => {root.changed();}}
-                    SettingToggle {label:"Show note date"; checked <=> root.show-note-date; toggled => {root.changed();}}
+                    SettingToggle {label:"Keep bottom bar visible"; description:"Keep navigation and note details in view while the note is active."; checked <=> AppearanceAdapter.keep-bottom-bar-visible; toggled => {AppearanceAdapter.changed();}}
+                    SettingToggle {label:"Show note count"; checked <=> AppearanceAdapter.show-note-count; toggled => {AppearanceAdapter.changed();}}
+                    SettingToggle {label:"Show note date"; checked <=> AppearanceAdapter.show-note-date; toggled => {AppearanceAdapter.changed();}}
                 }
                 SettingsHeading {text:"Appearance";}
                 SettingsGroup {
@@ -288,11 +294,11 @@ export component AppearancePanel inherits Rectangle {
                         for mode in [UiAppearanceMode.light, UiAppearanceMode.dark, UiAppearanceMode.system]: ChoiceOption {
                             text:mode == UiAppearanceMode.light ? "Light" : mode == UiAppearanceMode.dark ? "Dark" : "System";
                             material-effects:false;
-                            selected:root.mode == mode;
-                            clicked => {root.mode = mode; root.changed();}
+                            selected:AppearanceAdapter.mode == mode;
+                            clicked => {AppearanceAdapter.mode = mode; AppearanceAdapter.changed();}
                         }
                     }
-                    Text {text:root.mode == UiAppearanceMode.system ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
+                    Text {text:AppearanceAdapter.mode == UiAppearanceMode.system ? "Follows system appearance. Light and dark themes are saved separately." : "Light and dark themes are saved separately."; font-size:Typography.small; color:Theme.palette.muted; wrap:word-wrap;}
                 }
             theme-heading := Text {
                 text: "Themes";
@@ -304,31 +310,31 @@ export component AppearancePanel inherits Rectangle {
             gallery := Rectangle {
                 private property <int> columns:self.width >= 640px ? 4 : 2;
                 private property <length> card-size:min(168px,(self.width - 32px - (self.columns - 1) * 16px) / self.columns);
-                private property <int> rows:ceil(root.theme-pairs.length * 2 / self.columns);
+                private property <int> rows:ceil(AppearanceAdapter.theme-pairs.length * 2 / self.columns);
                 private property <length> left-inset:(self.width - self.columns * self.card-size - (self.columns - 1) * 16px) / 2;
                 height:32px + self.rows * self.card-size + max(0,self.rows - 1) * 16px;
                 background:Theme.palette.surface; border-radius:Radius.group;
-                for pair[index] in root.theme-pairs: Rectangle {
+                for pair[index] in AppearanceAdapter.theme-pairs: Rectangle {
                     width:parent.width; height:parent.height; accessible-role:none;
                     ThemeCard {
                         size:gallery.card-size;
                         x:gallery.left-inset + mod(index * 2,gallery.columns) * (gallery.card-size + 16px);
                         y:16px + floor(index * 2 / gallery.columns) * (gallery.card-size + 16px);
-                        paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+                        paper-type:AppearanceAdapter.paper-type; paper-style:AppearanceAdapter.paper-style; font-size-px:AppearanceAdapter.font-size-px;
                         focus-generation:index == 0 ? root.theme-focus-generation : 0;
-                        option:pair.left; light-selected:root.light-theme == pair.left.id; dark-selected:root.dark-theme == pair.left.id;
-                        clicked => { root.theme-selected(pair.left.id); }
-                        cycled => { root.cycle-theme-assignment(pair.left.id); }
+                        option:pair.left; light-selected:AppearanceAdapter.light-theme == pair.left.id; dark-selected:AppearanceAdapter.dark-theme == pair.left.id;
+                        clicked => { AppearanceAdapter.theme-selected(pair.left.id); }
+                        cycled => { AppearanceAdapter.cycle-theme-assignment(pair.left.id); }
                     }
                     ThemeCard {
                         size:gallery.card-size;
                         x:gallery.left-inset + mod(index * 2 + 1,gallery.columns) * (gallery.card-size + 16px);
                         y:16px + floor((index * 2 + 1) / gallery.columns) * (gallery.card-size + 16px);
-                        paper-type:root.paper-type; paper-style:root.paper-style; font-size-px:root.font-size-px;
+                        paper-type:AppearanceAdapter.paper-type; paper-style:AppearanceAdapter.paper-style; font-size-px:AppearanceAdapter.font-size-px;
                         option:pair.right; visible:pair.has-right;
-                        light-selected:root.light-theme == pair.right.id; dark-selected:root.dark-theme == pair.right.id;
-                        clicked => { root.theme-selected(pair.right.id); }
-                        cycled => { root.cycle-theme-assignment(pair.right.id); }
+                        light-selected:AppearanceAdapter.light-theme == pair.right.id; dark-selected:AppearanceAdapter.dark-theme == pair.right.id;
+                        clicked => { AppearanceAdapter.theme-selected(pair.right.id); }
+                        cycled => { AppearanceAdapter.cycle-theme-assignment(pair.right.id); }
                     }
                 }
             }
@@ -338,11 +344,11 @@ export component AppearancePanel inherits Rectangle {
                 Text {x:10px;y:35px;width:max(1px,parent.width - 200px);text:"Import or export a palette";font-size:Typography.body;color:Theme.palette.muted;wrap:word-wrap;}
                 HorizontalBox {
                     x:parent.width - 184px; y:21px; width:174px; height:28px; padding:0px; spacing:Spacing.md;
-                    ChoiceButton { text:"Import…";label:"Import theme";clicked => {root.import-theme();}}
-                    ChoiceButton { text:"Export…";label:"Export theme";clicked => {root.export-theme();}}
+                    ChoiceButton { text:"Import…";label:"Import theme";clicked => {AppearanceAdapter.import-theme();}}
+                    ChoiceButton { text:"Export…";label:"Export theme";clicked => {AppearanceAdapter.export-theme();}}
                 }
             }
-            if root.low-contrast-warning:VerticalBox {
+            if AppearanceAdapter.low-contrast-warning:VerticalBox {
                 padding: Spacing.lg;
                 spacing: Spacing.md;
                 Text {
@@ -357,12 +363,12 @@ export component AppearancePanel inherits Rectangle {
                     spacing: Spacing.md;
                     ChoiceButton {
                         text: "Cancel";
-                        clicked => { root.cancel-theme-import(); }
+                        clicked => { AppearanceAdapter.cancel-theme-import(); }
                     }
 
                     ChoiceButton {
                         text: "Apply anyway";
-                        clicked => { root.apply-low-contrast(); }
+                        clicked => { AppearanceAdapter.apply-low-contrast(); }
                     }
                 }
             }
@@ -371,7 +377,7 @@ export component AppearancePanel inherits Rectangle {
     }
     Text {
         x:root.inset; y:parent.height - 37px; width:parent.width - 2 * root.inset; height:32px;
-        text:root.message; color:Theme.palette.muted; font-size:Typography.small; wrap:word-wrap; overflow:elide;
+        text:AppearanceAdapter.message; color:Theme.palette.muted; font-size:Typography.small; wrap:word-wrap; overflow:elide;
         vertical-alignment:center;
     }
 }

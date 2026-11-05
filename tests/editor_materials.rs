@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, UiPaperType, UiView,
+    AppWindow, AppearanceAdapter, UiPaperType, UiView,
     app::ui::present_settings,
     store::settings::AppSettings,
     theme::{
@@ -182,7 +182,10 @@ fn paper_intensity_changes_lines_independently_of_finish_and_text() {
             assert_ne!(&pixels, finish);
         }
         previous.push(pixels);
-        assert_eq!(window.get_paper_type(), UiPaperType::Bone);
+        assert_eq!(
+            window.global::<AppearanceAdapter>().get_paper_type(),
+            UiPaperType::Bone
+        );
         assert_eq!(window.get_note_text(), "café\r\n👩🏽‍💻");
     }
 }
