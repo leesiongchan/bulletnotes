@@ -23,6 +23,11 @@ pub struct SearchRequest {
     pub id: u64,
     pub query: SearchQuery,
 }
+pub enum LinkOutcome {
+    Open(PageKey),
+    Create(PageKey),
+    Refused(&'static str),
+}
 pub enum AppAction {
     ResolveConflict(ConflictResolution),
     MoveToTrash(PageKey, LocalRevision),
@@ -43,6 +48,11 @@ pub enum AppAction {
     CancelOpen,
     Navigate(View),
     OpenPage(PageKey),
+    /// A wikilink followed from `from`, resolved against the page catalogue.
+    FollowLink {
+        from: PageKey,
+        outcome: LinkOutcome,
+    },
     NewNote,
     StepHistory(i8),
     RefreshScratchpads,
@@ -156,6 +166,8 @@ enum Transition {
     Recovery(RecoveryIntent),
     Open(PageKey, Option<(NavigationState, i8)>),
     New(Option<String>),
+    /// A new page at a chosen path, such as the target of a wikilink.
+    Create(PageKey),
     Quit,
     Hide,
 }
@@ -620,6 +632,30 @@ impl Coordinator {
                     } else {
                         self.transition(Transition::Open(key, None), &mut effects);
                     }
+                }
+            }
+            AppAction::FollowLink { from, outcome } => {
+                // The link resolved asynchronously; ignore it once the user has moved on.
+                if self.view() != View::Note
+                    || self.pending_load.is_some()
+                    || self
+                        .editor
+                        .as_ref()
+                        .is_none_or(|editor| editor.key() != &from)
+                {
+                    return effects;
+                }
+                match outcome {
+                    LinkOutcome::Open(key) => return self.dispatch(AppAction::OpenPage(key)),
+                    LinkOutcome::Create(key) if key == from => {}
+                    LinkOutcome::Create(key) => {
+                        self.background_view = None;
+                        self.stack_intent = None;
+                        self.stack_cursor = None;
+                        self.selected_uncached = None;
+                        self.transition(Transition::Create(key), &mut effects);
+                    }
+                    LinkOutcome::Refused(notice) => self.notice = Some(notice),
                 }
             }
             AppAction::NewNote => {
@@ -1182,6 +1218,21 @@ impl Coordinator {
         self.pending_transition = Some(transition);
         self.finish_transition(effects);
     }
+    /// Open an unsaved page at `key`; the flush creates its row before any edit.
+    fn open_draft(&mut self, key: PageKey, seed: Option<String>, effects: &mut Vec<AppEffect>) {
+        self.editor = Some(EditorSession::draft(key.clone()));
+        if let Some(text) = seed
+            && let Some(editor) = &mut self.editor
+        {
+            let _ = editor.edit(text, self.now);
+        }
+        self.navigation.open(key, EditorPosition::default());
+        if let Some(view) = self.background_view.take() {
+            self.navigation.set_view(view);
+        }
+        self.notice = None;
+        self.flush(effects);
+    }
     fn finish_transition(&mut self, effects: &mut Vec<AppEffect>) {
         if self
             .editor
@@ -1197,6 +1248,7 @@ impl Coordinator {
                 t,
                 Transition::Open(..)
                     | Transition::New(_)
+                    | Transition::Create(_)
                     | Transition::Recovery(..)
                     | Transition::Hide
                     | Transition::Quit
@@ -1264,19 +1316,9 @@ impl Coordinator {
                     self.notice = Some("Quick note could not be created.");
                     return;
                 }
-                self.editor = Some(EditorSession::draft(key.clone()));
-                if let Some(text) = seed
-                    && let Some(editor) = &mut self.editor
-                {
-                    let _ = editor.edit(text, self.now);
-                }
-                self.navigation.open(key, EditorPosition::default());
-                if let Some(view) = self.background_view.take() {
-                    self.navigation.set_view(view);
-                }
-                self.notice = None;
-                self.flush(effects);
+                self.open_draft(key, seed, effects);
             }
+            Transition::Create(key) => self.open_draft(key, None, effects),
         }
     }
 }

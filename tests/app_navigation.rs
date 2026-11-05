@@ -438,4 +438,87 @@ mod coordination {
         let second = save(&effects);
         assert_eq!(second.1, "second");
     }
+
+    fn follow(app: &mut Coordinator, from: &str, outcome: LinkOutcome) -> Vec<AppEffect> {
+        app.dispatch_ready(AppAction::FollowLink {
+            from: key(from),
+            outcome,
+        })
+    }
+    fn create_draft(effects: &[AppEffect]) -> Option<PageKey> {
+        effects.iter().find_map(|effect| match effect {
+            AppEffect::CreateDraft { key, .. } => Some(key.clone()),
+            _ => None,
+        })
+    }
+    #[test]
+    fn following_a_missing_link_creates_that_page_and_back_returns() {
+        let mut app = app();
+        let effects = follow(
+            &mut app,
+            "a.md",
+            LinkOutcome::Create(key("Projects/Plan.md")),
+        );
+        assert_eq!(create_draft(&effects), Some(key("Projects/Plan.md")));
+        assert_eq!(app.editor().unwrap().key(), &key("Projects/Plan.md"));
+        assert_eq!(app.editor().unwrap().body(), "");
+        assert_eq!(app.view(), View::Note);
+        let expected = effects
+            .iter()
+            .find_map(|effect| match effect {
+                AppEffect::CreateDraft { expected, .. } => Some(expected.clone()),
+                _ => None,
+            })
+            .unwrap();
+        app.receive_ready(AppEvent::LocalSaved {
+            expected,
+            outcome: bulletnotes::domain::reconciliation::LocalSaveOutcome {
+                attempt: SavedRevision {
+                    key: key("Projects/Plan.md"),
+                    local_revision: LocalRevision(0),
+                },
+                stored: page("Projects/Plan.md", "").into(),
+            },
+        });
+        let request = load(&app.dispatch_ready(AppAction::StepHistory(-1)));
+        app.receive_ready(AppEvent::PageLoaded {
+            request_id: request,
+            key: key("a.md"),
+            result: Ok(Some(page("a.md", "original").into())),
+        });
+        assert_eq!(app.editor().unwrap().key(), &key("a.md"));
+    }
+    #[test]
+    fn following_an_existing_link_loads_it_through_the_normal_open_path() {
+        let mut app = app();
+        let effects = follow(&mut app, "a.md", LinkOutcome::Open(key("b.md")));
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, AppEffect::LoadPage { key: k, .. } if *k == key("b.md")))
+        );
+        assert!(create_draft(&effects).is_none());
+    }
+    #[test]
+    fn following_a_link_saves_the_source_before_leaving_it() {
+        let mut app = app();
+        app.dispatch_ready(AppAction::EditText("see [[Plan]]".into()));
+        let effects = follow(&mut app, "a.md", LinkOutcome::Create(key("Plan.md")));
+        assert!(create_draft(&effects).is_none());
+        let write = save(&effects);
+        assert_eq!((&write.0, write.1.as_str()), (&key("a.md"), "see [[Plan]]"));
+        assert_eq!(create_draft(&ack(&mut app, write)), Some(key("Plan.md")));
+    }
+    #[test]
+    fn stale_self_and_refused_links_leave_the_editor_in_place() {
+        let mut app = app();
+        assert!(follow(&mut app, "elsewhere.md", LinkOutcome::Create(key("x.md"))).is_empty());
+        assert!(follow(&mut app, "a.md", LinkOutcome::Create(key("a.md"))).is_empty());
+        app.dispatch_ready(AppAction::Navigate(View::AllPages));
+        assert!(follow(&mut app, "a.md", LinkOutcome::Open(key("b.md"))).is_empty());
+        app.dispatch_ready(AppAction::Navigate(View::Note));
+        assert!(follow(&mut app, "a.md", LinkOutcome::Refused("refused")).is_empty());
+        assert_eq!(app.notice(), Some("refused"));
+        assert_eq!(app.editor().unwrap().key(), &key("a.md"));
+    }
 }

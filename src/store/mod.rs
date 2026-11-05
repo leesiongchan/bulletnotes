@@ -5,6 +5,7 @@ mod editor_rebase;
 pub use draft_admission::DraftAdmissionRequest;
 mod outbox;
 mod pages;
+pub use pages::LinkCatalogue;
 mod probes;
 mod reconciliation;
 pub mod recovery;
@@ -120,6 +121,14 @@ impl StoreHandle {
     pub async fn load_page(&self, key: &PageKey) -> Result<Option<PageSnapshot>, StoreError> {
         let key = key.clone();
         self.call(move |w| pages::load(&w.db, &key)).await
+    }
+    pub async fn link_catalogue(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<LinkCatalogue, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| pages::link_catalogue(&w.db, &connection))
+            .await
     }
     pub async fn load_stored_page(
         &self,

@@ -310,6 +310,18 @@ pub(super) fn markers(source: &str, palette: &UiTheme) -> Vec<slint::language::T
     markers
 }
 
+/// The destination of the wikilink whose source, brackets included, touches `offset`.
+pub(super) fn wikilink_at(source: &str, offset: usize) -> Option<String> {
+    events(source).find_map(|(event, range)| match event {
+        Event::Start(Tag::Link {
+            link_type: LinkType::WikiLink { .. },
+            dest_url,
+            ..
+        }) if range.contains(&offset) || range.end == offset => Some(dest_url.into_string()),
+        _ => None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,6 +419,34 @@ mod tests {
             let span = spans.iter().find(|span| span.start <= at && at < span.end);
             assert_eq!(span.is_some_and(|span| span.bold), bold, "{needle}");
         }
+    }
+
+    #[test]
+    fn wikilink_at_reports_the_target_only_inside_a_link() {
+        let source = "See [[Daily Notes]] and [[Projects/Plan|the plan]].\n\n`[[code]]` [x](y.md)";
+        let at = |needle: &str| source.find(needle).unwrap();
+        assert_eq!(wikilink_at(source, 0), None);
+        assert_eq!(
+            wikilink_at(source, at("[[Daily")).as_deref(),
+            Some("Daily Notes")
+        );
+        assert_eq!(
+            wikilink_at(source, at("Notes")).as_deref(),
+            Some("Daily Notes")
+        );
+        assert_eq!(
+            wikilink_at(source, at(" and")).as_deref(),
+            Some("Daily Notes")
+        );
+        assert_eq!(wikilink_at(source, at("and")), None);
+        assert_eq!(
+            wikilink_at(source, at("the plan")).as_deref(),
+            Some("Projects/Plan")
+        );
+        assert_eq!(wikilink_at(source, at("code")), None);
+        assert_eq!(wikilink_at(source, at("y.md")), None);
+        assert_eq!(wikilink_at(source, source.len()), None);
+        assert_eq!(wikilink_at("[[é]]", 5).as_deref(), Some("é"));
     }
 
     #[test]

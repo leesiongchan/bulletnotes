@@ -1,6 +1,7 @@
 pub mod connection;
 pub mod editor;
 pub mod error;
+pub mod link;
 pub mod page;
 pub mod reconciliation;
 pub mod status;

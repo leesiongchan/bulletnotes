@@ -53,6 +53,8 @@ export component NoteEditor inherits Rectangle {
             if (event.modifiers.shift && (event.text == "x" || event.text == "X")) { return root.apply-command(MarkdownCommand.strikethrough,-1,-1); }
             if (event.modifiers.shift && (event.text == "h" || event.text == "H")) { return root.apply-command(MarkdownCommand.cycle-heading,-1,-1); }
             if (event.modifiers.shift && (event.text == "k" || event.text == "K")) { return root.apply-command(MarkdownCommand.toggle-task,-1,-1); }
+            // Cmd/Ctrl+Enter follows the wikilink at the caret and is ignored elsewhere.
+            if (!event.modifiers.shift && event.text == Key.Return && input.preedit-text.is-empty && root.follow-link(root.text,input.cursor-position-byte-offset)) { return accept; }
         }
         if (event.modifiers.alt && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift) {
             if (event.text == Key.UpArrow) { return root.apply-command(MarkdownCommand.move-up,-1,-1); }
@@ -66,6 +68,8 @@ export component NoteEditor inherits Rectangle {
         return reject;
     }
     callback edited(string);
+    // Returns whether the caret was inside a wikilink.
+    callback follow-link(string, int) -> bool;
     callback move-to-trash();
     callback key-pressed(KeyEvent) -> EventResult;
     public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }

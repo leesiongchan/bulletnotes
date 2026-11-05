@@ -111,6 +111,39 @@ pub(super) fn id(db: &Connection, key: &PageKey) -> Result<i64, StoreError> {
     .optional()?
     .ok_or(StoreError::PageMissing)
 }
+/// Page rows a wikilink can resolve to, for [`crate::domain::link::resolve`].
+pub struct LinkCatalogue {
+    /// Every known path with whether it is visible (neither trashed nor remotely deleted).
+    pub pages: Vec<(PagePath, bool)>,
+    /// Whether a complete remote listing was ever recorded; without one a missing
+    /// page may still exist remotely.
+    pub listed: bool,
+}
+pub(super) fn link_catalogue(
+    db: &Connection,
+    connection: &ConnectionId,
+) -> Result<LinkCatalogue, StoreError> {
+    let mut query =
+        db.prepare("SELECT path, NOT (trashed OR remote_deleted) FROM pages WHERE connection=?1")?;
+    let pages = query
+        .query_map([connection.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+        })?
+        .map(|row| {
+            let (path, visible) = row?;
+            Ok((
+                PagePath::parse(&path).map_err(|_| StoreError::InvalidData)?,
+                visible,
+            ))
+        })
+        .collect::<Result<_, StoreError>>()?;
+    let listed = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM catalogue_state WHERE connection=?1)",
+        [connection.as_str()],
+        |row| row.get(0),
+    )?;
+    Ok(LinkCatalogue { pages, listed })
+}
 pub(super) fn key_for_id(db: &Connection, id: i64) -> Result<PageKey, StoreError> {
     let (connection, path) = db.query_row(
         "SELECT connection,path FROM pages WHERE id=?1",

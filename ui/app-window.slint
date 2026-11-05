@@ -238,6 +238,7 @@ export component AppWindow inherits Window {
     in property <string> connection-message;
     callback return-to-note();
     callback note-edited(string);
+    callback follow-link(string, int) -> bool;
     callback appearance-changed();
     callback theme-selected(string);
     callback theme-assigned(string, bool);
@@ -340,6 +341,7 @@ export component AppWindow inherits Window {
                     read-only: root.note-read-only || root.recovery-busy || root.lifecycle-pending || root.search-busy;
                     edit-markdown(source,anchor,caret,command,start,end) => { root.edit-markdown(source,anchor,caret,command,start,end) }
                     edited(text) => { root.note-edited(text); }
+                    follow-link(source,caret) => { root.follow-link(source,caret) }
                     move-to-trash => { root.trash-current-note(); }
                     key-pressed(event) => { root.shortcut(event) }
                 }

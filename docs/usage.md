@@ -17,8 +17,17 @@ and original spacing. Unsupported or narrow prefixes remain raw.
 Click a visible task box to toggle its Markdown source, or use Command+Shift+K
 on the current task. Dragging, modifier clicks, and clicks on text or padding do
 not toggle tasks. Markdown inside code stays literal, and YAML frontmatter stays
-plain. Standard Markdown semantics apply,
-including `__bold__` for bold text.
+plain. Parsing follows CommonMark with GitHub task lists and strikethrough,
+including `__bold__` for bold text, plus SilverBullet wikilinks: `[[Page]]` and
+`[[Page|label]]` underline the page name and keep the brackets quiet.
+Command+Return with the caret in a wikilink opens its page. As in SilverBullet,
+an exact path wins, then a case-insensitive page name or folder suffix such as
+`[[api/Auth]]`; ties go to the page nearest the current one. A target that
+matches nothing becomes a new empty page at that path from the space root, but
+only after the space's page list has fully downloaded once; until then the page
+may already exist remotely. A leading `/` matches only that exact path. `#header` and `@position`
+suffixes open the page without jumping. Meta-page (`[[^…]]`) and document
+(`[[file.pdf]]`) links are not opened.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains
 deferred.
@@ -95,7 +104,8 @@ The Command shortcuts below use Control on Windows/Linux; Option uses Alt.
 
 On macOS, Command+B/I toggles bold/italic, Command+Shift+X toggles strikethrough,
 and Command+Shift+H cycles the current line through plain, H1, H2, H3, and plain.
-Command+Shift+K toggles an existing task. Option+Up/Down moves the current line or
+Command+Shift+K toggles an existing task. Command+Return opens the wikilink at
+the caret. Option+Up/Down moves the current line or
 selected lines. Return continues an eligible list/task, Tab indents it, and
 Shift+Tab outdents it; an empty list item exits its list. New task items start
 unchecked. Each command is one undo/redo step and preserves directed selection.

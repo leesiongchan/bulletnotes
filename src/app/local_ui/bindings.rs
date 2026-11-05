@@ -2,8 +2,15 @@
 use super::State;
 use crate::{
     AppWindow,
-    app::{coordinator::AppAction, model::View},
-    domain::page::PageKey,
+    app::{
+        coordinator::{AppAction, LinkOutcome},
+        markdown,
+        model::View,
+    },
+    domain::{
+        link::{self, Resolution},
+        page::PageKey,
+    },
 };
 use slint::ComponentHandle;
 use std::rc::Rc;
@@ -31,6 +38,10 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
         window.on_note_edited(move |text| state.dispatch(AppAction::EditText(text.to_string())));
+    }
+    {
+        let state = state.clone();
+        window.on_follow_link(move |source, caret| follow_link(&state, &source, caret));
     }
     {
         let state = state.clone();
@@ -328,4 +339,60 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
             slint::CloseRequestResponse::KeepWindowShown
         });
     }
+}
+
+/// Resolve the wikilink at `caret` and open or create its page. Returns whether the caret
+/// was in a wikilink, so the editor only consumes the shortcut there.
+fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
+    let Some(raw) = usize::try_from(caret)
+        .ok()
+        .and_then(|caret| markdown::wikilink_at(source, caret))
+    else {
+        return false;
+    };
+    let Some(from) = state
+        .coordinator
+        .borrow()
+        .editor()
+        .map(|editor| editor.key().clone())
+    else {
+        return false;
+    };
+    let link = match link::parse(&raw) {
+        Ok(Some(link)) => link,
+        Ok(None) => return true,
+        Err(error) => {
+            state.dispatch(AppAction::FollowLink {
+                from,
+                outcome: LinkOutcome::Refused(error.notice()),
+            });
+            return true;
+        }
+    };
+    let task = state.clone();
+    if slint::spawn_local(async move {
+        let outcome = match task.store.link_catalogue(&from.connection).await {
+            Err(error) => {
+                tracing::warn!(%error, "wikilink catalogue could not be read");
+                LinkOutcome::Refused("This link could not be opened. Try again.")
+            }
+            Ok(catalogue) => {
+                let key = |path| PageKey {
+                    connection: from.connection.clone(),
+                    path,
+                };
+                match link::resolve(&link, &from.path, &catalogue.pages, catalogue.listed) {
+                    Ok(Resolution::Open(path)) => LinkOutcome::Open(key(path)),
+                    Ok(Resolution::Create(path)) => LinkOutcome::Create(key(path)),
+                    Err(error) => LinkOutcome::Refused(error.notice()),
+                }
+            }
+        };
+        task.dispatch(AppAction::FollowLink { from, outcome });
+    })
+    .is_err()
+    {
+        tracing::warn!("wikilink resolution could not be scheduled");
+    }
+    true
 }
