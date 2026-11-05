@@ -45,6 +45,11 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     }
     {
         let state = state.clone();
+        window
+            .on_suggest_links(move |source, caret, _revision| state.suggest_links(&source, caret));
+    }
+    {
+        let state = state.clone();
         window.global::<LinkPicker>().on_chosen(move |path| {
             if let Some((from, anchor)) = close_link_choices(&state)
                 && let Ok(path) = crate::domain::page::PagePath::parse(&path)

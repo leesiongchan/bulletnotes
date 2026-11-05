@@ -2,6 +2,7 @@
 mod bindings;
 mod effects;
 mod lifecycle;
+mod links;
 mod metadata;
 mod presentation;
 mod scratchpads;
@@ -56,6 +57,7 @@ struct State {
     lifecycle: Lifecycle,
     sync: Synchronization,
     scratchpads: scratchpads::StackRefresh,
+    links: links::LinkPages,
 }
 #[derive(Clone)]
 pub struct LocalUi(Rc<State>);
@@ -219,6 +221,11 @@ impl State {
             &event,
             AppEvent::LocalSaved { .. } | AppEvent::PageLoaded { .. }
         );
+        // Opening or recovering a page can add one; saves do not change the list.
+        let pages_changed = matches!(
+            &event,
+            AppEvent::PageLoaded { .. } | AppEvent::RecoveryFinished { result: Ok(_), .. }
+        );
         if refresh {
             self.sync.facts.borrow_mut().take();
         }
@@ -269,6 +276,9 @@ impl State {
         if refresh {
             self.refresh_remote();
         }
+        if pages_changed {
+            self.refresh_link_pages();
+        }
     }
 }
 
@@ -298,10 +308,12 @@ pub fn bind(
         lifecycle: Lifecycle::default(),
         sync: Synchronization::default(),
         scratchpads: Default::default(),
+        links: Default::default(),
     });
     workers.start(&state, store)?;
     bindings::bind(window, &state);
     state.dispatch(AppAction::RefreshScratchpads);
     state.render();
+    state.refresh_link_pages();
     Ok(LocalUi(state))
 }

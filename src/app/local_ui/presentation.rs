@@ -351,6 +351,7 @@ impl State {
                 .global::<SearchAdapter>()
                 .set_index_status("Searching local pages…".into());
         }
+        self.update_missing_links(&window);
         self.reveal_link_target(&window);
         self.updates.send_replace(());
         presentation.success();

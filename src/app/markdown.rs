@@ -114,10 +114,13 @@ impl Styles {
     }
 }
 
+/// `missing` lists wikilink targets that would create a page; they are drawn in the
+/// quiet syntax color without an underline, so the cue survives high contrast.
 pub(super) fn decorations(
     source: &str,
     palette: &UiTheme,
     high_contrast: bool,
+    missing: &[String],
 ) -> Vec<TextInputDecoration> {
     let styles = Styles::new(palette, high_contrast);
     let (plain, quiet) = (styles.plain, styles.quiet);
@@ -181,10 +184,18 @@ pub(super) fn decorations(
                         body.foreground = quiet.foreground;
                         syntax = quiet;
                     }
-                    Tag::Link { link_type, .. } => {
+                    Tag::Link {
+                        link_type,
+                        dest_url,
+                        ..
+                    } => {
                         if link_type == LinkType::Inline {
                             emit(range.start..range.start + 1, quiet);
                             cursor = range.start + 1;
+                        } else if matches!(link_type, LinkType::WikiLink { .. })
+                            && missing.iter().any(|target| **target == *dest_url)
+                        {
+                            body.foreground = quiet.foreground;
                         } else {
                             body.foreground = styles.link;
                             body.underline = true;
@@ -322,6 +333,30 @@ pub(super) fn wikilink_at(source: &str, offset: usize) -> Option<String> {
     })
 }
 
+/// Targets of every wikilink in `source`, as written.
+pub(super) fn wikilinks(source: &str) -> impl Iterator<Item = String> + '_ {
+    events(source).filter_map(|(event, _)| match event {
+        Event::Start(Tag::Link {
+            link_type: LinkType::WikiLink { .. },
+            dest_url,
+            ..
+        }) => Some(dest_url.into_string()),
+        _ => None,
+    })
+}
+
+/// Whether `offset` falls in inline code or a code block, where `[[` is literal.
+pub(super) fn in_code(source: &str, offset: usize) -> bool {
+    events(source).any(|(event, range)| {
+        let block = matches!(event, Event::Start(Tag::CodeBlock(_)));
+        // An unclosed fence runs to the end of the document, caret included; after a
+        // closing fence the document ends on a new line.
+        (block || matches!(event, Event::Code(_)))
+            && range.start < offset
+            && (offset < range.end || (block && offset == source.len() && !source.ends_with('\n')))
+    })
+}
+
 /// Byte offset of the first heading whose text is exactly `header`.
 pub(super) fn heading_offset(source: &str, header: &str) -> Option<usize> {
     let mut current: Option<(usize, String)> = None;
@@ -385,7 +420,7 @@ mod tests {
     #[test]
     fn original_unicode_and_crlf_offsets_are_sorted_and_disjoint() {
         let source = "# café [site](https://example.com)\r\n\r\n[日本語](https://example.org)\r\n";
-        let spans = decorations(source, &UiTheme::default(), false);
+        let spans = decorations(source, &UiTheme::default(), false, &[]);
         assert!(spans.iter().any(
             |span| span.bold && source[span.start as usize..span.end as usize].contains("café")
         ));
@@ -401,20 +436,22 @@ mod tests {
     #[test]
     fn code_styling_does_not_interpret_literal_markdown() {
         let source = "\\# literal\n\n`[code](https://example.com)`\n\n```\n# Heading\n[link](https://example.com)\n```\n";
-        let spans = decorations(source, &UiTheme::default(), false);
+        let spans = decorations(source, &UiTheme::default(), false, &[]);
         assert!(spans.iter().any(|span| span.code));
         assert!(
             spans
                 .iter()
                 .all(|span| !span.bold && !span.italic && !span.underline)
         );
-        assert!(decorations("\\# literal\n\\*literal*", &UiTheme::default(), false).is_empty());
+        assert!(
+            decorations("\\# literal\n\\*literal*", &UiTheme::default(), false, &[]).is_empty()
+        );
     }
 
     #[test]
     fn nested_emphasis_composes_in_disjoint_unicode_source_runs() {
         let source = "# **bold *日本語***\r\n***café 👩🏽‍💻***\r\n~~**done**~~";
-        let spans = decorations(source, &UiTheme::default(), false);
+        let spans = decorations(source, &UiTheme::default(), false, &[]);
         for (needle, bold, italic, strike) in [
             ("日本語", true, true, false),
             ("café 👩🏽‍💻", true, true, false),
@@ -437,7 +474,7 @@ mod tests {
     #[test]
     fn heading_hierarchy_uses_weight_without_changing_the_source() {
         let source = "# First\n## Second\n### Third\n";
-        let spans = decorations(source, &UiTheme::default(), false);
+        let spans = decorations(source, &UiTheme::default(), false, &[]);
         for (needle, bold) in [("First", true), ("Second", true), ("Third", false)] {
             let at = source.find(needle).unwrap() as i32;
             let span = spans.iter().find(|span| span.start <= at && at < span.end);
@@ -496,7 +533,7 @@ mod tests {
             accent: slint::Color::from_rgb_u8(0x8a, 0x2b, 0x0e),
             ..UiTheme::default()
         };
-        let spans = decorations(source, &palette, false);
+        let spans = decorations(source, &palette, false, &[]);
         let text = |span: &TextInputDecoration| &source[span.start as usize..span.end as usize];
         let linked: Vec<_> = spans
             .iter()
@@ -520,9 +557,58 @@ mod tests {
     }
 
     #[test]
+    fn missing_wikilinks_lose_the_underline_even_in_high_contrast() {
+        let source = "[[Plan]] and [[Someday|later]] and [Someday](x)";
+        let palette = UiTheme {
+            ink: slint::Color::from_rgb_u8(0x22, 0x22, 0x22),
+            paper: slint::Color::from_rgb_u8(0xff, 0xff, 0xff),
+            muted: slint::Color::from_rgb_u8(0x55, 0x55, 0x55),
+            accent: slint::Color::from_rgb_u8(0x8a, 0x2b, 0x0e),
+            ..UiTheme::default()
+        };
+        for high_contrast in [false, true] {
+            let spans = decorations(source, &palette, high_contrast, &["Someday".into()]);
+            let text = |span: &TextInputDecoration| &source[span.start as usize..span.end as usize];
+            let linked: Vec<_> = spans
+                .iter()
+                .filter(|span| span.underline)
+                .map(text)
+                .collect();
+            assert_eq!(linked, ["Plan", "x"], "high contrast: {high_contrast}");
+            let label = source.find("later").unwrap();
+            let later = spans
+                .iter()
+                .find(|span| (span.start as usize..span.end as usize).contains(&label));
+            if high_contrast {
+                // Quiet syntax is ink here, so the label is plain text; no underline remains the cue.
+                assert!(later.is_none_or(|span| span.foreground == palette.ink));
+            } else {
+                assert_eq!(
+                    later
+                        .expect("the missing link's label is styled")
+                        .foreground,
+                    palette.muted
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wikilink_targets_and_code_regions_are_found() {
+        let source = "[[A]] `[[B]]` [[C|c]]\n```\n[[D]]\n```\n";
+        assert_eq!(wikilinks(source).collect::<Vec<_>>(), ["A", "C"]);
+        assert!(in_code(source, source.find("[[B").unwrap() + 2));
+        assert!(!in_code(source, 2));
+        assert!(in_code(source, source.find("[[D").unwrap() + 2));
+        assert!(!in_code(source, source.len()));
+        let open = "```\n[[x";
+        assert!(in_code(open, open.len()), "an unclosed fence is still code");
+    }
+
+    #[test]
     fn empty_link_labels_still_style_the_destination() {
         let source = "[](https://example.com)";
-        let spans = decorations(source, &UiTheme::default(), false);
+        let spans = decorations(source, &UiTheme::default(), false, &[]);
         assert!(spans.iter().any(|span| span.underline
             && &source[span.start as usize..span.end as usize] == "https://example.com"));
     }
@@ -604,7 +690,7 @@ mod properties {
             let themes = crate::theme::palette::builtin_themes().unwrap();
             let theme = &themes[theme.index(themes.len())].theme;
             let palette = super::super::ui::palette(theme, theme.ink);
-            let spans = decorations(&source, &palette, high_contrast);
+            let spans = decorations(&source, &palette, high_contrast, &[]);
             let ranges: Vec<_> = spans.iter().map(|span| span.start as usize..span.end as usize).collect();
             assert_ranges(&source, &ranges);
             for (span, range) in spans.iter().zip(ranges) {

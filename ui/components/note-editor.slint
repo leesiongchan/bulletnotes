@@ -1,7 +1,7 @@
-import { Theme, Typography, Radius } from "theme.slint";
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
 import { PaperSurface } from "paper-surface.slint";
 import { ThemeScrollView } from "theme-scroll-view.slint";
-import { MarkdownCommand, MarkdownEdit, CodePanel, UiPaperStyle, UiPaperType } from "../types.slint";
+import { LinkSuggestions, MarkdownCommand, MarkdownEdit, CodePanel, UiPaperStyle, UiPaperType } from "../types.slint";
 export component NoteEditor inherits Rectangle {
     in property <bool> paper-material:false;
     in property <UiPaperType> paper-type:UiPaperType.smooth;
@@ -70,6 +70,38 @@ export component NoteEditor inherits Rectangle {
     callback edited(string);
     // Returns whether the caret was inside a wikilink.
     callback follow-link(string, int) -> bool;
+    // Page names for the unfinished `[[name` at the caret; the revision only
+    // re-evaluates the list when the pages change.
+    in property <int> link-pages-revision;
+    pure callback suggest-links(string, int, int) -> LinkSuggestions;
+    private property <LinkSuggestions> suggestions: input.has-focus && !root.read-only && input.preedit-text.is-empty
+        && input.anchor-position-byte-offset == input.cursor-position-byte-offset
+        ? root.suggest-links(root.text, input.cursor-position-byte-offset, root.link-pages-revision)
+        : { start: -1, items: [] };
+    // Escape hides the list for one `[[`; a new link starts showing it again.
+    private property <int> dismissed-start: -1;
+    private property <int> suggestion-index: 0;
+    private property <bool> suggesting: root.suggestions.items.length > 0 && root.suggestions.start != root.dismissed-start;
+    private property <length> caret-x;
+    private property <length> caret-y;
+    changed suggestions => {
+        root.suggestion-index = 0;
+        if (root.suggestions.start != root.dismissed-start) { root.dismissed-start = -1; }
+    }
+    function accept-suggestion(index: int) -> EventResult {
+        if (!input.source-edits-allowed) { return reject; }
+        let item = root.suggestions.items[index];
+        input.apply-source-edit(root.suggestions.start,input.cursor-position-byte-offset,item.replacement,item.caret,item.caret);
+        return accept;
+    }
+    function suggestion-key(event: KeyEvent) -> EventResult {
+        if (event.modifiers.control || event.modifiers.alt || event.modifiers.meta || event.modifiers.shift) { return reject; }
+        if (event.text == Key.DownArrow) { root.suggestion-index = min(root.suggestions.items.length - 1, root.suggestion-index + 1); return accept; }
+        if (event.text == Key.UpArrow) { root.suggestion-index = max(0, root.suggestion-index - 1); return accept; }
+        if (event.text == Key.Return || event.text == Key.Tab) { return root.accept-suggestion(root.suggestion-index); }
+        if (event.text == Key.Escape) { root.dismissed-start = root.suggestions.start; return accept; }
+        return reject;
+    }
     callback move-to-trash();
     callback key-pressed(KeyEvent) -> EventResult;
     public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }
@@ -181,14 +213,59 @@ export component NoteEditor inherits Rectangle {
                 marker-activated(start,end) => { root.apply-command(MarkdownCommand.toggle-task,start,end); }
                 edited => { root.edited(self.text); }
                 key-pressed(event) => {
+                    if (root.suggesting && root.suggestion-key(event) == accept) { return accept; }
                     if (root.command-key(event) == accept) { return accept; }
                     return root.key-pressed(event);
                 }
                 cursor-position-changed(pos) => {
+                    root.caret-x = pos.x;
+                    root.caret-y = pos.y;
                     if (!root.suppress-caret-reveal) {
                     if (pos.y + self.y + scroll.content-y < 0px) { scroll.content-y = min(0px,-pos.y - self.y); }
                     else if (pos.y + self.y + scroll.content-y > scroll.visible-height - root.line-height) { scroll.content-y = min(0px,scroll.visible-height - pos.y - self.y - root.line-height); }
                     }
+                }
+            }
+        }
+    }
+    // Suggestions sit under the caret line, or above it near the bottom edge.
+    if root.suggesting: Rectangle {
+        private property <length> line-top: input.y + root.caret-y + scroll.content-y;
+        private property <length> below: self.line-top + root.line-height + Spacing.xs;
+        width: min(360px, root.width - 2 * Spacing.md);
+        height: rows.preferred-height;
+        x: max(Spacing.md, min(input.x + root.caret-x - Spacing.md, root.width - self.width - Spacing.md));
+        y: self.below + self.height <= root.height ? self.below : max(0px, self.line-top - self.height - Spacing.xs);
+        background: Theme.palette.surface;
+        border-width: 1px;
+        border-color: Theme.palette.line;
+        border-radius: Radius.surface;
+        accessible-role: list;
+        accessible-label: "Page suggestions";
+        rows := VerticalLayout {
+            padding: Spacing.xs;
+            for item[i] in root.suggestions.items: Rectangle {
+                height: 28px;
+                border-radius: Radius.tight;
+                background: i == root.suggestion-index ? Theme.palette.selection : touch.has-hover ? Theme.palette.paper : transparent;
+                accessible-role: list-item;
+                accessible-label: item.name;
+                accessible-item-selectable: true;
+                accessible-item-selected: i == root.suggestion-index;
+                accessible-action-default => { root.accept-suggestion(i); }
+                Text {
+                    x: Spacing.md;
+                    width: parent.width - 2 * Spacing.md;
+                    text: item.name;
+                    color: Theme.palette.ink;
+                    font-family: Typography.sans;
+                    font-size: Typography.body;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+                touch := TouchArea {
+                    clicked => { root.accept-suggestion(i); }
                 }
             }
         }

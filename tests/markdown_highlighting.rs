@@ -97,7 +97,12 @@ fn fenced_languages_highlight_tokens_without_changing_source() {
     use slint::Model;
     let source = "```rust\r\nlet café = \"日本語\"; // comment\r\n```\r\n";
     let window = setup(source);
-    let spans = window.invoke_highlight_markdown(source.into(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        source.into(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     let at = |offset: usize| {
         spans
             .iter()
@@ -111,7 +116,12 @@ fn fenced_languages_highlight_tokens_without_changing_source() {
     );
     assert_eq!(window.get_note_text(), source);
     let unknown = "```unknown-language\nlet x = \"literal\";\n```\n";
-    let spans = window.invoke_highlight_markdown(unknown.into(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        unknown.into(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     assert!(
         spans
             .iter()
@@ -125,7 +135,12 @@ fn incomplete_code_unicode_ranges_and_budget_fallback_are_safe() {
     use slint::Model;
     let window = setup("");
     let source = "```rust\r\nlet café = \"日本語\";\r\n";
-    let spans = window.invoke_highlight_markdown(source.into(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        source.into(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     let mut end = 0;
     for span in spans.iter() {
         assert!(span.start >= end && span.end > span.start);
@@ -140,7 +155,12 @@ fn incomplete_code_unicode_ranges_and_budget_fallback_are_safe() {
         "an unclosed fence still highlights valid code"
     );
     let source = format!("```rust\n{}\n```\n", "let value = \"text\";\n".repeat(2000));
-    let spans = window.invoke_highlight_markdown(source.as_str().into(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        source.as_str().into(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     assert!(
         spans
             .iter()
@@ -151,7 +171,12 @@ fn incomplete_code_unicode_ranges_and_budget_fallback_are_safe() {
         "{}\n```rust\nlet value = \"text\";\n```",
         "plain prose\n".repeat(12000)
     );
-    let spans = window.invoke_highlight_markdown(source.as_str().into(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        source.as_str().into(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     assert!(
         spans.iter().all(
             |span| span.end as usize <= source.find("let value").unwrap()
@@ -167,13 +192,18 @@ fn unchanged_code_reuses_colors_at_new_unicode_offsets() {
     let window = setup("");
     let code = "```rust\nlet value = \"text\";\n```\n";
     let initial: Vec<_> = window
-        .invoke_highlight_markdown(code.into(), window.get_theme(), false)
+        .invoke_highlight_markdown(code.into(), window.get_theme(), false, Default::default())
         .iter()
         .collect();
     let prefix = "日本語\n\n";
     let shifted = format!("{prefix}{code}");
     let shifted: Vec<_> = window
-        .invoke_highlight_markdown(shifted.as_str().into(), window.get_theme(), false)
+        .invoke_highlight_markdown(
+            shifted.as_str().into(),
+            window.get_theme(),
+            false,
+            Default::default(),
+        )
         .iter()
         .collect();
     assert_eq!(initial.len(), shifted.len());
@@ -276,7 +306,7 @@ fn emphasis_styles_the_body_glyphs_while_preserving_source() {
         let source = format!("{syntax}MMMMMM{syntax}");
         window.set_note_text(source.as_str().into());
         let styled = window.window().take_snapshot().unwrap();
-        window.on_highlight_markdown(|_, _, _| Default::default());
+        window.on_highlight_markdown(|_, _, _, _| Default::default());
         let plain = window.window().take_snapshot().unwrap();
         let scale = window.window().scale_factor();
         // Inspect the middle of the word so dimming punctuation alone cannot pass.
@@ -308,7 +338,12 @@ fn emphasis_styles_the_body_glyphs_while_preserving_source() {
 fn emphasis_punctuation_is_muted_and_struck_text_is_quiet() {
     use slint::Model;
     let window = setup("**Bold**\n~~Done~~");
-    let spans = window.invoke_highlight_markdown(window.get_note_text(), window.get_theme(), false);
+    let spans = window.invoke_highlight_markdown(
+        window.get_note_text(),
+        window.get_theme(),
+        false,
+        Default::default(),
+    );
     let foreground_at = |offset| {
         spans
             .iter()
@@ -333,7 +368,8 @@ fn tartan_preserves_native_palette_components() {
     let theme = window.get_theme();
     assert_eq!(theme.paper, slint::Color::from_rgb_u8(243, 241, 235));
     assert_eq!(theme.ink, slint::Color::from_rgb_u8(60, 40, 10));
-    let spans = window.invoke_highlight_markdown(source.into(), theme.clone(), false);
+    let spans =
+        window.invoke_highlight_markdown(source.into(), theme.clone(), false, Default::default());
     for (needle, rgb) in [
         ("First", (255, 120, 40)),
         ("Second", (200, 90, 30)),
@@ -353,7 +389,8 @@ fn tartan_preserves_native_palette_components() {
             "{needle}"
         );
     }
-    let contrast = window.invoke_highlight_markdown(source.into(), theme.clone(), true);
+    let contrast =
+        window.invoke_highlight_markdown(source.into(), theme.clone(), true, Default::default());
     assert!(contrast.iter().all(|span| span.foreground == theme.ink));
     assert_eq!(window.get_note_text(), source);
 }

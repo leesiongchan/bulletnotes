@@ -68,6 +68,7 @@ impl LocalUi {
         self.0.update_selected_status();
         self.0.render();
         self.0.refresh_remote();
+        self.0.refresh_link_pages();
         if self.0.coordinator.borrow().view() == View::Recovery
             && let Some(window) = self.0.window.upgrade()
         {

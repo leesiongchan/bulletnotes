@@ -211,6 +211,82 @@ pub fn resolve(
     Ok(Resolution::Create(link.path.clone()))
 }
 
+/// Whether following `raw` would create a page. Without a complete listing nothing
+/// counts as missing, because the page may exist remotely.
+pub fn dangles(raw: &str, pages: &[(PagePath, bool)], listed: bool) -> bool {
+    matches!(parse(raw), Ok(Some(link))
+        if matches!(resolve(&link, &link.path, pages, listed), Ok(Resolution::Create(_))))
+}
+
+/// An unfinished `[[name` ending at the caret, on the caret's line.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Completion {
+    /// Byte offset just after `[[`; a chosen name replaces `start..caret`.
+    pub start: usize,
+    /// The name typed so far.
+    pub query: String,
+}
+
+/// Characters that end a link name: brackets, alias, header, position and newline.
+const NAME_END: [char; 6] = [']', '[', '|', '#', '@', '\n'];
+
+/// The link name being typed at `caret`. A name the caret sits in that already
+/// continues to `]]`, an alias, a header or a position is a finished link and is
+/// left alone.
+pub fn completion_at(source: &str, caret: usize) -> Option<Completion> {
+    let before = source.get(..caret)?;
+    let line = &before[before.rfind('\n').map_or(0, |at| at + 1)..];
+    let start = caret - line.len() + line.rfind("[[")? + 2;
+    let query = &source[start..caret];
+    if query.contains(NAME_END) || query.trim().is_empty() {
+        return None;
+    }
+    let rest = &source[caret..];
+    if rest
+        .find(NAME_END)
+        .is_some_and(|at| matches!(rest.as_bytes()[at], b']' | b'|' | b'#' | b'@'))
+    {
+        return None;
+    }
+    Some(Completion {
+        start,
+        query: query.trim_start().to_owned(),
+    })
+}
+
+/// Page names matching `query`, best first: a name prefix, then a folder or word
+/// prefix, then any substring, each preferring shallower and shorter names.
+pub fn suggest(query: &str, pages: &[(PagePath, bool)], limit: usize) -> Vec<String> {
+    let wanted = query.to_lowercase();
+    let mut ranked: Vec<(u8, usize, &str)> = pages
+        .iter()
+        .filter(|(_, visible)| *visible)
+        .filter_map(|(path, _)| path.as_str().strip_suffix(".md"))
+        .filter_map(|name| {
+            let lower = name.to_lowercase();
+            let tier = if lower.starts_with(&wanted) {
+                0
+            } else if lower
+                .match_indices(&wanted)
+                .any(|(at, _)| lower[..at].ends_with(['/', ' ', '-', '_']))
+            {
+                1
+            } else if lower.contains(&wanted) {
+                2
+            } else {
+                return None;
+            };
+            Some((tier, name.matches('/').count(), name))
+        })
+        .collect();
+    ranked.sort_by(|a, b| (a.0, a.1, a.2.len(), a.2).cmp(&(b.0, b.1, b.2.len(), b.2)));
+    ranked
+        .into_iter()
+        .take(limit)
+        .map(|(.., name)| name.to_owned())
+        .collect()
+}
+
 fn folder(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(folder, _)| folder)
 }
@@ -404,5 +480,65 @@ mod tests {
             choices("d/x.md"),
             ranked(&["d/e/Tag.md", "a/Tag.md", "b/c/Tag.md"])
         );
+    }
+
+    #[test]
+    fn only_targets_a_complete_listing_lacks_dangle() {
+        let pages = [(path("Projects/Plan.md"), true), (path("Old.md"), false)];
+        assert!(!dangles("plan", &pages, true));
+        assert!(
+            !dangles("Old", &pages, true),
+            "an exact hidden path still opens"
+        );
+        assert!(dangles("Someday", &pages, true));
+        assert!(!dangles("Someday", &pages, false), "may exist remotely");
+        assert!(!dangles("report.pdf", &pages, true));
+        assert!(!dangles("#Heading", &pages, true));
+        assert!(!dangles("^Meta", &pages, true));
+    }
+
+    #[test]
+    fn completion_covers_an_unfinished_name_before_the_caret() {
+        let at = |source: &str| {
+            let caret = source.find('|').unwrap();
+            let source = source.replacen('|', "", 1);
+            completion_at(&source, caret).map(|c| (c.start, c.query))
+        };
+        assert_eq!(at("See [[Pro|"), Some((6, "Pro".into())));
+        assert_eq!(at("See [[Pro| and [[x]]"), Some((6, "Pro".into())));
+        assert_eq!(at("[[Pr|\nnext]]"), Some((2, "Pr".into())));
+        assert_eq!(at("[[a]] then [[b c|"), Some((13, "b c".into())));
+        assert_eq!(at("[[|"), None, "nothing typed yet");
+        assert_eq!(at("[[ |"), None);
+        assert_eq!(at("[[Pro|]]"), None, "a finished link");
+        assert_eq!(at("[[Pr|o]]"), None);
+        assert_eq!(at("[[Pr|o#Top]]"), None);
+        assert_eq!(at("[[Pr|o|label]]"), None);
+        assert_eq!(at("[[a]] tail|"), None);
+        assert_eq!(at("[[a\nb|"), None, "links stay on one line");
+        assert_eq!(at("[[é|"), Some((2, "é".into())));
+    }
+
+    #[test]
+    fn suggestions_prefer_prefixes_then_word_starts_then_substrings() {
+        let pages: Vec<_> = [
+            ("Projects/Plan.md", true),
+            ("Plan.md", true),
+            ("Work/Planning notes.md", true),
+            ("Airplane.md", true),
+            ("Hidden plan.md", false),
+            ("plan.pdf", true),
+            ("Other.md", true),
+        ]
+        .iter()
+        .map(|(p, v)| (path(p), *v))
+        .collect();
+        assert_eq!(
+            suggest("plan", &pages, 8),
+            ["Plan", "Projects/Plan", "Work/Planning notes", "Airplane"]
+        );
+        assert_eq!(suggest("PROJ", &pages, 8), ["Projects/Plan"]);
+        assert_eq!(suggest("plan", &pages, 2), ["Plan", "Projects/Plan"]);
+        assert!(suggest("zzz", &pages, 8).is_empty());
     }
 }

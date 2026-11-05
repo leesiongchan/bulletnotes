@@ -19,7 +19,13 @@ on the current task. Dragging, modifier clicks, and clicks on text or padding do
 not toggle tasks. Markdown inside code stays literal, and YAML frontmatter stays
 plain. Parsing follows CommonMark with GitHub task lists and strikethrough,
 including `__bold__` for bold text, plus SilverBullet wikilinks: `[[Page]]` and
-`[[Page|label]]` underline the page name and keep the brackets quiet.
+`[[Page|label]]` underline the page name and keep the brackets quiet. Once the
+page list has fully downloaded, a link to a page that does not exist yet is
+drawn in the quiet syntax color without an underline.
+Typing `[[` and part of a name lists matching pages under the caret: names
+that start with the text first, then names with a folder or word that does,
+then any name containing it. Up and Down choose, Return or Tab inserts the full
+page name and the closing `]]`, and Escape hides the list until the next `[[`.
 Command+Return with the caret in a wikilink opens its page. As in SilverBullet,
 an exact path wins, then a case-insensitive page name or folder suffix such as
 `[[api/Auth]]`; a match with the link's exact spelling beats one that differs

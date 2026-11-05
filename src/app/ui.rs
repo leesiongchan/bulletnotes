@@ -131,19 +131,21 @@ pub fn apply_theme(window: &AppWindow, resolved: &ResolvedTheme) {
         }
     });
     let cache = std::cell::RefCell::new(None);
-    window.on_highlight_markdown(move |source, palette, high_contrast| {
+    window.on_highlight_markdown(move |source, palette, high_contrast, missing| {
+        let missing: Vec<String> = missing.iter().map(|target| target.to_string()).collect();
         let mut cache = cache.borrow_mut();
-        if let Some((text, previous, contrast, spans)) = cache.as_ref()
+        if let Some((text, previous, contrast, absent, spans)) = cache.as_ref()
             && text == &source
             && previous == &palette
             && contrast == &high_contrast
+            && absent == &missing
         {
             return ModelRc::clone(spans);
         }
         let spans = ModelRc::from(
-            super::markdown::decorations(&source, &palette, high_contrast).as_slice(),
+            super::markdown::decorations(&source, &palette, high_contrast, &missing).as_slice(),
         );
-        *cache = Some((source, palette, high_contrast, spans.clone()));
+        *cache = Some((source, palette, high_contrast, missing, spans.clone()));
         spans
     });
     let weak = window.as_weak();

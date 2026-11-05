@@ -7,7 +7,7 @@ import "../site/assets/fonts/dm-sans.ttf";
 import { RecoveryAdapter, RecoveryPanel } from "recovery-view.slint";
 import { ConnectionPanel } from "connection-view.slint";
 import { Palette, AboutSlint } from "std-widgets.slint";
-import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiRecoveryKind, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType, UiView } from "types.slint";
+import { LinkSuggestion, LinkSuggestions, UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiRecoveryKind, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType, UiView } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
 import { LinkPicker, LinkPickerPanel } from "components/link-picker.slint";
@@ -16,7 +16,7 @@ import { PageBrowser, SearchAdapter } from "components/page-browser.slint";
 import { PaperSurface } from "components/paper-surface.slint";
 import { AppearanceAdapter, AppearancePanel } from "components/appearance-panel.slint";
 export { AppearanceAdapter, LinkPicker, RecoveryAdapter, SearchAdapter }
-export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
+export { LinkSuggestion, LinkSuggestions, UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
 
 export component AppWindow inherits Window {
     default-font-family: Typography.sans;
@@ -44,8 +44,13 @@ export component AppWindow inherits Window {
     out property <int> editor-caret: editor.selection-caret;
     pure callback mark-markdown(string, UiTheme) -> [TextInputMarker];
     private property <[TextInputMarker]> note-markers: root.mark-markdown(root.note-text,root.theme);
-    pure callback highlight-markdown(string, UiTheme, bool) -> [TextInputDecoration];
-    private property <[TextInputDecoration]> note-decorations: root.highlight-markdown(root.note-text,root.theme,root.system-high-contrast);
+    // Wikilink targets in the note that would create a page; Rust keeps it current.
+    in property <[string]> missing-links;
+    // Bumped whenever the page list behind link suggestions changes.
+    in property <int> link-pages-revision;
+    pure callback suggest-links(string, int, int) -> LinkSuggestions;
+    pure callback highlight-markdown(string, UiTheme, bool, [string]) -> [TextInputDecoration];
+    private property <[TextInputDecoration]> note-decorations: root.highlight-markdown(root.note-text,root.theme,root.system-high-contrast,root.missing-links);
     in property <string> status-text;
     in property <[CodePanel]> code-panels;
     in property <[TextInputMarker]> code-layout-markers;
@@ -263,6 +268,8 @@ export component AppWindow inherits Window {
                     edit-markdown(source,anchor,caret,command,start,end) => { root.edit-markdown(source,anchor,caret,command,start,end) }
                     edited(text) => { root.note-edited(text); }
                     follow-link(source,caret) => { root.follow-link(source,caret) }
+                    link-pages-revision: root.link-pages-revision;
+                    suggest-links(source,caret,revision) => { root.suggest-links(source,caret,revision) }
                     move-to-trash => { root.trash-current-note(); }
                     key-pressed(event) => { root.shortcut(event) }
                 }

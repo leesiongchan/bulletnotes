@@ -1,4 +1,8 @@
 export struct CodePanel { top: float, bottom: float }
+// A page name offered while typing `[[`; `caret` follows the inserted `]]`.
+export struct LinkSuggestion { name: string, replacement: string, caret: int }
+// Suggestions for the name typed after `[[` at byte `start`; `start` is -1 when none apply.
+export struct LinkSuggestions { start: int, items: [LinkSuggestion] }
 export struct UiMarkdownColors {
     heading1: color,
     heading2: color,
