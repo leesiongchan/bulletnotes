@@ -1,0 +1,75 @@
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
+
+// Pages an ambiguous wikilink could mean, best match first. Rust fills `choices`
+// and empties it again once the user picks or dismisses.
+export global LinkPicker {
+    in property <[string]> choices;
+    callback chosen(string);
+    callback dismissed();
+}
+
+export component LinkPickerPanel inherits FocusScope {
+    private property <int> count: LinkPicker.choices.length;
+    private property <int> index: 0;
+    visible: root.count > 0;
+    height: self.visible ? rows.preferred-height : 0px;
+    accessible-role: list;
+    accessible-label: "Choose the linked page";
+    changed count => {
+        root.index = 0;
+        if (root.count > 0) { root.focus(); }
+    }
+    changed has-focus => {
+        if (!self.has-focus && root.count > 0) { LinkPicker.dismissed(); }
+    }
+    key-pressed(event) => {
+        if (event.text == Key.Escape) { LinkPicker.dismissed(); return accept; }
+        if (event.text == Key.UpArrow) { root.index = max(0, root.index - 1); return accept; }
+        if (event.text == Key.DownArrow) { root.index = min(root.count - 1, root.index + 1); return accept; }
+        if (event.text == Key.Return) { LinkPicker.chosen(LinkPicker.choices[root.index]); return accept; }
+        return reject;
+    }
+    Rectangle {
+        background: Theme.palette.surface;
+        border-width: 1px;
+        border-color: Theme.palette.line;
+        border-radius: Radius.surface;
+        rows := VerticalLayout {
+            padding: Spacing.md;
+            spacing: Spacing.xs;
+            // Inset to line up with the row text below.
+            HorizontalLayout {
+                padding-left: Spacing.md;
+                Text {
+                    text: "Several pages match this link";
+                    color: Theme.palette.muted;
+                    font-size: Typography.small;
+                    accessible-role: none;
+                }
+            }
+            for path[i] in LinkPicker.choices: Rectangle {
+                height: 30px;
+                border-radius: Radius.tight;
+                background: i == root.index ? Theme.palette.selection : touch.has-hover ? Theme.palette.paper : transparent;
+                accessible-role: list-item;
+                accessible-label: path;
+                accessible-item-selectable: true;
+                accessible-item-selected: i == root.index;
+                accessible-action-default => { LinkPicker.chosen(path); }
+                Text {
+                    x: Spacing.md;
+                    width: parent.width - 2 * Spacing.md;
+                    text: path;
+                    color: Theme.palette.ink;
+                    font-size: Typography.body;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+                touch := TouchArea {
+                    clicked => { LinkPicker.chosen(path); }
+                }
+            }
+        }
+    }
+}

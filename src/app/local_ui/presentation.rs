@@ -13,8 +13,10 @@ pub(super) struct Presentation {
     pub(super) key: RefCell<Option<PageKey>>,
     pub(super) revision: Cell<Option<LocalRevision>>,
     pub(super) search: Cell<Option<u64>>,
-    /// A followed link's page and heading, revealed once that page is presented.
-    pub(super) link_target: RefCell<Option<(PageKey, String)>>,
+    /// A followed link's page and anchor, revealed once that page is presented.
+    pub(super) link_target: RefCell<Option<(PageKey, crate::domain::link::Anchor)>>,
+    /// The page and anchor of an ambiguous link while the user picks its target.
+    pub(super) link_choice: RefCell<Option<(PageKey, Option<crate::domain::link::Anchor>)>>,
 }
 impl Presentation {
     pub(super) fn reset(&self) {
@@ -22,6 +24,7 @@ impl Presentation {
         self.revision.set(None);
         self.search.set(None);
         self.link_target.borrow_mut().take();
+        self.link_choice.borrow_mut().take();
     }
 }
 
@@ -352,19 +355,26 @@ impl State {
         self.updates.send_replace(());
         presentation.success();
     }
-    /// After a followed link opens its page, put the caret on the linked heading. The
-    /// target is dropped once loading settles anywhere else, so it cannot fire later.
+    /// After a followed link opens its page, put the caret on the linked heading or
+    /// position. The target is dropped once loading settles, so it cannot fire later.
     fn reveal_link_target(&self, window: &crate::AppWindow) {
         let app = self.coordinator.borrow();
         if app.loading() {
             return;
         }
-        let Some((key, header)) = self.presentation.link_target.borrow_mut().take() else {
+        let Some((key, anchor)) = self.presentation.link_target.borrow_mut().take() else {
             return;
         };
         if app.view() == View::Note
             && let Some(editor) = app.editor().filter(|editor| editor.key() == &key)
-            && let Some(offset) = crate::app::markdown::heading_offset(editor.body(), &header)
+            && let Some(offset) = match anchor {
+                crate::domain::link::Anchor::Heading(header) => {
+                    crate::app::markdown::heading_offset(editor.body(), &header)
+                }
+                crate::domain::link::Anchor::Position(position) => {
+                    Some(position.offset_in(editor.body()))
+                }
+            }
             && let Ok(offset) = i32::try_from(offset)
         {
             window.invoke_select_find_match(offset, offset);

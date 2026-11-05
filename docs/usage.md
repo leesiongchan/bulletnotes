@@ -22,13 +22,17 @@ including `__bold__` for bold text, plus SilverBullet wikilinks: `[[Page]]` and
 `[[Page|label]]` underline the page name and keep the brackets quiet.
 Command+Return with the caret in a wikilink opens its page. As in SilverBullet,
 an exact path wins, then a case-insensitive page name or folder suffix such as
-`[[api/Auth]]`; ties go to the page nearest the current one. A target that
+`[[api/Auth]]`; a match with the link's exact spelling beats one that differs
+only in case. When several pages still match, a list offers them, nearest to the
+current page first: Up and Down choose, Return opens, Escape closes. A target that
 matches nothing becomes a new empty page at that path from the space root, but
 only after the space's page list has fully downloaded once; until then the page
 may already exist remotely. A leading `/` matches only that exact path. `[[Page#Heading]]`
 puts the caret on the first heading with exactly that text, and `[[#Heading]]`
 jumps within the current page; without a matching heading the page opens where
-you left it. `@position` suffixes open the page without jumping. Meta-page (`[[^…]]`) and document
+you left it. `[[Page@123]]` puts the caret at that character offset (counted
+from 0), and `[[Page@L12C3]]` at line 12, column 3; positions past the end
+stop at the end. Meta-page (`[[^…]]`) and document
 (`[[file.pdf]]`) links are not opened.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains

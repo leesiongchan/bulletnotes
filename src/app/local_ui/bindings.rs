@@ -1,7 +1,7 @@
 //! Slint callback registration for local editing and navigation.
 use super::State;
 use crate::{
-    AppWindow, SearchAdapter,
+    AppWindow, LinkPicker, SearchAdapter,
     app::{
         coordinator::{AppAction, LinkOutcome},
         markdown,
@@ -42,6 +42,26 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
         window.on_follow_link(move |source, caret| follow_link(&state, &source, caret));
+    }
+    {
+        let state = state.clone();
+        window.global::<LinkPicker>().on_chosen(move |path| {
+            if let Some((from, anchor)) = close_link_choices(&state)
+                && let Ok(path) = crate::domain::page::PagePath::parse(&path)
+            {
+                let target = PageKey {
+                    connection: from.connection.clone(),
+                    path,
+                };
+                open_link(&state, from, LinkOutcome::Open(target), anchor);
+            }
+        });
+    }
+    {
+        let state = state.clone();
+        window.global::<LinkPicker>().on_dismissed(move || {
+            close_link_choices(&state);
+        });
     }
     {
         let state = state.clone();
@@ -375,13 +395,13 @@ fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
     else {
         return false;
     };
-    let header = link::header(&raw).map(str::to_owned);
+    let anchor = link::anchor(&raw);
     let link = match link::parse(&raw) {
         Ok(Some(link)) => link,
         Ok(None) => {
-            // `[[#Heading]]` points into the current page.
-            if let Some(header) = header {
-                *state.presentation.link_target.borrow_mut() = Some((from, header));
+            // `[[#Heading]]` and `[[@123]]` point into the current page.
+            if let Some(anchor) = anchor {
+                *state.presentation.link_target.borrow_mut() = Some((from, anchor));
                 state.render();
             }
             return true;
@@ -409,18 +429,59 @@ fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
                 match link::resolve(&link, &from.path, &catalogue.pages, catalogue.listed) {
                     Ok(Resolution::Open(path)) => LinkOutcome::Open(key(path)),
                     Ok(Resolution::Create(path)) => LinkOutcome::Create(key(path)),
+                    Ok(Resolution::Choose(paths)) => {
+                        offer_link_choices(&task, from, anchor, paths);
+                        return;
+                    }
                     Err(error) => LinkOutcome::Refused(error.notice()),
                 }
             }
         };
-        if let (LinkOutcome::Open(target), Some(header)) = (&outcome, header) {
-            *task.presentation.link_target.borrow_mut() = Some((target.clone(), header));
-        }
-        task.dispatch(AppAction::FollowLink { from, outcome });
+        open_link(&task, from, outcome, anchor);
     })
     .is_err()
     {
         tracing::warn!("wikilink resolution could not be scheduled");
     }
     true
+}
+
+fn open_link(state: &Rc<State>, from: PageKey, outcome: LinkOutcome, anchor: Option<link::Anchor>) {
+    if let (LinkOutcome::Open(target), Some(anchor)) = (&outcome, anchor) {
+        *state.presentation.link_target.borrow_mut() = Some((target.clone(), anchor));
+    }
+    state.dispatch(AppAction::FollowLink { from, outcome });
+}
+
+/// Show the pages an ambiguous link could mean, unless the user has left its page.
+fn offer_link_choices(
+    state: &Rc<State>,
+    from: PageKey,
+    anchor: Option<link::Anchor>,
+    paths: Vec<crate::domain::page::PagePath>,
+) {
+    let current = {
+        let app = state.coordinator.borrow();
+        app.view() == View::Note
+            && !app.loading()
+            && app.editor().is_some_and(|editor| editor.key() == &from)
+    };
+    let Some(window) = state.window.upgrade().filter(|_| current) else {
+        return;
+    };
+    let choices: Vec<slint::SharedString> = paths.iter().map(|path| path.as_str().into()).collect();
+    *state.presentation.link_choice.borrow_mut() = Some((from, anchor));
+    window
+        .global::<LinkPicker>()
+        .set_choices(slint::ModelRc::from(choices.as_slice()));
+}
+
+fn close_link_choices(state: &Rc<State>) -> Option<(PageKey, Option<link::Anchor>)> {
+    if let Some(window) = state.window.upgrade() {
+        window
+            .global::<LinkPicker>()
+            .set_choices(Default::default());
+        window.invoke_focus_editor();
+    }
+    state.presentation.link_choice.borrow_mut().take()
 }

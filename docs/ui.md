@@ -48,8 +48,10 @@ selected item's sources, the merge draft and the actions the panel raises.
 and folder, selection and drag state, and the page actions.
 `AppearanceAdapter` in `ui/components/appearance-panel.slint` holds the
 appearance and general preferences and the panel's actions; the window also
-reads its font size, paper and footer preferences. `app-window.slint`
-re-exports all three, and Rust uses them through the window:
+reads its font size, paper and footer preferences. `LinkPicker` in
+`ui/components/link-picker.slint` holds the pages an ambiguous wikilink could
+mean. `app-window.slint` re-exports all four, and Rust uses them through the
+window:
 
 ```rust
 let recovery = window.global::<RecoveryAdapter>();

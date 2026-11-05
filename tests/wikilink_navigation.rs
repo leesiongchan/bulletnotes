@@ -1,9 +1,10 @@
 use bulletnotes::{
-    AppWindow,
+    AppWindow, LinkPicker,
     app::{
         appearance_ui,
         coordinator::AppAction,
         local_ui::{self, LocalUi},
+        model::View,
     },
     domain::{
         connection::{ConnectionConfig, ConnectionId},
@@ -12,14 +13,14 @@ use bulletnotes::{
     store::{StoreHandle, settings::AppSettings},
     theme::SystemAppearance,
 };
-use slint::{ComponentHandle, platform::Key, platform::WindowEvent};
+use slint::{ComponentHandle, Model, platform::Key, platform::WindowEvent};
 use std::{cell::RefCell, rc::Rc, sync::LazyLock, time::Duration};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// Both pages are taller than the window, so revealing a heading must scroll.
 static SOURCE: LazyLock<String> = LazyLock::new(|| {
     format!(
-        "# Top\nRead [[plan#Milestones]], then [[Someday]] or [[report.pdf]].\n{}Back to [[#Top]].\n",
+        "# Top\nRead [[plan#Milestones]], then [[Someday]] or [[report.pdf]].\nAlso [[plan@L62C4]] and [[Notes]].\n{}Back to [[#Top]].\n",
         "filler line\n".repeat(60)
     )
 });
@@ -43,6 +44,17 @@ async fn settle(window: &AppWindow) -> Result {
     });
     rx.await?;
     window.window().take_snapshot()?;
+    Ok(())
+}
+/// Settle until `done` holds, up to two seconds; resolution and page loads are
+/// asynchronous. The assertion that follows reports any timeout.
+async fn until(window: &AppWindow, done: impl Fn() -> bool) -> Result {
+    for _ in 0..100 {
+        if done() {
+            break;
+        }
+        settle(window).await?;
+    }
     Ok(())
 }
 fn press(window: &AppWindow, text: slint::SharedString) {
@@ -100,6 +112,7 @@ async fn check(
 
     follow_at(window, SOURCE.find("plan").unwrap() + 2).await?;
     let plan = key(connection, "Projects/Plan.md");
+    until(window, || local.current_key().as_ref() == Some(&plan)).await?;
     assert_eq!(
         local.current_key(),
         Some(plan.clone()),
@@ -117,6 +130,56 @@ async fn check(
     );
 
     open(local, &today).await?;
+    follow_at(window, SOURCE.find("@L62").unwrap()).await?;
+    until(window, || local.current_key().as_ref() == Some(&plan)).await?;
+    assert_eq!(local.current_key(), Some(plan.clone()));
+    assert_eq!(
+        window.get_editor_caret() as usize,
+        PLAN.find("Milestones").unwrap(),
+        "line 62, column 4 is the heading's first word"
+    );
+
+    // Two pages are equally good matches, so the user picks one.
+    open(local, &today).await?;
+    let notes_at = SOURCE.find("[[Notes]]").unwrap() + 3;
+    let choices = |window: &AppWindow| {
+        window
+            .global::<LinkPicker>()
+            .get_choices()
+            .iter()
+            .map(|choice| choice.to_string())
+            .collect::<Vec<_>>()
+    };
+    follow_at(window, notes_at).await?;
+    until(window, || !choices(window).is_empty()).await?;
+    assert_eq!(choices(window), ["Home/Notes.md", "Work/Notes.md"]);
+    assert_eq!(local.current_key(), Some(today.clone()));
+    press(window, Key::Escape.into());
+    settle(window).await?;
+    assert!(choices(window).is_empty(), "Escape dismisses the choices");
+    assert_eq!(local.current_key(), Some(today.clone()));
+    // Leaving the page drops its choices; they must not reappear on return.
+    follow_at(window, notes_at).await?;
+    until(window, || !choices(window).is_empty()).await?;
+    local.dispatch(AppAction::Navigate(View::AllPages));
+    settle(window).await?;
+    local.dispatch(AppAction::Navigate(View::Note));
+    settle(window).await?;
+    assert!(
+        choices(window).is_empty(),
+        "leaving the note closes the choices"
+    );
+    open(local, &today).await?;
+    follow_at(window, notes_at).await?;
+    until(window, || !choices(window).is_empty()).await?;
+    press(window, Key::DownArrow.into());
+    press(window, Key::Return.into());
+    let work = key(connection, "Work/Notes.md");
+    until(window, || local.current_key().as_ref() == Some(&work)).await?;
+    assert!(choices(window).is_empty());
+    assert_eq!(local.current_key(), Some(work));
+
+    open(local, &today).await?;
     follow_at(window, SOURCE.find("[[#Top]]").unwrap() + 3).await?;
     assert_eq!(local.current_key(), Some(today.clone()));
     assert_eq!(
@@ -131,6 +194,10 @@ async fn check(
     );
 
     follow_at(window, SOURCE.find("report.pdf").unwrap()).await?;
+    until(window, || {
+        window.get_status_text().starts_with("Only Markdown")
+    })
+    .await?;
     assert_eq!(local.current_key(), Some(today.clone()));
     assert_eq!(
         window.get_status_text(),
@@ -139,6 +206,7 @@ async fn check(
 
     let someday_at = SOURCE.find("[[Someday]]").unwrap();
     follow_at(window, someday_at).await?;
+    until(window, || window.get_status_text().contains("page list")).await?;
     assert_eq!(
         local.current_key(),
         Some(today.clone()),
@@ -158,6 +226,7 @@ async fn check(
         .await?;
     follow_at(window, someday_at).await?;
     let someday = key(connection, "Someday.md");
+    until(window, || local.current_key().as_ref() == Some(&someday)).await?;
     assert_eq!(local.current_key(), Some(someday.clone()));
     assert_eq!(window.get_note_text(), "");
     local.flush().await?;
@@ -189,6 +258,8 @@ fn ctrl_enter_follows_the_wikilink_at_the_caret() -> Result {
         for (path, body) in [
             ("Journal/today.md", SOURCE.as_str()),
             ("Projects/Plan.md", PLAN.as_str()),
+            ("Home/Notes.md", "# Home notes"),
+            ("Work/Notes.md", "# Work notes"),
         ] {
             let page = key(&connection, path);
             store.create_draft(page.clone()).await?;

@@ -10,11 +10,12 @@ import { Palette, AboutSlint } from "std-widgets.slint";
 import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiRecoveryKind, SettingsCategory, UiAppearanceMode, UiPaperIntensity, UiPaperStyle, UiPaperType, UiView } from "types.slint";
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
+import { LinkPicker, LinkPickerPanel } from "components/link-picker.slint";
 import { NoteEditor } from "components/note-editor.slint";
 import { PageBrowser, SearchAdapter } from "components/page-browser.slint";
 import { PaperSurface } from "components/paper-surface.slint";
 import { AppearanceAdapter, AppearancePanel } from "components/appearance-panel.slint";
-export { AppearanceAdapter, RecoveryAdapter, SearchAdapter }
+export { AppearanceAdapter, LinkPicker, RecoveryAdapter, SearchAdapter }
 export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
 
 export component AppWindow inherits Window {
@@ -273,6 +274,11 @@ export component AppWindow inherits Window {
                     query-changed(query) => { root.find-query-changed(query); }
                     step(direction) => { root.find-step(direction); }
                     close => { root.close-find(); }
+                }
+
+                LinkPickerPanel {
+                    x: Spacing.page; y: root.find-visible ? 92px : 48px;
+                    width: min(parent.width - 2 * Spacing.page, 480px);
                 }
 
             }

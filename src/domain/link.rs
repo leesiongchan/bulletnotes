@@ -2,8 +2,8 @@
 //!
 //! Resolution follows SilverBullet's documented order
 //! (<https://docs.silverbullet.md/Link>, accessed 2026-11-05; the page is unversioned):
-//! an exact path wins, then a case-insensitive name or folder-suffix lookup, and a
-//! link that matches nothing names a new page at the space root.
+//! an exact path wins, then a case-insensitive name or folder-suffix lookup (with a
+//! choice when several pages fit), and a link that matches nothing names a new page.
 use super::page::PagePath;
 use std::cmp::Reverse;
 
@@ -19,6 +19,50 @@ pub struct LinkRef {
 pub enum Resolution {
     Open(PagePath),
     Create(PagePath),
+    /// Several pages match equally well, best-ranked first; the user picks one.
+    Choose(Vec<PagePath>),
+}
+
+/// Where in its page a link points: `Page#Heading`, `Page@123` or `Page@L12C3`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Anchor {
+    Heading(String),
+    Position(Position),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Position {
+    /// 0-based character index.
+    Offset(usize),
+    /// 1-based line and column, counted in characters.
+    Line { line: usize, column: usize },
+}
+impl Position {
+    /// Byte offset of this position in `body`, clamped to the end of its line or body.
+    pub fn offset_in(self, body: &str) -> usize {
+        match self {
+            Self::Offset(index) => body
+                .char_indices()
+                .nth(index)
+                .map_or(body.len(), |(offset, _)| offset),
+            Self::Line { line, column } => {
+                let mut start = 0;
+                for _ in 1..line.max(1) {
+                    match body[start..].find('\n') {
+                        Some(end) => start += end + 1,
+                        None => return body.len(),
+                    }
+                }
+                let text = body[start..].split('\n').next().unwrap_or("");
+                let text = text.strip_suffix('\r').unwrap_or(text);
+                start
+                    + text
+                        .char_indices()
+                        .nth(column.saturating_sub(1))
+                        .map_or(text.len(), |(offset, _)| offset)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,7 +94,7 @@ pub fn parse(raw: &str) -> Result<Option<LinkRef>, LinkError> {
     // A header may itself contain `#`, so the first one ends the page name.
     let core = raw.split_once('#').map_or(raw, |(core, _)| core);
     let core = match core.rsplit_once('@') {
-        Some((page, position)) if is_position(position) => page,
+        Some((page, position)) if parse_position(position).is_some() => page,
         _ => core,
     }
     .trim();
@@ -74,28 +118,33 @@ pub fn parse(raw: &str) -> Result<Option<LinkRef>, LinkError> {
     }))
 }
 
-/// The header a link points into, from `Page#Header` or `#Header`. A header may itself
-/// contain `#`; position suffixes (`@…`) carry no header.
-pub fn header(raw: &str) -> Option<&str> {
+/// Where in its page a link points, if anywhere. A header may itself contain `#` or `@`.
+pub fn anchor(raw: &str) -> Option<Anchor> {
     let raw = raw.trim();
-    let (_, header) = raw.split_once('#')?;
-    let header = header.trim();
-    (!header.is_empty()).then_some(header)
+    if let Some((_, header)) = raw.split_once('#') {
+        let header = header.trim();
+        return (!header.is_empty()).then(|| Anchor::Heading(header.to_owned()));
+    }
+    let (_, position) = raw.rsplit_once('@')?;
+    parse_position(position).map(Anchor::Position)
 }
 
-/// `@123` (character offset) or `@L12` / `@L12C3` (line and column), in either case.
-fn is_position(suffix: &str) -> bool {
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    if digits(suffix) {
-        return true;
-    }
-    let Some(line) = suffix.strip_prefix(['L', 'l']) else {
-        return false;
+/// `123` (character offset) or `L12` / `L12C3` (line and column), in either case.
+fn parse_position(suffix: &str) -> Option<Position> {
+    let number = |s: &str| {
+        (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse().ok())
+            .flatten()
     };
-    match line.split_once(['C', 'c']) {
-        Some((line, column)) => digits(line) && digits(column),
-        None => digits(line),
+    if let Some(index) = number(suffix) {
+        return Some(Position::Offset(index));
     }
+    let line = suffix.strip_prefix(['L', 'l'])?;
+    let (line, column) = match line.split_once(['C', 'c']) {
+        Some((line, column)) => (number(line)?, number(column)?),
+        None => (number(line)?, 1),
+    };
+    Some(Position::Line { line, column })
 }
 
 /// Resolve `link`, written on `source`, against `(path, visible)` catalogue rows.
@@ -104,8 +153,8 @@ fn is_position(suffix: &str) -> bool {
 ///
 /// Exact paths match any row, including trashed or remotely deleted pages, so those keep
 /// their existing "unavailable" handling instead of being shadowed by a new page. Name
-/// lookup only considers visible pages. Where SilverBullet asks the user to pick between
-/// equally good candidates, this picks its first-ranked candidate.
+/// lookup only considers visible pages. Candidates spelled exactly like the link win; if
+/// several remain, they are returned ranked for the user to choose, as SilverBullet does.
 pub fn resolve(
     link: &LinkRef,
     source: &PagePath,
@@ -131,18 +180,26 @@ pub fn resolve(
             .collect();
         let spelled = candidates.iter().any(|(_, tail)| *tail == link.name);
         let source_folder = folder(source.as_str());
-        if let Some((best, _)) = candidates
+        let mut pool: Vec<&PagePath> = candidates
             .into_iter()
             .filter(|(_, tail)| !spelled || *tail == link.name)
-            .min_by_key(|(path, _)| {
-                (
-                    Reverse(shared_depth(folder(path.as_str()), source_folder)),
-                    path.as_str().matches('/').count(),
-                    path.as_str(),
-                )
-            })
-        {
-            return Ok(Resolution::Open(best.clone()));
+            .map(|(path, _)| path)
+            .collect();
+        pool.sort_by_key(|path| {
+            (
+                Reverse(shared_depth(folder(path.as_str()), source_folder)),
+                path.as_str().matches('/').count(),
+                path.as_str(),
+            )
+        });
+        match pool.as_slice() {
+            [] => {}
+            [only] => return Ok(Resolution::Open((*only).clone())),
+            ranked => {
+                return Ok(Resolution::Choose(
+                    ranked.iter().map(|path| (*path).clone()).collect(),
+                ));
+            }
         }
     }
     if looks_like_document(&link.name) {
@@ -209,13 +266,45 @@ mod tests {
     }
 
     #[test]
-    fn headers_are_taken_after_the_first_hash() {
-        assert_eq!(header("Plan#Goals"), Some("Goals"));
-        assert_eq!(header(" #Intro "), Some("Intro"));
-        assert_eq!(header("Plan#C# notes"), Some("C# notes"));
-        assert_eq!(header("Plan"), None);
-        assert_eq!(header("Plan#"), None);
-        assert_eq!(header("CHANGELOG@L12"), None);
+    fn anchors_name_a_heading_or_a_position() {
+        let heading = |text: &str| Some(Anchor::Heading(text.into()));
+        assert_eq!(anchor("Plan#Goals"), heading("Goals"));
+        assert_eq!(anchor(" #Intro "), heading("Intro"));
+        assert_eq!(anchor("Plan#C# notes @ 9"), heading("C# notes @ 9"));
+        assert_eq!(anchor("Plan"), None);
+        assert_eq!(anchor("Plan#"), None);
+        assert_eq!(anchor("me@example"), None);
+        assert_eq!(
+            anchor("CHANGELOG@123"),
+            Some(Anchor::Position(Position::Offset(123)))
+        );
+        assert_eq!(
+            anchor("CHANGELOG@l12C42"),
+            Some(Anchor::Position(Position::Line {
+                line: 12,
+                column: 42
+            }))
+        );
+        assert_eq!(
+            anchor("@L3"),
+            Some(Anchor::Position(Position::Line { line: 3, column: 1 }))
+        );
+    }
+
+    #[test]
+    fn positions_map_to_byte_offsets_and_clamp() {
+        let body = "a😀b\r\nsecond line\nthird";
+        assert_eq!(Position::Offset(0).offset_in(body), 0);
+        assert_eq!(Position::Offset(2).offset_in(body), 5, "after the emoji");
+        assert_eq!(Position::Offset(999).offset_in(body), body.len());
+        let line = |line, column| Position::Line { line, column }.offset_in(body);
+        assert_eq!(line(1, 1), 0);
+        assert_eq!(line(1, 99), 6, "clamped before CRLF");
+        assert_eq!(line(2, 1), body.find("second").unwrap());
+        assert_eq!(line(2, 8), body.find("line").unwrap());
+        assert_eq!(line(3, 3), body.find("ird").unwrap());
+        assert_eq!(line(9, 1), body.len());
+        assert_eq!(line(0, 0), 0);
     }
 
     #[test]
@@ -286,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_names_prefer_spelling_then_proximity_then_depth() {
+    fn exact_spelling_settles_a_name_and_remaining_ties_are_ranked_choices() {
         let pages = [
             ("a/Tag.md", true),
             ("b/tag.md", true),
@@ -297,17 +386,23 @@ mod tests {
             open("tag", "z.md", &pages),
             Ok(Resolution::Open(path("b/tag.md")))
         );
+        let choices = |source| match open("Tag", source, &pages) {
+            Ok(Resolution::Choose(paths)) => paths,
+            other => panic!("expected choices, got {other:?}"),
+        };
+        let ranked = |paths: &[&str]| paths.iter().map(|p| path(p)).collect::<Vec<_>>();
+        // Nearest shared folder first, then the shallowest path, then alphabetical.
         assert_eq!(
-            open("Tag", "b/c/x.md", &pages),
-            Ok(Resolution::Open(path("b/c/Tag.md")))
+            choices("b/c/x.md"),
+            ranked(&["b/c/Tag.md", "a/Tag.md", "d/e/Tag.md"])
         );
         assert_eq!(
-            open("Tag", "z.md", &pages),
-            Ok(Resolution::Open(path("a/Tag.md")))
+            choices("z.md"),
+            ranked(&["a/Tag.md", "b/c/Tag.md", "d/e/Tag.md"])
         );
         assert_eq!(
-            open("Tag", "d/x.md", &pages),
-            Ok(Resolution::Open(path("d/e/Tag.md")))
+            choices("d/x.md"),
+            ranked(&["d/e/Tag.md", "a/Tag.md", "b/c/Tag.md"])
         );
     }
 }
