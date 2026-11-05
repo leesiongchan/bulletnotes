@@ -1,6 +1,7 @@
 //! Revision-checked remote refresh and synchronization presentation.
 use super::{LocalUi, State};
 use crate::{
+    RecoveryAdapter,
     app::{
         coordinator::{AppAction, AppEvent},
         editor::EditorSession,
@@ -10,6 +11,7 @@ use crate::{
     store::PageSyncFacts,
     sync::worker::{SyncHandle, SyncSnapshot},
 };
+use slint::ComponentHandle;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -69,7 +71,7 @@ impl LocalUi {
         if self.0.coordinator.borrow().view() == View::Recovery
             && let Some(window) = self.0.window.upgrade()
         {
-            window.invoke_refresh_recovery();
+            window.global::<RecoveryAdapter>().invoke_refresh();
         }
         if self.0.coordinator.borrow().view() == View::AllPages
             && !self.0.sync.search_timer.running()

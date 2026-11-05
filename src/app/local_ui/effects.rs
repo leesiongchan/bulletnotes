@@ -1,6 +1,7 @@
 //! Bounded ordered writes, latest-request reads and effect delivery.
 use super::{LocalUiError, State, metadata::MetadataJournal};
 use crate::{
+    RecoveryAdapter,
     app::coordinator::{AppAction, AppEffect, AppEvent, SearchRequest},
     domain::{error::StoreError, page::*},
     store::StoreHandle,
@@ -107,7 +108,7 @@ impl State {
                 AppEffect::RecoveryCancelled { connection } => {
                     let current = connection == *self.coordinator.borrow().connection();
                     if current && let Some(window) = self.window.upgrade() {
-                        window.invoke_recovery_completed(
+                        window.global::<RecoveryAdapter>().invoke_completed(
                             false,
                             "Recovery action cancelled. Your saved versions are still available."
                                 .into(),

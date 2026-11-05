@@ -14,7 +14,7 @@ use super::{
     lifecycle::{CloseIntent, Lifecycle},
 };
 use crate::{
-    AppWindow,
+    AppWindow, RecoveryAdapter,
     domain::{connection::ConnectionId, page::*},
     store::StoreHandle,
 };
@@ -252,7 +252,9 @@ impl State {
             && let Some(window) = self.window.upgrade()
         {
             self.sync.facts.borrow_mut().take();
-            window.invoke_recovery_completed(success, message.into());
+            window
+                .global::<RecoveryAdapter>()
+                .invoke_completed(success, message.into());
             if let Some(sync) = self.sync.handle.borrow().as_ref() {
                 sync.refresh();
             }

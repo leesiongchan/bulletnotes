@@ -1,9 +1,11 @@
 //! Durable connection replacement, close admission, barriers and shutdown.
 use super::{LocalUi, LocalUiError, State};
 use crate::{
+    RecoveryAdapter,
     app::{coordinator::AppAction, lifecycle::CloseIntent},
     domain::{connection::ConnectionId, error::StoreError, page::*, status::LocalSaveState},
 };
+use slint::ComponentHandle;
 use std::rc::Rc;
 
 impl LocalUi {
@@ -12,7 +14,7 @@ impl LocalUi {
             .0
             .window
             .upgrade()
-            .is_some_and(|window| window.get_recovery_busy())
+            .is_some_and(|window| window.global::<RecoveryAdapter>().get_busy())
             || !self.0.lifecycle.begin_connection()
         {
             return Err(LocalUiError::SaveFailed);
@@ -95,7 +97,7 @@ impl LocalUi {
             .0
             .window
             .upgrade()
-            .is_some_and(|window| window.get_recovery_busy())
+            .is_some_and(|window| window.global::<RecoveryAdapter>().get_busy())
             && self.0.lifecycle.prepare_close(intent);
         if admitted {
             self.0.render();

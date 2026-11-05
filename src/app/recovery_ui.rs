@@ -1,7 +1,7 @@
 //! Main-thread review state. Metadata lists load without fetching every saved body.
 use super::{coordinator::AppAction, local_ui::LocalUi, model::View};
 use crate::{
-    AppWindow, PageRow,
+    AppWindow, PageRow, RecoveryAdapter,
     domain::{error::StoreError, page::*},
     store::StoreHandle,
 };
@@ -49,7 +49,7 @@ impl RecoveryUi {
                 .0
                 .window
                 .upgrade()
-                .is_none_or(|window| !window.get_recovery_busy())
+                .is_none_or(|window| !window.global::<RecoveryAdapter>().get_busy())
             {
                 return Ok(());
             }
@@ -68,7 +68,7 @@ fn item_key(item: &RecoveryItem) -> &PageKey {
     }
 }
 fn kind(window: &AppWindow) -> RecoveryKind {
-    window.get_recovery_section().into()
+    window.global::<RecoveryAdapter>().get_section().into()
 }
 fn item_id(item: &RecoveryItem) -> uuid::Uuid {
     match item {
@@ -133,7 +133,7 @@ impl State {
     fn present_admission(&self) {
         if let Some(window) = self.window.upgrade() {
             let closed=self.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if self.draft_closed(&record.key,record.id)));
-            window.set_recovery_draft_closed(closed);
+            window.global::<RecoveryAdapter>().set_draft_closed(closed);
         }
     }
     fn edit_draft(self: &Rc<Self>, key: PageKey, body: String) {
@@ -188,7 +188,9 @@ impl State {
     }
     fn message(&self, message: &str) {
         if let Some(window) = self.window.upgrade() {
-            window.set_recovery_message(message.into());
+            window
+                .global::<RecoveryAdapter>()
+                .set_message(message.into());
         }
     }
     fn refresh(self: &Rc<Self>) {
@@ -203,15 +205,16 @@ impl State {
         if slint::spawn_local(async move {
             let result=store.recovery_index(&connection).await;let Some(state)=weak.upgrade()else{return;};state.loading.set(false);
             if connection==state.local.connection_id() && let Some(window)=state.window.upgrade(){
+                let recovery=window.global::<RecoveryAdapter>();
                 match result {
                     Ok(rows)=>{
                         let visible:Vec<_>=rows.iter().filter(|row|row.kind==kind(&window)).collect();
                         let model=visible.iter().map(|row|PageRow{key:row.id.to_string().into(),title:format!("{} · {}",row.label,row.key.path.as_str()).into(),path:row.key.path.as_str().into(),excerpt:Default::default(),availability:Default::default(),modified_label:Default::default(),path_highlights:Default::default(),excerpt_highlights:Default::default(),..Default::default()}).collect::<Vec<_>>();
-                        window.set_recovery_items(ModelRc::new(VecModel::from(model)));
+                        recovery.set_items(ModelRc::new(VecModel::from(model)));
                         if let Some(selected)=state.selected.borrow().as_ref(){
-                            if item_key(selected).connection!=connection{window.set_recovery_selected(false);}
+                            if item_key(selected).connection!=connection{recovery.set_selected(false);}
                             else if !visible.iter().any(|row|row.id==item_id(selected)){
-                                window.set_recovery_stale(true);state.message("Changes arrived during review. Reload to review them; your merged draft is kept.");
+                                recovery.set_stale(true);state.message("Changes arrived during review. Reload to review them; your merged draft is kept.");
                             }
                         }
                         let first=visible.first().map(|row|row.id);state.rows.replace(rows);
@@ -236,7 +239,7 @@ impl State {
         }
         self.epoch.set(self.epoch.get().wrapping_add(1));
         let epoch = self.epoch.get();
-        window.set_recovery_selected(false);
+        window.global::<RecoveryAdapter>().set_selected(false);
         let store = self.store.clone();
         let weak = Rc::downgrade(self);
         if slint::spawn_local(async move {
@@ -246,25 +249,26 @@ impl State {
             let saved_draft=match saved_draft{Ok(draft)=>draft,Err(_)=>{state.message("Saved merged draft could not be loaded. Try again before editing it.");return;}};
             if state.epoch.get()!=epoch||state.local.connection_id()!=connection{return;}
             let Some(window)=state.window.upgrade()else{return;};
+            let recovery=window.global::<RecoveryAdapter>();
             match result {
                 Ok(item)=>{
-                    window.set_recovery_selected_id(id.to_string().into());window.set_recovery_path(item_key(&item).path.as_str().into());
-                    window.set_recovery_destination(item_key(&item).path.as_str().into());window.set_recovery_stale(false);
-                    window.set_recovery_remote("".into());window.set_recovery_base("".into());window.set_recovery_has_base(false);window.set_recovery_remote_deleted(false);window.set_recovery_writable(false);
+                    recovery.set_selected_id(id.to_string().into());recovery.set_path(item_key(&item).path.as_str().into());
+                    recovery.set_destination(item_key(&item).path.as_str().into());recovery.set_stale(false);
+                    recovery.set_remote_text("".into());recovery.set_base_text("".into());recovery.set_has_base(false);recovery.set_remote_deleted(false);recovery.set_writable(false);
                     match &item {
                         RecoveryItem::Conflict(record)=>{
-                            window.set_recovery_local(record.local.body.as_str().into());
-                            let draft=state.drafts.borrow().get(&record.key).cloned().or(saved_draft).unwrap_or_else(||record.local.body.clone());window.set_recovery_merge(draft.into());
-                            if let Some(base)=&record.base{window.set_recovery_base(base.body.as_str().into());window.set_recovery_has_base(true);}
-                            match &record.remote {RemoteRead::Missing(_)=>{window.set_recovery_remote_deleted(true);window.set_recovery_writable(true);},RemoteRead::Present(file)=>{window.set_recovery_remote(file.body.as_str().into());window.set_recovery_writable(file.permission==Permission::ReadWrite&&file.revision.is_some());}}
+                            recovery.set_local_text(record.local.body.as_str().into());
+                            let draft=state.drafts.borrow().get(&record.key).cloned().or(saved_draft).unwrap_or_else(||record.local.body.clone());recovery.set_merge_text(draft.into());
+                            if let Some(base)=&record.base{recovery.set_base_text(base.body.as_str().into());recovery.set_has_base(true);}
+                            match &record.remote {RemoteRead::Missing(_)=>{recovery.set_remote_deleted(true);recovery.set_writable(true);},RemoteRead::Present(file)=>{recovery.set_remote_text(file.body.as_str().into());recovery.set_writable(file.permission==Permission::ReadWrite&&file.revision.is_some());}}
                             state.message("Review both versions. Resolved versions remain in Kept versions.");
                         },
-                        RecoveryItem::Trash(record)=>{window.set_recovery_local(record.page.body.as_str().into());state.message("Restoration creates a page without replacing an existing path. The Trash copy remains until you delete it.");},
-                        RecoveryItem::Copy(record)=>{window.set_recovery_local(record.page.body.as_str().into());state.message("This version is retained locally. Choose an unused path to restore it.");},
+                        RecoveryItem::Trash(record)=>{recovery.set_local_text(record.page.body.as_str().into());state.message("Restoration creates a page without replacing an existing path. The Trash copy remains until you delete it.");},
+                        RecoveryItem::Copy(record)=>{recovery.set_local_text(record.page.body.as_str().into());state.message("This version is retained locally. Choose an unused path to restore it.");},
                     }
-                    state.selected.replace(Some(item));state.present_admission();window.set_recovery_selected(true);
+                    state.selected.replace(Some(item));state.present_admission();recovery.set_selected(true);
                 },
-                Err(_)=>{window.set_recovery_stale(true);state.message("This review changed. Refresh and select its current version.");state.schedule();}
+                Err(_)=>{recovery.set_stale(true);state.message("This review changed. Refresh and select its current version.");state.schedule();}
             }
         }).is_err(){self.message("Review could not load. Try again.");}
     }
@@ -272,11 +276,11 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        if window.get_recovery_busy() || window.get_lifecycle_pending() {
+        if window.global::<RecoveryAdapter>().get_busy() || window.get_lifecycle_pending() {
             return;
         }
         if self.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if self.draft_closed(&record.key,record.id))) {return;}
-        window.set_recovery_busy(true);
+        window.global::<RecoveryAdapter>().set_busy(true);
         self.message("Saving recovery action locally…");
         let weak = Rc::downgrade(self);
         let local = self.local.clone();
@@ -295,7 +299,7 @@ impl State {
             };
             if result.is_err() || connection != local.connection_id() {
                 if let Some(window) = state.window.upgrade() {
-                    window.set_recovery_busy(false);
+                    window.global::<RecoveryAdapter>().set_busy(false);
                 }
                 state.draft_updates.send_replace(());
                 state.message(
@@ -304,14 +308,14 @@ impl State {
                 return;
             }
             if state.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if state.draft_closed(&record.key,record.id))) {
-                if let Some(window)=state.window.upgrade() {window.set_recovery_busy(false);}
+                if let Some(window)=state.window.upgrade() {window.global::<RecoveryAdapter>().set_busy(false);}
                 state.draft_updates.send_replace(());return;
             }
             local.dispatch(action);
         })
         .is_err()
         {
-            window.set_recovery_busy(false);
+            window.global::<RecoveryAdapter>().set_busy(false);
             self.message("Recovery action could not start. Try again.");
         }
     }
@@ -366,8 +370,8 @@ pub fn bind(
         window.on_show_recovery(move || {
             state.selected.borrow_mut().take();
             if let Some(window) = state.window.upgrade() {
-                window.set_recovery_selected(false);
-                window.set_recovery_draft_closed(false);
+                window.global::<RecoveryAdapter>().set_selected(false);
+                window.global::<RecoveryAdapter>().set_draft_closed(false);
             }
             state.local.dispatch(AppAction::Navigate(View::Recovery));
             state.schedule();
@@ -375,23 +379,27 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_refresh_recovery(move || state.schedule());
+        window
+            .global::<RecoveryAdapter>()
+            .on_refresh(move || state.schedule());
     }
     {
         let state = state.clone();
-        window.on_recovery_section_changed(move || {
-            state.epoch.set(state.epoch.get().wrapping_add(1));
-            state.selected.borrow_mut().take();
-            if let Some(window) = state.window.upgrade() {
-                window.set_recovery_selected(false);
-                window.set_recovery_message("".into());
-            }
-            state.schedule();
-        });
+        window
+            .global::<RecoveryAdapter>()
+            .on_section_changed(move || {
+                state.epoch.set(state.epoch.get().wrapping_add(1));
+                state.selected.borrow_mut().take();
+                if let Some(window) = state.window.upgrade() {
+                    window.global::<RecoveryAdapter>().set_selected(false);
+                    window.global::<RecoveryAdapter>().set_message("".into());
+                }
+                state.schedule();
+            });
     }
     {
         let state = state.clone();
-        window.on_recovery_select(move |id| {
+        window.global::<RecoveryAdapter>().on_select(move |id| {
             if let Ok(id) = uuid::Uuid::parse_str(&id) {
                 state.select(id);
             }
@@ -399,25 +407,35 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_recovery_merge_edited(move || {
+        window.global::<RecoveryAdapter>().on_merge_edited(move || {
             if let (Some(RecoveryItem::Conflict(record)), Some(window)) =
                 (state.selected.borrow().as_ref(), state.window.upgrade())
             {
-                state.edit_draft(record.key.clone(), window.get_recovery_merge().to_string());
+                state.edit_draft(
+                    record.key.clone(),
+                    window
+                        .global::<RecoveryAdapter>()
+                        .get_merge_text()
+                        .to_string(),
+                );
             }
         });
     }
     {
         let state = state.clone();
-        window.on_recovery_reload(move || state.reload());
+        window
+            .global::<RecoveryAdapter>()
+            .on_reload(move || state.reload());
     }
     {
         let state = state.clone();
-        window.on_recovery_apply(move |choice| {
+        window.global::<RecoveryAdapter>().on_apply(move |choice| {
             let Some(window) = state.window.upgrade() else {
                 return;
             };
-            if window.get_recovery_stale() || window.get_recovery_draft_closed() {
+            if window.global::<RecoveryAdapter>().get_stale()
+                || window.global::<RecoveryAdapter>().get_draft_closed()
+            {
                 return;
             }
             let Some(RecoveryItem::Conflict(record)) = state.selected.borrow().as_ref().cloned()
@@ -427,7 +445,12 @@ pub fn bind(
             let choice = match choice.as_str() {
                 "remote" => ResolutionChoice::AcceptRemote,
                 "local" => ResolutionChoice::KeepLocal,
-                "merge" => ResolutionChoice::Merge(window.get_recovery_merge().to_string()),
+                "merge" => ResolutionChoice::Merge(
+                    window
+                        .global::<RecoveryAdapter>()
+                        .get_merge_text()
+                        .to_string(),
+                ),
                 _ => return,
             };
             state.begin(AppAction::ResolveConflict(ConflictResolution {
@@ -439,11 +462,11 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_recovery_restore(move || {
+        window.global::<RecoveryAdapter>().on_restore(move || {
             let Some(window) = state.window.upgrade() else {
                 return;
             };
-            let raw = window.get_recovery_destination();
+            let raw = window.global::<RecoveryAdapter>().get_destination();
             let destination = if raw.is_empty() {
                 None
             } else {
@@ -469,7 +492,7 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_recovery_purge(move || {
+        window.global::<RecoveryAdapter>().on_purge(move || {
             let id = match state.selected.borrow().as_ref() {
                 Some(RecoveryItem::Trash(record)) => record.id,
                 _ => return,
@@ -479,28 +502,30 @@ pub fn bind(
     }
     {
         let state = state.clone();
-        window.on_recovery_completed(move |success, message| {
-            if let Some(window) = state.window.upgrade() {
-                window.set_recovery_busy(false);
-            }
-            state.message(&message);
-            if success {
-                if let Some(selected) = state.selected.borrow_mut().take() {
-                    state.drafts.borrow_mut().remove(item_key(&selected));
-                    state
-                        .pending_drafts
-                        .borrow_mut()
-                        .remove(item_key(&selected));
-                }
+        window
+            .global::<RecoveryAdapter>()
+            .on_completed(move |success, message| {
                 if let Some(window) = state.window.upgrade() {
-                    window.set_recovery_selected(false);
+                    window.global::<RecoveryAdapter>().set_busy(false);
                 }
-            } else if let Some(window) = state.window.upgrade() {
-                window.set_recovery_stale(true);
-            }
-            state.draft_updates.send_replace(());
-            state.schedule();
-        });
+                state.message(&message);
+                if success {
+                    if let Some(selected) = state.selected.borrow_mut().take() {
+                        state.drafts.borrow_mut().remove(item_key(&selected));
+                        state
+                            .pending_drafts
+                            .borrow_mut()
+                            .remove(item_key(&selected));
+                    }
+                    if let Some(window) = state.window.upgrade() {
+                        window.global::<RecoveryAdapter>().set_selected(false);
+                    }
+                } else if let Some(window) = state.window.upgrade() {
+                    window.global::<RecoveryAdapter>().set_stale(true);
+                }
+                state.draft_updates.send_replace(());
+                state.schedule();
+            });
     }
     {
         let state = state.clone();
@@ -521,7 +546,9 @@ pub fn bind(
                 {
                     local.dispatch(AppAction::Navigate(View::Recovery));
                     if let Some(window) = state.window.upgrade() {
-                        window.set_recovery_section(crate::UiRecoveryKind::Trash);
+                        window
+                            .global::<RecoveryAdapter>()
+                            .set_section(crate::UiRecoveryKind::Trash);
                     }
                     state.selected.borrow_mut().take();
                     state.begin(AppAction::MoveToTrash(key, revision));
@@ -554,7 +581,7 @@ impl State {
                         reply,
                     } => {
                         let manual = state.window.upgrade().is_none_or(|window| {
-                            window.get_recovery_busy()
+                            window.global::<RecoveryAdapter>().get_busy()
                                 && state
                                     .selected
                                     .borrow()
@@ -599,7 +626,7 @@ impl State {
                             // The lease drained the complete accepted generation for this key.
                             state.pending_drafts.borrow_mut().remove(&key);
                             if state.selected.borrow().as_ref().is_some_and(|item|matches!(item,RecoveryItem::Conflict(record) if record.key==key && record.id==conflict_id)) {
-                                if let Some(window)=state.window.upgrade() {window.set_recovery_stale(true);}
+                                if let Some(window)=state.window.upgrade() {window.global::<RecoveryAdapter>().set_stale(true);}
                                 state.message("Changes reconciled automatically. Your draft remains in Kept versions.");
                             }
                         }

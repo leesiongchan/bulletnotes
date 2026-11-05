@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, UiView, app::ui::present_settings, store::settings::AppSettings,
+    AppWindow, RecoveryAdapter, UiView, app::ui::present_settings, store::settings::AppSettings,
     theme::SystemAppearance,
 };
 use i_slint_core::{
@@ -123,7 +123,7 @@ fn readonly_and_composition_do_not_edit() {
     let window = setup("- [ ] one");
     for barrier in 0..3 {
         window.set_note_read_only(barrier == 0);
-        window.set_recovery_busy(barrier == 1);
+        window.global::<RecoveryAdapter>().set_busy(barrier == 1);
         window.set_lifecycle_pending(barrier == 2);
         shortcut(&window, &[Key::Control], "b".into());
         shortcut(&window, &[Key::Control, Key::Shift], "k".into());
