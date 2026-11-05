@@ -13,10 +13,22 @@ use bulletnotes::{
     theme::SystemAppearance,
 };
 use slint::{ComponentHandle, platform::Key, platform::WindowEvent};
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::LazyLock, time::Duration};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
-const SOURCE: &str = "Read [[plan]], then [[Someday]] or [[report.pdf]].";
+/// Both pages are taller than the window, so revealing a heading must scroll.
+static SOURCE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "# Top\nRead [[plan#Milestones]], then [[Someday]] or [[report.pdf]].\n{}Back to [[#Top]].\n",
+        "filler line\n".repeat(60)
+    )
+});
+static PLAN: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "# Plan\n{}## Milestones\nship it\n",
+        "filler line\n".repeat(60)
+    )
+});
 
 fn key(connection: &ConnectionId, path: &str) -> PageKey {
     PageKey {
@@ -72,7 +84,7 @@ async fn check(
     let today = key(connection, "Journal/today.md");
     open(local, &today).await?;
     settle(window).await?;
-    assert_eq!(window.get_note_text(), SOURCE);
+    assert_eq!(window.get_note_text(), SOURCE.as_str());
 
     follow_at(window, 0).await?;
     assert_eq!(
@@ -82,7 +94,7 @@ async fn check(
     );
     assert_eq!(
         window.get_note_text(),
-        SOURCE,
+        SOURCE.as_str(),
         "Ctrl+Enter outside a link must not edit"
     );
 
@@ -93,9 +105,31 @@ async fn check(
         Some(plan.clone()),
         "name lookup is case-insensitive"
     );
-    assert_eq!(window.get_note_text(), "# Plan");
+    assert_eq!(window.get_note_text(), PLAN.as_str());
+    assert_eq!(
+        window.get_editor_caret() as usize,
+        PLAN.find("## Milestones").unwrap(),
+        "the caret moves to the linked heading"
+    );
+    assert!(
+        window.get_editor_scroll_y() > 0.0,
+        "the heading is scrolled into view"
+    );
 
     open(local, &today).await?;
+    follow_at(window, SOURCE.find("[[#Top]]").unwrap() + 3).await?;
+    assert_eq!(local.current_key(), Some(today.clone()));
+    assert_eq!(
+        window.get_editor_caret(),
+        0,
+        "[[#Top]] jumps within the page"
+    );
+    // Line 0 sits below the editor's 33.75 px top clearance, so it is in view up to there.
+    assert!(
+        window.get_editor_scroll_y() <= 33.75,
+        "the page scrolls back to its top"
+    );
+
     follow_at(window, SOURCE.find("report.pdf").unwrap()).await?;
     assert_eq!(local.current_key(), Some(today.clone()));
     assert_eq!(
@@ -152,7 +186,10 @@ fn ctrl_enter_follows_the_wikilink_at_the_caret() -> Result {
         .id()
         .clone();
     runtime.block_on(async {
-        for (path, body) in [("Journal/today.md", SOURCE), ("Projects/Plan.md", "# Plan")] {
+        for (path, body) in [
+            ("Journal/today.md", SOURCE.as_str()),
+            ("Projects/Plan.md", PLAN.as_str()),
+        ] {
             let page = key(&connection, path);
             store.create_draft(page.clone()).await?;
             store

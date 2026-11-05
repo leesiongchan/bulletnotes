@@ -375,9 +375,17 @@ fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
     else {
         return false;
     };
+    let header = link::header(&raw).map(str::to_owned);
     let link = match link::parse(&raw) {
         Ok(Some(link)) => link,
-        Ok(None) => return true,
+        Ok(None) => {
+            // `[[#Heading]]` points into the current page.
+            if let Some(header) = header {
+                *state.presentation.link_target.borrow_mut() = Some((from, header));
+                state.render();
+            }
+            return true;
+        }
         Err(error) => {
             state.dispatch(AppAction::FollowLink {
                 from,
@@ -405,6 +413,9 @@ fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
                 }
             }
         };
+        if let (LinkOutcome::Open(target), Some(header)) = (&outcome, header) {
+            *task.presentation.link_target.borrow_mut() = Some((target.clone(), header));
+        }
         task.dispatch(AppAction::FollowLink { from, outcome });
     })
     .is_err()

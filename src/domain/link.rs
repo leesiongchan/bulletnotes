@@ -74,6 +74,15 @@ pub fn parse(raw: &str) -> Result<Option<LinkRef>, LinkError> {
     }))
 }
 
+/// The header a link points into, from `Page#Header` or `#Header`. A header may itself
+/// contain `#`; position suffixes (`@…`) carry no header.
+pub fn header(raw: &str) -> Option<&str> {
+    let raw = raw.trim();
+    let (_, header) = raw.split_once('#')?;
+    let header = header.trim();
+    (!header.is_empty()).then_some(header)
+}
+
 /// `@123` (character offset) or `@L12` / `@L12C3` (line and column), in either case.
 fn is_position(suffix: &str) -> bool {
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
@@ -197,6 +206,16 @@ mod tests {
         assert_eq!(parse("#Heading"), Ok(None));
         assert_eq!(parse("@5"), Ok(None));
         assert_eq!(parse(""), Ok(None));
+    }
+
+    #[test]
+    fn headers_are_taken_after_the_first_hash() {
+        assert_eq!(header("Plan#Goals"), Some("Goals"));
+        assert_eq!(header(" #Intro "), Some("Intro"));
+        assert_eq!(header("Plan#C# notes"), Some("C# notes"));
+        assert_eq!(header("Plan"), None);
+        assert_eq!(header("Plan#"), None);
+        assert_eq!(header("CHANGELOG@L12"), None);
     }
 
     #[test]

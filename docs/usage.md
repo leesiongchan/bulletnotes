@@ -25,8 +25,10 @@ an exact path wins, then a case-insensitive page name or folder suffix such as
 `[[api/Auth]]`; ties go to the page nearest the current one. A target that
 matches nothing becomes a new empty page at that path from the space root, but
 only after the space's page list has fully downloaded once; until then the page
-may already exist remotely. A leading `/` matches only that exact path. `#header` and `@position`
-suffixes open the page without jumping. Meta-page (`[[^…]]`) and document
+may already exist remotely. A leading `/` matches only that exact path. `[[Page#Heading]]`
+puts the caret on the first heading with exactly that text, and `[[#Heading]]`
+jumps within the current page; without a matching heading the page opens where
+you left it. `@position` suffixes open the page without jumping. Meta-page (`[[^…]]`) and document
 (`[[file.pdf]]`) links are not opened.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains

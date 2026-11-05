@@ -322,6 +322,30 @@ pub(super) fn wikilink_at(source: &str, offset: usize) -> Option<String> {
     })
 }
 
+/// Byte offset of the first heading whose text is exactly `header`.
+pub(super) fn heading_offset(source: &str, header: &str) -> Option<usize> {
+    let mut current: Option<(usize, String)> = None;
+    for (event, range) in events(source) {
+        match event {
+            Event::Start(Tag::Heading { .. }) => current = Some((range.start, String::new())),
+            Event::Text(text) | Event::Code(text) => {
+                if let Some((_, title)) = &mut current {
+                    title.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((start, title)) = current.take()
+                    && title.trim() == header
+                {
+                    return Some(start);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,6 +443,19 @@ mod tests {
             let span = spans.iter().find(|span| span.start <= at && at < span.end);
             assert_eq!(span.is_some_and(|span| span.bold), bold, "{needle}");
         }
+    }
+
+    #[test]
+    fn heading_offset_finds_the_exact_heading_line() {
+        let source =
+            "Intro\n\n# Goals\n\n## Plan `v2` notes\n\nSetext\n---\n\n```\n# Goals in code\n```\n";
+        let at = |needle: &str| source.find(needle);
+        assert_eq!(heading_offset(source, "Goals"), at("# Goals"));
+        assert_eq!(heading_offset(source, "Plan v2 notes"), at("## Plan"));
+        assert_eq!(heading_offset(source, "Setext"), at("Setext"));
+        assert_eq!(heading_offset(source, "goals"), None);
+        assert_eq!(heading_offset(source, "Goals in code"), None);
+        assert_eq!(heading_offset(source, "Intro"), None);
     }
 
     #[test]
