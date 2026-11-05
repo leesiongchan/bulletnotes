@@ -1,10 +1,11 @@
 //! Projection of coordinator state into Slint properties and result models.
 use super::State;
 use crate::{
-    PageRow,
+    PageRow, SearchAdapter,
     app::model::View,
     domain::{page::*, status::status_text},
 };
+use slint::ComponentHandle;
 use std::cell::{Cell, RefCell};
 
 #[derive(Default)]
@@ -145,26 +146,34 @@ impl State {
         }
         if self.search.connection.borrow().as_ref() != Some(app.connection()) {
             *self.search.connection.borrow_mut() = Some(app.connection().clone());
-            window.set_search_selecting(false);
-            window.set_search_drag_active(false);
+            window.global::<SearchAdapter>().set_selecting(false);
+            window.global::<SearchAdapter>().set_drag_active(false);
             self.search.drag.borrow_mut().take();
         }
-        window.set_search_busy(app.search_management.busy());
-        window.set_search_can_reorder(
-            window.get_search_scratchpads()
+        window
+            .global::<SearchAdapter>()
+            .set_busy(app.search_management.busy());
+        window.global::<SearchAdapter>().set_can_reorder(
+            window.global::<SearchAdapter>().get_scratchpads()
                 && app.scratchpads().is_some()
                 && !app.scratchpads_pending()
                 && !app.search_management.busy(),
         );
         let (confirm_id, confirm_count) = app.search_management.confirmation().unwrap_or_default();
-        window.set_search_confirm_count(i32::try_from(confirm_count).unwrap_or(i32::MAX));
-        window.set_search_confirm_id(if confirm_count > 0 {
-            confirm_id.to_string().into()
-        } else {
-            "".into()
-        });
+        window
+            .global::<SearchAdapter>()
+            .set_confirm_count(i32::try_from(confirm_count).unwrap_or(i32::MAX));
+        window
+            .global::<SearchAdapter>()
+            .set_confirm_id(if confirm_count > 0 {
+                confirm_id.to_string().into()
+            } else {
+                "".into()
+            });
         let selected = app.search_management.selected();
-        window.set_search_selected_count(i32::try_from(selected.len()).unwrap_or(i32::MAX));
+        window
+            .global::<SearchAdapter>()
+            .set_selected_count(i32::try_from(selected.len()).unwrap_or(i32::MAX));
         let selected_pages = app
             .search_results()
             .map(|r| {
@@ -178,24 +187,28 @@ impl State {
             let reason = trash_disabled_reason(p);
             (!reason.is_empty()).then_some(reason)
         });
-        window.set_search_can_trash(
+        window.global::<SearchAdapter>().set_can_trash(
             !selected_pages.is_empty() && disabled.is_none() && !app.search_management.busy(),
         );
-        window.set_search_can_promote(
+        window.global::<SearchAdapter>().set_can_promote(
             !selected_pages.is_empty()
-                && window.get_search_scratchpads()
+                && window.global::<SearchAdapter>().get_scratchpads()
                 && !app.scratchpads_pending()
                 && !app.search_management.busy(),
         );
-        window.set_search_can_create(self.can_create_search_note(&window));
-        window.set_search_action_message(
+        window
+            .global::<SearchAdapter>()
+            .set_can_create(self.can_create_search_note(&window));
+        window.global::<SearchAdapter>().set_action_message(
             if app.notice().is_some() {
                 ""
             } else if app.search_management.busy() {
                 "Saving note changes…"
             } else if let Some(reason) = disabled {
                 reason
-            } else if window.get_search_scratchpads() && !window.get_search_query().is_empty() {
+            } else if window.global::<SearchAdapter>().get_scratchpads()
+                && !window.global::<SearchAdapter>().get_query().is_empty()
+            {
                 "Clear the search to reorder scratchpads"
             } else {
                 ""
@@ -218,7 +231,7 @@ impl State {
                             let disabled_reason = trash_disabled_reason(page);
                             Ok(PageRow {
                                 checked: selected.contains(&page.key),
-                                can_promote: window.get_search_scratchpads(),
+                                can_promote: window.global::<SearchAdapter>().get_scratchpads(),
                                 can_trash: disabled_reason.is_empty(),
                                 trash_disabled_reason: disabled_reason.into(),
                                 list_excerpt_highlights: slint::ModelRc::from(
@@ -279,14 +292,18 @@ impl State {
                 })
                 .transpose();
             match rows {
-                Ok(rows) => window.set_page_results(slint::ModelRc::new(slint::VecModel::from(
-                    rows.unwrap_or_default(),
-                ))),
-                Err(_) => window.set_index_status("Page list could not be displayed".into()),
+                Ok(rows) => window
+                    .global::<SearchAdapter>()
+                    .set_results(slint::ModelRc::new(slint::VecModel::from(
+                        rows.unwrap_or_default(),
+                    ))),
+                Err(_) => window
+                    .global::<SearchAdapter>()
+                    .set_index_status("Page list could not be displayed".into()),
             }
             self.presentation.search.set(app.search_generation());
         }
-        window.set_can_load_more_pages(
+        window.global::<SearchAdapter>().set_can_load_more(
             !self.search.invalid_folder.get()
                 && !app.search_pending()
                 && app
@@ -294,16 +311,20 @@ impl State {
                     .is_some_and(|results| results.items.len() < results.total),
         );
         if self.search.invalid_folder.get() {
-            window.set_index_status("Enter a relative folder path".into());
+            window
+                .global::<SearchAdapter>()
+                .set_index_status("Enter a relative folder path".into());
         } else if let Some(message) = app.notice() {
-            window.set_index_status(message.into());
+            window
+                .global::<SearchAdapter>()
+                .set_index_status(message.into());
         } else if let Some(results) = app.search_results() {
             let (indexed, total, complete) = app.catalogue_progress().unwrap_or((
                 results.indexed,
                 results.catalogue_total,
                 results.complete,
             ));
-            window.set_index_status(
+            window.global::<SearchAdapter>().set_index_status(
                 format!(
                     "{} pages · {} of {} indexed{}",
                     results.total,
@@ -320,7 +341,9 @@ impl State {
                 .into(),
             );
         } else {
-            window.set_index_status("Searching local pages…".into());
+            window
+                .global::<SearchAdapter>()
+                .set_index_status("Searching local pages…".into());
         }
         self.updates.send_replace(());
         presentation.success();

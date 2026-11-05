@@ -1,7 +1,7 @@
 //! Catalogue query admission, pagination and in-note find interactions.
 use super::{LocalUi, LocalUiError, State};
 use crate::{
-    AppWindow,
+    AppWindow, SearchAdapter,
     app::{
         coordinator::{AppAction, SearchRequest},
         find::NoteFind,
@@ -9,6 +9,7 @@ use crate::{
     domain::page::PagePath,
     store::search::SearchQuery,
 };
+use slint::ComponentHandle;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -50,8 +51,10 @@ impl State {
         self.coordinator.borrow_mut().search_management.clear();
         self.presentation.search.set(None);
         if let Some(window) = self.window.upgrade() {
-            window.set_search_selecting(false);
-            window.set_page_results(Default::default());
+            window.global::<SearchAdapter>().set_selecting(false);
+            window
+                .global::<SearchAdapter>()
+                .set_results(Default::default());
         }
     }
     pub(super) fn selected_search_keys(&self) -> Vec<crate::domain::page::PageKey> {
@@ -83,7 +86,7 @@ impl State {
         let Some(window) = self.window.upgrade() else {
             return;
         };
-        if !window.get_search_scratchpads() || selected.is_empty() {
+        if !window.global::<SearchAdapter>().get_scratchpads() || selected.is_empty() {
             return;
         }
         let expected = {
@@ -108,8 +111,8 @@ impl State {
     }
     pub(super) fn can_create_search_note(&self, window: &AppWindow) -> bool {
         let app = self.coordinator.borrow();
-        let folder = window.get_search_folder();
-        let valid_folder = window.get_search_scratchpads()
+        let folder = window.global::<SearchAdapter>().get_folder();
+        let valid_folder = window.global::<SearchAdapter>().get_scratchpads()
             || folder.is_empty()
             || PagePath::parse(folder.trim_end_matches('/')).is_ok();
         valid_folder
@@ -122,7 +125,11 @@ impl State {
             && app
                 .search_results()
                 .is_some_and(|results| results.total == 0)
-            && !window.get_search_query().trim().is_empty()
+            && !window
+                .global::<SearchAdapter>()
+                .get_query()
+                .trim()
+                .is_empty()
     }
     pub(super) fn issue_search(self: &Rc<Self>) -> Option<u64> {
         self.issue_search_page(false)
@@ -142,10 +149,10 @@ impl State {
             0
         };
         let window = self.window.upgrade()?;
-        let folder = if window.get_search_scratchpads() {
+        let folder = if window.global::<SearchAdapter>().get_scratchpads() {
             slint::SharedString::default()
         } else {
-            window.get_search_folder()
+            window.global::<SearchAdapter>().get_folder()
         };
         let folder = if folder.is_empty() {
             None
@@ -155,26 +162,32 @@ impl State {
                 Err(_) => {
                     self.search.invalid_folder.set(true);
                     self.render();
-                    window.set_page_results(Default::default());
-                    window.set_index_status("Enter a relative folder path".into());
+                    window
+                        .global::<SearchAdapter>()
+                        .set_results(Default::default());
+                    window
+                        .global::<SearchAdapter>()
+                        .set_index_status("Enter a relative folder path".into());
                     return None;
                 }
             }
         };
         let Some(id) = self.search.request_id.get().checked_add(1) else {
-            window.set_index_status("Search limit reached. Restart after saving.".into());
+            window
+                .global::<SearchAdapter>()
+                .set_index_status("Search limit reached. Restart after saving.".into());
             return None;
         };
         self.search.invalid_folder.set(false);
         self.search.request_id.set(id);
         let query = SearchQuery {
-            scope: if window.get_search_scratchpads() {
+            scope: if window.global::<SearchAdapter>().get_scratchpads() {
                 crate::store::search::SearchScope::Scratchpads
             } else {
                 crate::store::search::SearchScope::AllPages
             },
             connection: self.coordinator.borrow().connection().clone(),
-            text: window.get_search_query().to_string(),
+            text: window.global::<SearchAdapter>().get_query().to_string(),
             folder,
             offset,
             limit: 200,

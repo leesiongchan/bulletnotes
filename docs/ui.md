@@ -41,10 +41,12 @@ place one in each root window.
 ## Area adapters
 
 A view with its own state and actions declares them in an exported global next
-to the view, instead of passing each value through `AppWindow`. Recovery is
-the first: `RecoveryAdapter` in `ui/recovery-view.slint` holds the review list,
-the selected item's sources, the merge draft and the actions the panel raises.
-`app-window.slint` re-exports it, and Rust uses it through the window:
+to the view, instead of passing each value through `AppWindow`.
+`RecoveryAdapter` in `ui/recovery-view.slint` holds the review list, the
+selected item's sources, the merge draft and the actions the panel raises.
+`SearchAdapter` in `ui/components/page-browser.slint` holds results, the query
+and folder, selection and drag state, and the page actions. `app-window.slint`
+re-exports both, and Rust uses them through the window:
 
 ```rust
 let recovery = window.global::<RecoveryAdapter>();
@@ -55,8 +57,14 @@ recovery.on_select(move |id| { /* load the item */ });
 The view still takes properties for state it does not own, such as
 `lifecycle-pending` on `RecoveryPanel`, and keeps navigation callbacks like
 `return-to-note` on `AppWindow`. A global exists once per window, so this
-fits views that appear once. `tests/recovery_panel.rs` checks that panel
-actions and edits reach the adapter.
+fits views that appear once.
+
+Slint's `changed` handlers only watch a component's own properties. A view that
+reacts to adapter state declares a private mirror, such as
+`private property <string> query: SearchAdapter.query;`, and keeps its
+`changed query => …` handler. `tests/recovery_panel.rs` and
+`tests/search_preview.rs` check that view actions reach the adapters and that
+adapter changes reach the views.
 
 ## Enums shared with Rust
 

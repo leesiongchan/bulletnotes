@@ -1,6 +1,6 @@
 //! Screen readers must hear the same on/off and chosen state that the visuals show.
 use bulletnotes::{
-    AppWindow, PageRow, SettingsCategory, UiView, app::ui::present_settings,
+    AppWindow, PageRow, SearchAdapter, SettingsCategory, UiView, app::ui::present_settings,
     store::settings::AppSettings, theme::SystemAppearance,
 };
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
@@ -82,7 +82,7 @@ fn accessible_states_match_visual_state() {
     assert_ne!(close.accessible_checkable(), Some(true));
 
     // Search view toggles and selectable rows.
-    window.set_page_results(ModelRc::from(
+    window.global::<SearchAdapter>().set_results(ModelRc::from(
         [PageRow {
             title: "Groceries".into(),
             path: "Quick Notes/groceries.md".into(),
@@ -95,13 +95,16 @@ fn accessible_states_match_visual_state() {
     window.set_active_view(UiView::Pages);
     let list = element(&window, "List view");
     assert_eq!(list.accessible_role(), Some(AccessibleRole::RadioButton));
-    assert_eq!(list.accessible_checked(), Some(!window.get_search_cards()));
+    assert_eq!(
+        list.accessible_checked(),
+        Some(!window.global::<SearchAdapter>().get_cards())
+    );
     let row_label = "Groceries, Quick Notes/groceries.md, Cached";
     assert_ne!(
         element(&window, row_label).accessible_checkable(),
         Some(true)
     );
-    window.set_search_selecting(true);
+    window.global::<SearchAdapter>().set_selecting(true);
     let row = element(&window, row_label);
     assert_eq!(row.accessible_checkable(), Some(true));
     assert_eq!(row.accessible_checked(), Some(true));

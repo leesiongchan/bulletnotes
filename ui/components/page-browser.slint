@@ -6,102 +6,112 @@ import { ChoiceButton } from "action-button.slint";
 import { SearchResult } from "search-result.slint";
 import { SearchToolbar } from "search-toolbar.slint";
 
-export component PageBrowser inherits Rectangle {
+// Search's contract with Rust: results, query state and the page actions it raises.
+export global SearchAdapter {
     in property <[PageRow]> results;
     in-out property <string> query;
     in-out property <string> folder;
-    in-out property <bool> scratchpads;
-    in-out property <bool> cards;
-    in-out property <bool> selecting;
+    in property <string> index-status;
+    in property <bool> can-load-more:false;
+    in-out property <bool> scratchpads:false;
+    in-out property <bool> cards:false;
+    in-out property <bool> selecting:false;
     in property <int> selected-count;
-    in property <bool> busy;
+    in property <bool> busy:false;
     in property <int> confirm-count;
     in property <string> confirm-id;
     in property <string> action-message;
-    in property <bool> can-promote;
-    in property <bool> can-trash;
-    in property <bool> can-create;
-    in property <bool> can-reorder;
-    in-out property <bool> drag-active;
-    private property <length> drag-x;
-    private property <length> drag-y;
-    private property <int> drag-index;
-    private property <bool> drag-after;
-    private property <length> edge-step:!root.drag-active ? 0px : root.drag-y < 24px ? 8px : root.drag-y > list.visible-height - 24px ? -8px : 0px;
-    callback drag-started(string);
-    callback drag-cancelled();
-    callback reordered(string,bool);
-    in property <string> index-status;
-    in property <bool> can-load-more:false;
-    in-out property <int> selected-index:-1;
-    private property <int> columns:root.cards ? max(1,floor((root.width - 36px) / 224px)) : 1;
-    private property <length> row-height:root.cards ? min(236px,max(160px,list.visible-height)) : 112px;
-    private property <int> row-count:ceil(root.results.length / root.columns);
-    out property <bool> escape-allowed: !query-input.has-focus || query-input.source-edits-allowed;
-    callback load-more();
+    in property <bool> can-promote:false;
+    in property <bool> can-trash:false;
+    in property <bool> can-create:false;
+    in property <bool> can-reorder:false;
+    in-out property <bool> drag-active:false;
     callback query-changed(string);
     callback folder-changed(string);
-    callback open-page(string);
-    callback return-to-note();
+    callback load-more();
     callback scope-changed(bool);
     callback view-changed(bool);
     callback select-toggled();
     callback selection-toggled(string);
-    callback promote(string,bool);
+    callback promote(string, bool);
     callback promote-selected();
     callback trash(string);
     callback trash-selected();
     callback trash-confirmed(string);
     callback trash-cancelled();
     callback create();
+    callback drag-started(string);
+    callback drag-cancelled();
+    callback reordered(string, bool);
+}
+export component PageBrowser inherits Rectangle {
+    // Mirrors of adapter state this view reacts to; `changed` needs its own properties.
+    private property <[PageRow]> results: SearchAdapter.results;
+    private property <string> query: SearchAdapter.query;
+    private property <string> folder: SearchAdapter.folder;
+    private property <bool> scratchpads: SearchAdapter.scratchpads;
+    private property <bool> cards: SearchAdapter.cards;
+    private property <string> confirm-id: SearchAdapter.confirm-id;
+    private property <length> drag-x;
+    private property <length> drag-y;
+    private property <int> drag-index;
+    private property <bool> drag-after;
+    private property <length> edge-step:!SearchAdapter.drag-active ? 0px : root.drag-y < 24px ? 8px : root.drag-y > list.visible-height - 24px ? -8px : 0px;
+    in-out property <int> selected-index:-1;
+    private property <int> columns:SearchAdapter.cards ? max(1,floor((root.width - 36px) / 224px)) : 1;
+    private property <length> row-height:SearchAdapter.cards ? min(236px,max(160px,list.visible-height)) : 112px;
+    private property <int> row-count:ceil(SearchAdapter.results.length / root.columns);
+    out property <bool> escape-allowed: !query-input.has-focus || query-input.source-edits-allowed;
+    callback open-page(string);
+    callback return-to-note();
     public function focus-query() {
-        if (root.folder != "") { root.folder = ""; root.folder-changed(""); }
+        if (SearchAdapter.folder != "") { SearchAdapter.folder = ""; SearchAdapter.folder-changed(""); }
         root.selected-index = -1; query-input.focus();
     }
     pure function pointer-index(x:length,y:length) -> int {
         let index = floor((y - list.content-y) / root.row-height) * root.columns + floor(x / (list.width / root.columns));
-        return x >= 0px && x < list.width && y >= 0px && y < list.visible-height && index < root.results.length ? index : -1;
+        return x >= 0px && x < list.width && y >= 0px && y < list.visible-height && index < SearchAdapter.results.length ? index : -1;
     }
     pure function pointer-action(x:length,y:length) -> int {
         let local-x = mod(x,list.width / root.columns) - 6px;
         let local-y = mod(y - list.content-y,root.row-height) - 6px;
         let cell-width = list.width / root.columns - 12px;
-        let button-y = root.cards ? root.row-height - 39px : 27px;
+        let button-y = SearchAdapter.cards ? root.row-height - 39px : 27px;
         if (local-y >= button-y && local-y < button-y + 28px) {
             if (local-x >= cell-width - 42px && local-x < cell-width - 14px) { return 3; }
             if (local-x >= cell-width - 76px && local-x < cell-width - 48px) { return 2; }
         }
-        return root.selecting && local-x >= 8px && local-x < 36px && local-y >= 10px && local-y < 38px ? 1 : 0;
+        return SearchAdapter.selecting && local-x >= 8px && local-x < 36px && local-y >= 10px && local-y < 38px ? 1 : 0;
     }
     pure function action-hint(index:int,action:int) -> string {
-        if (index < 0 || root.drag-active) { return ""; }
-        if (action == 3) { return root.results[index].can-trash ? "Move to Trash" : root.results[index].trash-disabled-reason; }
-        if (action == 2 && root.results[index].can-promote) { return "Promote to front"; }
-        if (action == 1) { return root.results[index].checked ? "Deselect note" : "Select note"; }
+        if (index < 0 || SearchAdapter.drag-active) { return ""; }
+        if (action == 3) { return SearchAdapter.results[index].can-trash ? "Move to Trash" : SearchAdapter.results[index].trash-disabled-reason; }
+        if (action == 2 && SearchAdapter.results[index].can-promote) { return "Promote to front"; }
+        if (action == 1) { return SearchAdapter.results[index].checked ? "Deselect note" : "Select note"; }
         return "";
     }
-    function cancel-drag() { if (root.drag-active) { root.drag-active = false; root.drag-cancelled(); } }
+    function cancel-drag() { if (SearchAdapter.drag-active) { SearchAdapter.drag-active = false; SearchAdapter.drag-cancelled(); } }
     function update-drag(x:length,y:length) {
-        if (!root.drag-active || root.results.length == 0) { return; }
+        if (!SearchAdapter.drag-active || SearchAdapter.results.length == 0) { return; }
         root.drag-x = x; root.drag-y = y;
-        root.drag-index = max(0,min(root.results.length - 1,floor((y - list.content-y) / root.row-height) * root.columns + floor(clamp(x,0px,list.width - 1px) / (list.width / root.columns))));
-        root.drag-after = root.cards ? x - floor(x / (list.width / root.columns)) * (list.width / root.columns) > list.width / root.columns / 2 : y - list.content-y - floor((y - list.content-y) / root.row-height) * root.row-height > root.row-height / 2;
+        root.drag-index = max(0,min(SearchAdapter.results.length - 1,floor((y - list.content-y) / root.row-height) * root.columns + floor(clamp(x,0px,list.width - 1px) / (list.width / root.columns))));
+        root.drag-after = SearchAdapter.cards ? x - floor(x / (list.width / root.columns)) * (list.width / root.columns) > list.width / root.columns / 2 : y - list.content-y - floor((y - list.content-y) / root.row-height) * root.row-height > root.row-height / 2;
     }
     function drop-drag() {
-        if (!root.drag-active) { return; }
+        if (!SearchAdapter.drag-active) { return; }
         if (root.drag-y < 0px || root.drag-y > list.visible-height || root.drag-x < 0px || root.drag-x > list.width) { root.cancel-drag(); return; }
-        root.drag-active = false;
-        root.reordered(root.results[root.drag-index].key,root.drag-after);
+        SearchAdapter.drag-active = false;
+        SearchAdapter.reordered(SearchAdapter.results[root.drag-index].key,root.drag-after);
     }
     Timer {
-        interval:16ms;running:root.drag-active && root.edge-step != 0px;
+        interval:16ms;running:SearchAdapter.drag-active && root.edge-step != 0px;
         triggered => { list.content-y = clamp(list.content-y + root.edge-step,min(0px,list.visible-height - list.content-height),0px); root.update-drag(root.drag-x,root.drag-y); }
     }
     public function cancel-or-close() {
-        if (root.drag-active) { root.cancel-drag(); return; }
-        if (root.confirm-count > 0) { root.trash-cancelled(); query-input.focus(); }
-        else if (root.selecting) { root.selecting = false; root.select-toggled(); query-input.focus(); }
-        else { root.query = ""; root.return-to-note(); }
+        if (SearchAdapter.drag-active) { root.cancel-drag(); return; }
+        if (SearchAdapter.confirm-count > 0) { SearchAdapter.trash-cancelled(); query-input.focus(); }
+        else if (SearchAdapter.selecting) { SearchAdapter.selecting = false; SearchAdapter.select-toggled(); query-input.focus(); }
+        else { SearchAdapter.query = ""; root.return-to-note(); }
     }
     function reveal-selection() {
         if (root.selected-index < 0) { return; }
@@ -112,15 +122,15 @@ export component PageBrowser inherits Rectangle {
         }
     }
     function move-selection(step:int) {
-        if (root.results.length > 0) {
-            root.selected-index = max(0,min(root.results.length - 1,root.selected-index < 0 ? 0 : root.selected-index + step));
+        if (SearchAdapter.results.length > 0) {
+            root.selected-index = max(0,min(SearchAdapter.results.length - 1,root.selected-index < 0 ? 0 : root.selected-index + step));
             root.reveal-selection();
         }
     }
     changed results => {
         pointer-surface.source-index = -1;
         root.cancel-drag();
-        if (root.selected-index >= root.results.length) { root.focus-query(); }
+        if (root.selected-index >= SearchAdapter.results.length) { root.focus-query(); }
     }
     changed query => { pointer-surface.source-index = -1; root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
     changed scratchpads => { pointer-surface.source-index = -1; root.cancel-drag(); root.selected-index = -1; list.content-y = 0px; }
@@ -129,7 +139,7 @@ export component PageBrowser inherits Rectangle {
     changed height => { root.cancel-drag(); root.reveal-selection(); }
     changed width => { root.cancel-drag(); root.reveal-selection(); }
     changed visible => { if (!root.visible) { root.cancel-drag(); } }
-    changed confirm-id => { if (root.confirm-count > 0) { confirm-button.focus(); } }
+    changed confirm-id => { if (SearchAdapter.confirm-count > 0) { confirm-button.focus(); } }
     background:transparent;
     Rectangle {
         x:Spacing.page;y:14px;width:parent.width - 2 * Spacing.page;height:38px;border-radius:Radius.surface;
@@ -137,43 +147,43 @@ export component PageBrowser inherits Rectangle {
         Image { x:12px;y:12px;width:14px;height:14px;source:@image-url("../../assets/icons/search.svg");colorize:Theme.palette.muted; }
         query-input := TextInput {
             x:36px;width:parent.width - 78px;height:parent.height;single-line:true;vertical-alignment:center;
-            text <=> root.query;color:Theme.palette.ink;font-size:Typography.body;enabled:root.confirm-count == 0;
+            text <=> SearchAdapter.query;color:Theme.palette.ink;font-size:Typography.body;enabled:SearchAdapter.confirm-count == 0;
             selection-background-color:Theme.palette.cursor;selection-foreground-color:Theme.palette.ink;
             accessible-label:"Search notes";
-            edited => { root.query-changed(self.text); }
+            edited => { SearchAdapter.query-changed(self.text); }
             key-pressed(event) => {
-                if (!self.source-edits-allowed || root.busy) { return reject; }
-                if (event.text == Key.DownArrow && root.results.length > 0) { root.move-selection(1); return accept; }
+                if (!self.source-edits-allowed || SearchAdapter.busy) { return reject; }
+                if (event.text == Key.DownArrow && SearchAdapter.results.length > 0) { root.move-selection(1); return accept; }
                 if (event.text == Key.Return) {
-                    if (root.results.length > 0) {
-                        if (event.modifiers.shift && root.scratchpads) { root.promote(root.results[max(0,root.selected-index)].key,true); }
-                        else if (!event.modifiers.shift) { root.open-page(root.results[max(0,root.selected-index)].key); }
-                    } else if (root.can-create && !event.modifiers.shift) { root.create(); }
+                    if (SearchAdapter.results.length > 0) {
+                        if (event.modifiers.shift && SearchAdapter.scratchpads) { SearchAdapter.promote(SearchAdapter.results[max(0,root.selected-index)].key,true); }
+                        else if (!event.modifiers.shift) { root.open-page(SearchAdapter.results[max(0,root.selected-index)].key); }
+                    } else if (SearchAdapter.can-create && !event.modifiers.shift) { SearchAdapter.create(); }
                     return accept;
                 }
                 return reject;
             }
         }
-        Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:root.query == "";color:Theme.palette.muted;font-size:Typography.body;accessible-role:none; }
+        Text { x:36px;width:parent.width - 78px;height:parent.height;vertical-alignment:center;text:"Search";visible:SearchAdapter.query == "";color:Theme.palette.muted;font-size:Typography.body;accessible-role:none; }
         ChoiceButton { height:28px; x:parent.width - 39px;y:5px;width:34px;text:"esc";label:"Return to note";clicked => { root.cancel-or-close(); } }
     }
     list := ListView {
         x:18px;y:62px;width:parent.width - 36px;
         height:max(0px,parent.height - self.y - toolbar.height - 38px);
-        vertical-scrollbar-policy:always-off;enabled:root.confirm-count == 0;
+        vertical-scrollbar-policy:always-off;enabled:SearchAdapter.confirm-count == 0;
         for row in root.row-count: Rectangle {
             width:parent.width;height:root.row-height;
             for col in root.columns: SearchResult {
                 x:col * parent.width / root.columns;width:parent.width / root.columns;height:root.row-height;
-                visible:row * root.columns + col < root.results.length;
-                data:root.results[row * root.columns + col];cards:root.cards;columns:root.columns;
+                visible:row * root.columns + col < SearchAdapter.results.length;
+                data:SearchAdapter.results[row * root.columns + col];cards:SearchAdapter.cards;columns:root.columns;
                 selected:root.selected-index == row * root.columns + col;
-                selecting:root.selecting;busy:root.busy;
+                selecting:SearchAdapter.selecting;busy:SearchAdapter.busy;
                 hovered:pointer-surface.has-hover && row * root.columns + col == root.pointer-index(pointer-surface.mouse-x,pointer-surface.mouse-y);
-                opened => { root.open-page(root.results[row * root.columns + col].key); }
-                toggled => { root.selection-toggled(root.results[row * root.columns + col].key); }
-                promote(open) => { root.promote(root.results[row * root.columns + col].key,open); }
-                trash => { root.trash(root.results[row * root.columns + col].key); }
+                opened => { root.open-page(SearchAdapter.results[row * root.columns + col].key); }
+                toggled => { SearchAdapter.selection-toggled(SearchAdapter.results[row * root.columns + col].key); }
+                promote(open) => { SearchAdapter.promote(SearchAdapter.results[row * root.columns + col].key,open); }
+                trash => { SearchAdapter.trash(SearchAdapter.results[row * root.columns + col].key); }
                 step(amount) => { root.selected-index = row * root.columns + col; root.move-selection(amount); }
             }
         }
@@ -181,7 +191,7 @@ export component PageBrowser inherits Rectangle {
     // Keep the pointer owner outside virtualized rows while edge scrolling replaces them.
     pointer-surface := TouchArea {
         x:list.x;y:list.y;width:list.width;height:list.visible-height;
-        enabled:!root.busy && root.confirm-count == 0;
+        enabled:!SearchAdapter.busy && SearchAdapter.confirm-count == 0;
         private property <int> source-index:-1;
         private property <int> action:0;
         private property <bool> dragged:false;
@@ -209,64 +219,64 @@ export component PageBrowser inherits Rectangle {
             if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left && self.dragged) { root.drop-drag(); }
         }
         moved => {
-            if (self.pressed && self.source-index >= 0 && self.action == 0 && root.can-reorder && root.scratchpads && root.query == "") {
+            if (self.pressed && self.source-index >= 0 && self.action == 0 && SearchAdapter.can-reorder && SearchAdapter.scratchpads && SearchAdapter.query == "") {
                 if (!self.dragged && (abs(self.mouse-x - self.pressed-x) > 6px || abs(self.mouse-y - self.pressed-y) > 6px)) {
-                    self.dragged = true;root.drag-active = true;root.drag-started(root.results[self.source-index].key);
+                    self.dragged = true;SearchAdapter.drag-active = true;SearchAdapter.drag-started(SearchAdapter.results[self.source-index].key);
                 }
-                if (root.drag-active) { root.update-drag(self.mouse-x,self.mouse-y); }
+                if (SearchAdapter.drag-active) { root.update-drag(self.mouse-x,self.mouse-y); }
             }
         }
         clicked => {
             if (!self.dragged && self.source-index >= 0 && self.source-index == root.pointer-index(self.mouse-x,self.mouse-y)) {
-                if (self.action == 3) { if (root.results[self.source-index].can-trash) { root.trash(root.results[self.source-index].key); } }
-                else if (self.action == 2) { if (root.results[self.source-index].can-promote) { root.promote(root.results[self.source-index].key,false); } }
-                else if (self.action == 1 || root.selecting) { root.selection-toggled(root.results[self.source-index].key); }
-                else { root.selected-index = self.source-index;root.open-page(root.results[self.source-index].key); }
+                if (self.action == 3) { if (SearchAdapter.results[self.source-index].can-trash) { SearchAdapter.trash(SearchAdapter.results[self.source-index].key); } }
+                else if (self.action == 2) { if (SearchAdapter.results[self.source-index].can-promote) { SearchAdapter.promote(SearchAdapter.results[self.source-index].key,false); } }
+                else if (self.action == 1 || SearchAdapter.selecting) { SearchAdapter.selection-toggled(SearchAdapter.results[self.source-index].key); }
+                else { root.selected-index = self.source-index;root.open-page(SearchAdapter.results[self.source-index].key); }
             }
         }
     }
     Rectangle {
         private property <int> insertion:root.drag-index + (root.drag-after ? 1 : 0);
-        x:root.cards ? list.x + mod(self.insertion,root.columns) * list.width / root.columns : list.x;
+        x:SearchAdapter.cards ? list.x + mod(self.insertion,root.columns) * list.width / root.columns : list.x;
         y:list.y + floor(self.insertion / root.columns) * root.row-height + list.content-y;
-        width:root.cards ? 3px : list.width;
-        height:root.cards ? min(root.row-height,list.y + list.visible-height - self.y) : 3px;
+        width:SearchAdapter.cards ? 3px : list.width;
+        height:SearchAdapter.cards ? min(root.row-height,list.y + list.visible-height - self.y) : 3px;
         background:Theme.palette.accent;
-        visible:root.drag-active && self.y >= list.y && self.y < list.y + list.visible-height;
+        visible:SearchAdapter.drag-active && self.y >= list.y && self.y < list.y + list.visible-height;
     }
     ThemeScrollbar { x:parent.width - 14px;y:list.y;height:list.height;thumb-color:Theme.palette.scrollbar;content-height:list.content-height;visible-height:list.visible-height;content-y <=> list.content-y; }
-    if root.results.length == 0: Rectangle {
+    if SearchAdapter.results.length == 0: Rectangle {
         x:Spacing.page;y:list.y + 38px;width:parent.width - 2 * Spacing.page;height:100px;
-        Text { x:0px;y:0px;width:parent.width;height:24px;text:root.busy ? "Working…" : "Nothing found";color:Theme.palette.muted;font-family:Typography.mono;font-size:Typography.body;horizontal-alignment:center; }
-        if root.can-create: Rectangle {
+        Text { x:0px;y:0px;width:parent.width;height:24px;text:SearchAdapter.busy ? "Working…" : "Nothing found";color:Theme.palette.muted;font-family:Typography.mono;font-size:Typography.body;horizontal-alignment:center; }
+        if SearchAdapter.can-create: Rectangle {
             y:38px;width:parent.width;height:38px;border-radius:self.height / 2;background:Theme.palette.surface;
-            ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;text:"Create a note starting with “" + root.query + "”";clicked => { root.create(); } }
+            ChoiceButton { height:28px; x:12px;y:5px;width:parent.width - 24px;text:"Create a note starting with “" + SearchAdapter.query + "”";clicked => { SearchAdapter.create(); } }
         }
     }
-    Text { x:Spacing.page;y:toolbar.y - 34px;width:parent.width - (root.can-load-more ? 152px : 2 * Spacing.page);height:30px;text:root.index-status + (root.action-message != "" ? " · " + root.action-message : "");color:Theme.palette.muted;font-size:Typography.small;wrap:word-wrap;max-lines:2;overflow:elide; }
-    ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;text:"More pages";visible:root.can-load-more;enabled:!root.busy;clicked => { root.load-more(); } }
+    Text { x:Spacing.page;y:toolbar.y - 34px;width:parent.width - (SearchAdapter.can-load-more ? 152px : 2 * Spacing.page);height:30px;text:SearchAdapter.index-status + (SearchAdapter.action-message != "" ? " · " + SearchAdapter.action-message : "");color:Theme.palette.muted;font-size:Typography.small;wrap:word-wrap;max-lines:2;overflow:elide; }
+    ChoiceButton { height:28px; x:parent.width - 120px;y:toolbar.y - 34px;width:100px;text:"More pages";visible:SearchAdapter.can-load-more;enabled:!SearchAdapter.busy;clicked => { SearchAdapter.load-more(); } }
     toolbar := SearchToolbar {
         width:parent.width;y:parent.height - self.height;
-        scratchpads:root.scratchpads;cards:root.cards;selecting:root.selecting;
-        selected-count:root.selected-count;can-promote:root.can-promote;can-trash:root.can-trash;busy:root.busy;
-        enabled:root.confirm-count == 0;
-        select-toggled => { root.selecting = !root.selecting; root.select-toggled(); }
-        scope-changed => { root.scratchpads = !root.scratchpads; root.scope-changed(root.scratchpads); }
-        view-changed(value) => { root.cards = value; root.view-changed(value); }
-        promote-selected => { root.promote-selected(); }
-        trash-selected => { root.trash-selected(); }
+        scratchpads:SearchAdapter.scratchpads;cards:SearchAdapter.cards;selecting:SearchAdapter.selecting;
+        selected-count:SearchAdapter.selected-count;can-promote:SearchAdapter.can-promote;can-trash:SearchAdapter.can-trash;busy:SearchAdapter.busy;
+        enabled:SearchAdapter.confirm-count == 0;
+        select-toggled => { SearchAdapter.selecting = !SearchAdapter.selecting; SearchAdapter.select-toggled(); }
+        scope-changed => { SearchAdapter.scratchpads = !SearchAdapter.scratchpads; SearchAdapter.scope-changed(SearchAdapter.scratchpads); }
+        view-changed(value) => { SearchAdapter.cards = value; SearchAdapter.view-changed(value); }
+        promote-selected => { SearchAdapter.promote-selected(); }
+        trash-selected => { SearchAdapter.trash-selected(); }
     }
     Rectangle {
-        visible:root.confirm-count > 0;
+        visible:SearchAdapter.confirm-count > 0;
         background:Theme.palette.paper.with-alpha(0.85);
         TouchArea { }
         Rectangle {
             x:16px;y:max(12px,(parent.height - self.height) / 2);width:parent.width - 32px;height:174px;
             border-radius:Radius.surface;background:Theme.palette.surface;border-width:1px;border-color:Theme.palette.line;
-            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + root.confirm-count + " notes to Trash?";font-size:Typography.heading;font-weight:550;color:Theme.palette.ink; }
+            Text { x:16px;y:16px;width:parent.width - 32px;height:28px;text:"Move " + SearchAdapter.confirm-count + " notes to Trash?";font-size:Typography.heading;font-weight:550;color:Theme.palette.ink; }
             Text { x:16px;y:52px;width:parent.width - 32px;height:62px;text:"You can restore them from Trash. Deletion follows your existing SilverBullet sync settings.";wrap:word-wrap;font-size:Typography.small;color:Theme.palette.muted; }
-            ChoiceButton { height:28px; x:16px;y:128px;width:92px;text:"Cancel";clicked => { root.trash-cancelled(); query-input.focus(); } }
-            confirm-button := ChoiceButton { height:28px; x:parent.width - 154px;y:128px;width:138px;text:"Move to Trash";clicked => { root.trash-confirmed(root.confirm-id); } }
+            ChoiceButton { height:28px; x:16px;y:128px;width:92px;text:"Cancel";clicked => { SearchAdapter.trash-cancelled(); query-input.focus(); } }
+            confirm-button := ChoiceButton { height:28px; x:parent.width - 154px;y:128px;width:138px;text:"Move to Trash";clicked => { SearchAdapter.trash-confirmed(SearchAdapter.confirm-id); } }
         }
     }
 }

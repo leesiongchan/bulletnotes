@@ -1,5 +1,6 @@
 mod support;
 use bulletnotes::{
+    SearchAdapter,
     app::{
         coordinator::*,
         model::View,
@@ -299,24 +300,40 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
         )
         .unwrap();
         window.show().unwrap();
-        window.set_search_scratchpads(true);
+        window.global::<SearchAdapter>().set_scratchpads(true);
         window.invoke_browse_pages();
         local.refresh_scratchpads().await.unwrap();
         local.search_current().await.unwrap();
-        assert_eq!(window.get_page_results().row_count(), 3);
-        let initial = window.get_page_results();
+        assert_eq!(
+            window.global::<SearchAdapter>().get_results().row_count(),
+            3
+        );
+        let initial = window.global::<SearchAdapter>().get_results();
         let first = initial.row_data(0).unwrap().key;
         let second = initial.row_data(1).unwrap().key;
         let last = initial.row_data(2).unwrap().key;
-        window.set_search_selecting(true);
-        window.invoke_search_select_toggled();
-        window.invoke_search_selection_toggled(first.clone());
-        window.invoke_search_selection_toggled(second);
-        assert_eq!(window.get_search_selected_count(), 2);
-        assert!(window.get_page_results().row_data(0).unwrap().checked);
-        window.invoke_search_drag_started(first);
-        window.invoke_search_reordered(last, true);
-        until(|| !window.get_search_busy()).await;
+        window.global::<SearchAdapter>().set_selecting(true);
+        window.global::<SearchAdapter>().invoke_select_toggled();
+        window
+            .global::<SearchAdapter>()
+            .invoke_selection_toggled(first.clone());
+        window
+            .global::<SearchAdapter>()
+            .invoke_selection_toggled(second);
+        assert_eq!(window.global::<SearchAdapter>().get_selected_count(), 2);
+        assert!(
+            window
+                .global::<SearchAdapter>()
+                .get_results()
+                .row_data(0)
+                .unwrap()
+                .checked
+        );
+        window.global::<SearchAdapter>().invoke_drag_started(first);
+        window
+            .global::<SearchAdapter>()
+            .invoke_reordered(last, true);
+        until(|| !window.global::<SearchAdapter>().get_busy()).await;
         local.search_current().await.unwrap();
         let stack = store
             .scratchpad_stack(&key("a.md").connection)
@@ -329,8 +346,8 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
                 .collect::<Vec<_>>(),
             vec!["Quick Notes/a.md", "Quick Notes/c.md", "Quick Notes/b.md"]
         );
-        window.invoke_search_promote_selected();
-        until(|| !window.get_search_busy()).await;
+        window.global::<SearchAdapter>().invoke_promote_selected();
+        until(|| !window.global::<SearchAdapter>().get_busy()).await;
         local.search_current().await.unwrap();
         let promoted = store
             .scratchpad_stack(&key("a.md").connection)
@@ -343,16 +360,21 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
                 .collect::<Vec<_>>(),
             vec!["Quick Notes/c.md", "Quick Notes/b.md", "Quick Notes/a.md"]
         );
-        window.invoke_search_trash_selected();
-        until(|| window.get_search_confirm_count() == 2).await;
-        window.invoke_search_trash_confirmed(window.get_search_confirm_id());
-        until(|| !window.get_search_busy()).await;
+        window.global::<SearchAdapter>().invoke_trash_selected();
+        until(|| window.global::<SearchAdapter>().get_confirm_count() == 2).await;
+        window
+            .global::<SearchAdapter>()
+            .invoke_trash_confirmed(window.global::<SearchAdapter>().get_confirm_id());
+        until(|| !window.global::<SearchAdapter>().get_busy()).await;
         local.search_current().await.unwrap();
-        assert_eq!(window.get_page_results().row_count(), 1);
-        assert_eq!(window.get_search_selected_count(), 0);
+        assert_eq!(
+            window.global::<SearchAdapter>().get_results().row_count(),
+            1
+        );
+        assert_eq!(window.global::<SearchAdapter>().get_selected_count(), 0);
         assert_eq!(store.trash(&key("a.md").connection).await.unwrap().len(), 2);
-        window.set_search_cards(true);
-        window.invoke_search_view_changed(true);
+        window.global::<SearchAdapter>().set_cards(true);
+        window.global::<SearchAdapter>().invoke_view_changed(true);
         for _ in 0..100 {
             if store.load_settings().await.unwrap().search_view == SearchView::Cards {
                 break;
@@ -364,28 +386,45 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
             store.load_settings().await.unwrap().search_view,
             SearchView::Cards
         );
-        window.set_search_scratchpads(false);
-        window.invoke_search_scope_changed(false);
-        window.set_search_query("no matching notes".into());
-        window.invoke_query_changed(window.get_search_query());
+        window.global::<SearchAdapter>().set_scratchpads(false);
+        window.global::<SearchAdapter>().invoke_scope_changed(false);
+        window
+            .global::<SearchAdapter>()
+            .set_query("no matching notes".into());
+        window
+            .global::<SearchAdapter>()
+            .invoke_query_changed(window.global::<SearchAdapter>().get_query());
         local.search_current().await.unwrap();
-        assert!(window.get_search_can_create());
-        window.set_search_folder("../invalid".into());
-        window.invoke_folder_changed(window.get_search_folder());
+        assert!(window.global::<SearchAdapter>().get_can_create());
+        window
+            .global::<SearchAdapter>()
+            .set_folder("../invalid".into());
+        window
+            .global::<SearchAdapter>()
+            .invoke_folder_changed(window.global::<SearchAdapter>().get_folder());
         assert!(
-            !window.get_search_can_create(),
+            !window.global::<SearchAdapter>().get_can_create(),
             "invalid folder leaves stale creation readiness"
         );
-        window.set_search_folder("".into());
-        window.invoke_folder_changed(window.get_search_folder());
-        window.set_search_scratchpads(true);
-        window.invoke_search_scope_changed(true);
-        window.set_search_query("Header".into());
-        window.invoke_query_changed(window.get_search_query());
+        window.global::<SearchAdapter>().set_folder("".into());
+        window
+            .global::<SearchAdapter>()
+            .invoke_folder_changed(window.global::<SearchAdapter>().get_folder());
+        window.global::<SearchAdapter>().set_scratchpads(true);
+        window.global::<SearchAdapter>().invoke_scope_changed(true);
+        window.global::<SearchAdapter>().set_query("Header".into());
+        window
+            .global::<SearchAdapter>()
+            .invoke_query_changed(window.global::<SearchAdapter>().get_query());
         local.search_current().await.unwrap();
-        let target = window.get_page_results().row_data(0).unwrap().key;
-        window.invoke_search_trash(target);
-        until(|| window.get_search_confirm_count() == 1).await;
+        let target = window
+            .global::<SearchAdapter>()
+            .get_results()
+            .row_data(0)
+            .unwrap()
+            .key;
+        window.global::<SearchAdapter>().invoke_trash(target);
+        until(|| window.global::<SearchAdapter>().get_confirm_count() == 1).await;
         let target = key("Quick Notes/a.md");
         let page = store.load_page(&target).await.unwrap().unwrap();
         store
@@ -396,13 +435,23 @@ fn bound_browser_selects_moves_trashes_and_remembers_card_view() {
             )
             .await
             .unwrap();
-        window.invoke_search_trash_confirmed(window.get_search_confirm_id());
-        until(|| !window.get_search_busy()).await;
+        window
+            .global::<SearchAdapter>()
+            .invoke_trash_confirmed(window.global::<SearchAdapter>().get_confirm_id());
+        until(|| !window.global::<SearchAdapter>().get_busy()).await;
         assert!(
-            window.get_search_action_message().is_empty(),
+            window
+                .global::<SearchAdapter>()
+                .get_action_message()
+                .is_empty(),
             "reorder hint masks failed mutation"
         );
-        assert!(window.get_index_status().contains("could not finish"));
+        assert!(
+            window
+                .global::<SearchAdapter>()
+                .get_index_status()
+                .contains("could not finish")
+        );
         assert_eq!(
             store.load_page(&target).await.unwrap().unwrap().body,
             "changed while confirming"

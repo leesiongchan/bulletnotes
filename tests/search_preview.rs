@@ -1,6 +1,6 @@
 use bulletnotes::{
-    AppWindow, PageRow, UiView, app::ui::present_settings, store::settings::AppSettings,
-    theme::SystemAppearance,
+    AppWindow, PageRow, SearchAdapter, UiView, app::ui::present_settings,
+    store::settings::AppSettings, theme::SystemAppearance,
 };
 use slint::{
     ComponentHandle, ModelRc,
@@ -18,7 +18,7 @@ fn setup() -> AppWindow {
     .unwrap();
     let ui = AppWindow::new().unwrap();
     present_settings(&ui, &AppSettings::default(), SystemAppearance::Light).unwrap();
-    ui.set_page_results(ModelRc::from(
+    ui.global::<SearchAdapter>().set_results(ModelRc::from(
         (0..12).map(row).collect::<Vec<_>>().as_slice(),
     ));
     ui.show().unwrap();
@@ -88,7 +88,8 @@ fn keyboard_reveals_results_after_resize_and_replacement() {
     assert_eq!(&*opened.borrow(), "8");
     let selected = text_item(&ui, "generated/8.md");
     assert!(y(&selected) >= 180.0 && y(&selected) + 16.0 <= 406.0);
-    ui.set_page_results(ModelRc::from([row(0)]));
+    ui.global::<SearchAdapter>()
+        .set_results(ModelRc::from([row(0)]));
     settle();
     key(&ui, Key::Return);
     assert_eq!(&*opened.borrow(), "0");
@@ -126,7 +127,7 @@ fn search_reentry_keeps_query_focused_after_result_replacement() {
     assert_eq!(ui.get_active_view(), UiView::Note);
     ui.set_active_view(UiView::Pages);
     settle();
-    ui.set_page_results(ModelRc::from(
+    ui.global::<SearchAdapter>().set_results(ModelRc::from(
         (0..12).map(row).collect::<Vec<_>>().as_slice(),
     ));
     settle();
@@ -142,14 +143,14 @@ fn search_reentry_keeps_query_focused_after_result_replacement() {
     assert!(input.as_pin_ref().has_focus());
     ui.window()
         .dispatch_event(WindowEvent::KeyPressed { text: "x".into() });
-    assert_eq!(ui.get_search_query(), "x");
+    assert_eq!(ui.global::<SearchAdapter>().get_query(), "x");
 }
 
 #[test]
 fn cards_navigate_columns_and_escape_exits_selection_before_closing() {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
-    ui.set_search_cards(true);
+    ui.global::<SearchAdapter>().set_cards(true);
     settle();
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
@@ -158,9 +159,9 @@ fn cards_navigate_columns_and_escape_exits_selection_before_closing() {
     key(&ui, Key::RightArrow);
     key(&ui, Key::Return);
     assert_eq!(&*opened.borrow(), "1");
-    ui.set_search_selecting(true);
+    ui.global::<SearchAdapter>().set_selecting(true);
     key(&ui, Key::Escape);
-    assert!(!ui.get_search_selecting());
+    assert!(!ui.global::<SearchAdapter>().get_selecting());
     assert_eq!(ui.get_active_view(), UiView::Pages);
 }
 
@@ -171,7 +172,7 @@ fn busy_search_cannot_open_a_result_with_return() {
     let observed = opened.clone();
     ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
     key(&ui, Key::DownArrow);
-    ui.set_search_busy(true);
+    ui.global::<SearchAdapter>().set_busy(true);
     key(&ui, Key::Return);
     assert!(opened.borrow().is_empty());
 }
@@ -180,19 +181,21 @@ fn busy_search_cannot_open_a_result_with_return() {
 fn drag_reorders_without_opening_and_filtered_drag_stays_disabled() {
     let ui = setup();
     for filtered in [false, true] {
-        ui.set_search_scratchpads(true);
-        ui.set_search_can_reorder(true);
+        ui.global::<SearchAdapter>().set_scratchpads(true);
+        ui.global::<SearchAdapter>().set_can_reorder(true);
         if filtered {
-            ui.set_search_query("needle".into());
+            ui.global::<SearchAdapter>().set_query("needle".into());
         }
         settle();
         let started = Rc::new(RefCell::new(String::new()));
         let moved = Rc::new(RefCell::new(String::new()));
         let opened = Rc::new(RefCell::new(String::new()));
         let observed = started.clone();
-        ui.on_search_drag_started(move |key| *observed.borrow_mut() = key.to_string());
+        ui.global::<SearchAdapter>()
+            .on_drag_started(move |key| *observed.borrow_mut() = key.to_string());
         let observed = moved.clone();
-        ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+        ui.global::<SearchAdapter>()
+            .on_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
         let observed = opened.clone();
         ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
         let from = slint::LogicalPosition::new(100.0, 128.0);
@@ -243,18 +246,21 @@ fn disabled_result_action_does_not_open_the_note_beneath_it() {
 fn row_actions_and_shift_return_do_not_open_before_promotion_finishes() {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
-    ui.set_search_scratchpads(true);
+    ui.global::<SearchAdapter>().set_scratchpads(true);
     let mut item = row(0);
     item.can_promote = true;
     item.can_trash = true;
-    ui.set_page_results(ModelRc::from([item]));
+    ui.global::<SearchAdapter>()
+        .set_results(ModelRc::from([item]));
     settle();
     let promoted = Rc::new(RefCell::new(String::new()));
     let observed = promoted.clone();
-    ui.on_search_promote(move |key, open| *observed.borrow_mut() = format!("{key}:{open}"));
+    ui.global::<SearchAdapter>()
+        .on_promote(move |key, open| *observed.borrow_mut() = format!("{key}:{open}"));
     let trashed = Rc::new(RefCell::new(String::new()));
     let observed = trashed.clone();
-    ui.on_search_trash(move |key| *observed.borrow_mut() = key.to_string());
+    ui.global::<SearchAdapter>()
+        .on_trash(move |key| *observed.borrow_mut() = key.to_string());
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
     ui.on_open_page(move |key| *observed.borrow_mut() = key.to_string());
@@ -288,8 +294,8 @@ fn row_actions_and_shift_return_do_not_open_before_promotion_finishes() {
 fn confirmation_buttons_fit_inside_the_dialog_at_minimum_size() {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
-    ui.set_search_confirm_count(2);
-    ui.set_search_confirm_id("test".into());
+    ui.global::<SearchAdapter>().set_confirm_count(2);
+    ui.global::<SearchAdapter>().set_confirm_id("test".into());
     let _ = ui.window().take_snapshot().unwrap();
     let button = text_item(&ui, "Move to Trash");
     let point = button.map_to_window(button.geometry().origin);
@@ -305,9 +311,11 @@ fn minimum_card_keeps_its_footer_above_the_browser_status() {
     ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
     let mut item = row(0);
     item.modified_label = "Edited today".into();
-    ui.set_page_results(ModelRc::from([item]));
-    ui.set_index_status("Index status".into());
-    ui.set_search_cards(true);
+    ui.global::<SearchAdapter>()
+        .set_results(ModelRc::from([item]));
+    ui.global::<SearchAdapter>()
+        .set_index_status("Index status".into());
+    ui.global::<SearchAdapter>().set_cards(true);
     let _ = ui.window().take_snapshot().unwrap();
     let date = text_item(&ui, "Edited today");
     let status = text_item(&ui, "Index status");
@@ -329,7 +337,8 @@ fn result_refresh_during_press_cannot_open_a_replacement_note() {
         position: point,
         button: slint::platform::PointerEventButton::Left,
     });
-    ui.set_page_results(ModelRc::from([row(99)]));
+    ui.global::<SearchAdapter>()
+        .set_results(ModelRc::from([row(99)]));
     ui.window().dispatch_event(WindowEvent::PointerReleased {
         position: point,
         button: slint::platform::PointerEventButton::Left,
@@ -341,15 +350,16 @@ fn result_refresh_during_press_cannot_open_a_replacement_note() {
 fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
-    ui.set_search_scratchpads(true);
-    ui.set_search_can_reorder(true);
+    ui.global::<SearchAdapter>().set_scratchpads(true);
+    ui.global::<SearchAdapter>().set_can_reorder(true);
     let moved = Rc::new(RefCell::new(String::new()));
     let observed = moved.clone();
-    ui.on_search_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
+    ui.global::<SearchAdapter>()
+        .on_reordered(move |key, _| *observed.borrow_mut() = key.to_string());
     for cards in [false, true] {
-        ui.set_search_cards(cards);
-        ui.set_search_query("reset".into());
-        ui.set_search_query("".into());
+        ui.global::<SearchAdapter>().set_cards(cards);
+        ui.global::<SearchAdapter>().set_query("reset".into());
+        ui.global::<SearchAdapter>().set_query("".into());
         settle();
         let from = slint::LogicalPosition::new(100.0, 128.0);
         let edge = slint::LogicalPosition::new(100.0, 450.0);
@@ -362,7 +372,7 @@ fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
         for _ in 0..24 {
             settle();
         }
-        assert!(ui.get_search_drag_active());
+        assert!(ui.global::<SearchAdapter>().get_drag_active());
         ui.window().dispatch_event(WindowEvent::PointerReleased {
             position: edge,
             button: slint::platform::PointerEventButton::Left,
@@ -370,8 +380,8 @@ fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
         assert!(moved.borrow().parse::<usize>().unwrap() >= 4);
         moved.borrow_mut().clear();
     }
-    ui.set_search_query("reset".into());
-    ui.set_search_query("".into());
+    ui.global::<SearchAdapter>().set_query("reset".into());
+    ui.global::<SearchAdapter>().set_query("".into());
     settle();
     let from = slint::LogicalPosition::new(100.0, 128.0);
     let to = slint::LogicalPosition::new(120.0, 180.0);
@@ -381,9 +391,9 @@ fn list_and_card_drag_autoscroll_and_escape_cancel_are_stable() {
     });
     ui.window()
         .dispatch_event(WindowEvent::PointerMoved { position: to });
-    assert!(ui.get_search_drag_active());
+    assert!(ui.global::<SearchAdapter>().get_drag_active());
     key(&ui, Key::Escape);
-    assert!(!ui.get_search_drag_active());
+    assert!(!ui.global::<SearchAdapter>().get_drag_active());
     assert_eq!(ui.get_active_view(), UiView::Pages);
     ui.window().dispatch_event(WindowEvent::PointerReleased {
         position: to,
@@ -403,7 +413,7 @@ fn tabbed_card_arrows_follow_the_focused_row() {
 fn tabbed_arrows_follow_the_focused_row(cards: bool) {
     let ui = setup();
     ui.window().set_size(slint::LogicalSize::new(505.0, 552.0));
-    ui.set_search_cards(cards);
+    ui.global::<SearchAdapter>().set_cards(cards);
     settle();
     let opened = Rc::new(RefCell::new(String::new()));
     let observed = opened.clone();
@@ -424,13 +434,15 @@ fn tabbed_arrows_follow_the_focused_row(cards: bool) {
 #[test]
 fn reorder_hint_keeps_index_completeness_visible() {
     let ui = setup();
-    ui.set_search_scratchpads(true);
-    ui.set_index_status("3 pages · 2 of 3 indexed · content search incomplete".into());
-    ui.set_search_action_message("Clear the search to reorder scratchpads".into());
+    ui.global::<SearchAdapter>().set_scratchpads(true);
+    ui.global::<SearchAdapter>()
+        .set_index_status("3 pages · 2 of 3 indexed · content search incomplete".into());
+    ui.global::<SearchAdapter>()
+        .set_action_message("Clear the search to reorder scratchpads".into());
     let combined = format!(
         "{} · {}",
-        ui.get_index_status(),
-        ui.get_search_action_message()
+        ui.global::<SearchAdapter>().get_index_status(),
+        ui.global::<SearchAdapter>().get_action_message()
     );
     text_item(&ui, &combined);
 }
@@ -468,13 +480,14 @@ fn opening_search_clears_a_legacy_hidden_folder_filter() {
     let ui = setup();
     ui.set_active_view(UiView::Note);
     settle();
-    ui.set_search_folder("old/folder".into());
+    ui.global::<SearchAdapter>().set_folder("old/folder".into());
     let cleared = Rc::new(RefCell::new(false));
     let observed = cleared.clone();
-    ui.on_folder_changed(move |folder| *observed.borrow_mut() = folder.is_empty());
+    ui.global::<SearchAdapter>()
+        .on_folder_changed(move |folder| *observed.borrow_mut() = folder.is_empty());
     ui.set_active_view(UiView::Pages);
     settle();
-    assert!(ui.get_search_folder().is_empty());
+    assert!(ui.global::<SearchAdapter>().get_folder().is_empty());
     assert!(*cleared.borrow());
 }
 
@@ -496,7 +509,8 @@ fn icon_hint_appears(toolbar: bool) {
     } else {
         let mut item = row(0);
         item.can_trash = true;
-        ui.set_page_results(ModelRc::from([item]));
+        ui.global::<SearchAdapter>()
+            .set_results(ModelRc::from([item]));
     }
     settle();
     ui.window().dispatch_event(WindowEvent::PointerMoved {
@@ -530,4 +544,18 @@ fn icon_hint_appears(toolbar: bool) {
             "result hint must describe the hovered action"
         );
     }
+}
+
+#[test]
+fn a_trash_confirmation_takes_keyboard_focus() {
+    let ui = setup();
+    let confirmed = Rc::new(RefCell::new(String::new()));
+    let observed = confirmed.clone();
+    let search = ui.global::<SearchAdapter>();
+    search.on_trash_confirmed(move |id| *observed.borrow_mut() = id.to_string());
+    search.set_confirm_count(1);
+    search.set_confirm_id("c1".into());
+    settle();
+    key(&ui, Key::Return);
+    assert_eq!(&*confirmed.borrow(), "c1");
 }

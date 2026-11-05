@@ -11,10 +11,10 @@ import { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
 import { NoteEditor } from "components/note-editor.slint";
-import { PageBrowser } from "components/page-browser.slint";
+import { PageBrowser, SearchAdapter } from "components/page-browser.slint";
 import { PaperSurface } from "components/paper-surface.slint";
 import { AppearancePanel } from "components/appearance-panel.slint";
-export { RecoveryAdapter }
+export { RecoveryAdapter, SearchAdapter }
 export { UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
 
 export component AppWindow inherits Window {
@@ -117,40 +117,7 @@ export component AppWindow inherits Window {
     in property <string> selected-theme-id;
     in property <string> selected-light-theme-id;
     in property <string> selected-dark-theme-id;
-    in property <[PageRow]> page-results;
-    in property <bool> can-load-more-pages:false;
-    callback load-more-pages();
     in property <[ThemePair]> theme-options;
-    in-out property <bool> search-scratchpads:false;
-    in-out property <bool> search-cards:false;
-    in-out property <bool> search-selecting:false;
-    in property <int> search-selected-count;
-    in property <bool> search-busy:false;
-    in property <int> search-confirm-count;
-    in property <string> search-confirm-id;
-    in property <string> search-action-message;
-    in property <bool> search-can-promote:false;
-    in property <bool> search-can-trash:false;
-    in property <bool> search-can-create:false;
-    callback search-scope-changed(bool);
-    callback search-view-changed(bool);
-    callback search-select-toggled();
-    callback search-selection-toggled(string);
-    callback search-promote(string, bool);
-    callback search-promote-selected();
-    callback search-trash(string);
-    callback search-trash-selected();
-    callback search-trash-confirmed(string);
-    callback search-trash-cancelled();
-    callback search-create();
-    in property <bool> search-can-reorder:false;
-    in-out property <bool> search-drag-active:false;
-    callback search-drag-started(string);
-    callback search-drag-cancelled();
-    callback search-reordered(string,bool);
-    in-out property <string> search-query;
-    in-out property <string> search-folder;
-    in property <string> index-status;
     in property <string> note-counter;
     in property <string> note-date;
     in property <bool> can-go-older:false;
@@ -220,8 +187,6 @@ export component AppWindow inherits Window {
     callback cycle-theme-assignment(string);
     callback import-theme();
     callback export-theme();
-    callback query-changed(string);
-    callback folder-changed(string);
     callback toggle-pin();
     callback apply-low-contrast();
     callback cancel-theme-import();
@@ -313,7 +278,7 @@ export component AppWindow inherits Window {
                     code-layout-changed => {root.code-layout-changed();}
                     font-size-px: root.font-size-px;
                     paper-style: root.paper-style;
-                    read-only: root.note-read-only || RecoveryAdapter.busy || root.lifecycle-pending || root.search-busy;
+                    read-only: root.note-read-only || RecoveryAdapter.busy || root.lifecycle-pending || SearchAdapter.busy;
                     edit-markdown(source,anchor,caret,command,start,end) => { root.edit-markdown(source,anchor,caret,command,start,end) }
                     edited(text) => { root.note-edited(text); }
                     follow-link(source,caret) => { root.follow-link(source,caret) }
@@ -337,41 +302,6 @@ export component AppWindow inherits Window {
                 height: parent.height - 20px;
                 width: parent.width;
                 visible: root.active-view == UiView.pages;
-                results: root.page-results;
-                scratchpads <=> root.search-scratchpads;
-                cards <=> root.search-cards;
-                selecting <=> root.search-selecting;
-                selected-count: root.search-selected-count;
-                busy: root.search-busy;
-                confirm-count: root.search-confirm-count;
-                confirm-id: root.search-confirm-id;
-                action-message: root.search-action-message;
-                can-promote: root.search-can-promote;
-                can-trash: root.search-can-trash;
-                can-create: root.search-can-create;
-                can-reorder:root.search-can-reorder;
-                drag-active <=> root.search-drag-active;
-                drag-started(key) => { root.search-drag-started(key); }
-                drag-cancelled => { root.search-drag-cancelled(); }
-                reordered(key,after) => { root.search-reordered(key,after); }
-                scope-changed(value) => { root.search-scope-changed(value); }
-                view-changed(value) => { root.search-view-changed(value); }
-                select-toggled => { root.search-select-toggled(); }
-                selection-toggled(key) => { root.search-selection-toggled(key); }
-                promote(key,open) => { root.search-promote(key,open); }
-                promote-selected => { root.search-promote-selected(); }
-                trash(key) => { root.search-trash(key); }
-                trash-selected => { root.search-trash-selected(); }
-                trash-confirmed(id) => { root.search-trash-confirmed(id); }
-                trash-cancelled => { root.search-trash-cancelled(); }
-                create => { root.search-create(); }
-        can-load-more:root.can-load-more-pages;
-        load-more => { root.load-more-pages(); }
-                query <=> root.search-query;
-                folder <=> root.search-folder;
-                folder-changed(folder) => { root.folder-changed(folder); }
-                index-status: root.index-status;
-                query-changed(query) => { root.query-changed(query); }
                 open-page(key) => { root.open-page(key); }
                 return-to-note => { root.return-to-note(); }
             }

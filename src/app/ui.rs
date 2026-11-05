@@ -1,7 +1,7 @@
 //! Presentation mapping; applying appearance never touches the note buffer.
 use super::model::View;
 use crate::{
-    AboutWindow, AppWindow, MarkdownCommand, MarkdownEdit, ThemeOption, ThemePair,
+    AboutWindow, AppWindow, MarkdownCommand, MarkdownEdit, SearchAdapter, ThemeOption, ThemePair,
     UiAppearanceMode, UiMarkdownColors, UiPaperIntensity, UiPaperStyle, UiPaperType,
     UiRecoveryKind, UiTheme, UiThemeSwatches, UiView,
     domain::page::RecoveryKind,
@@ -227,7 +227,9 @@ pub fn present_settings(
     settings
         .validate()
         .map_err(|_| ThemeError::InvalidSettings)?;
-    window.set_search_cards(settings.search_view == crate::store::settings::SearchView::Cards);
+    window
+        .global::<SearchAdapter>()
+        .set_cards(settings.search_view == crate::store::settings::SearchView::Cards);
     let themes = settings.themes().map_err(|_| ThemeError::InvalidSettings)?;
     let resolved = theme::resolve_theme(&settings.appearance, system, &themes)?;
     let native_order = [
