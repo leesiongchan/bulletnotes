@@ -147,3 +147,116 @@ async fn renaming_moves_the_page_to_trash_and_updates_links_atomically() {
     );
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn scratchpads_keep_their_place_only_while_named_inside_quick_notes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    let connection = key("a.md").connection.clone();
+    let pads = [
+        "Quick Notes/2026-11-01/090000-00000000-0000-4000-8000-000000000001.md",
+        "Quick Notes/2026-11-02/090000-00000000-0000-4000-8000-000000000002.md",
+        "Quick Notes/2026-11-03/090000-00000000-0000-4000-8000-000000000003.md",
+    ];
+    for page in pads.iter().copied().chain(["Projects/Plan.md"]) {
+        store.create_draft(key(page)).await.unwrap();
+        store
+            .save_local(key(page), "text".into(), LocalRevision(1))
+            .await
+            .unwrap();
+    }
+    let stack = || {
+        let store = store.clone();
+        let connection = connection.clone();
+        async move {
+            store
+                .scratchpad_stack(&connection)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.key.path.as_str().to_owned())
+                .collect::<Vec<_>>()
+        }
+    };
+    let before = stack().await;
+    assert_eq!(before.len(), 3);
+    let middle = before[1].clone();
+    let rename = |from: &str, to: &str| {
+        let store = store.clone();
+        let (from, to) = (key(from), PagePath::parse(to).unwrap());
+        async move { store.rename_page(from, LocalRevision(1), to, None).await }
+    };
+
+    rename(&middle, "Quick Notes/Renamed.md").await.unwrap();
+    let mut expected = before.clone();
+    expected[1] = "Quick Notes/Renamed.md".into();
+    assert_eq!(stack().await, expected, "same place, old name gone");
+
+    rename("Quick Notes/Renamed.md", "Ideas/Renamed.md")
+        .await
+        .unwrap();
+    assert_eq!(stack().await, [before[0].clone(), before[2].clone()]);
+
+    rename("Projects/Plan.md", "Projects/Roadmap.md")
+        .await
+        .unwrap();
+    assert_eq!(
+        stack().await.len(),
+        2,
+        "an ordinary page stays out of the stack"
+    );
+
+    // A page that never reached the server leaves no remote delete behind, so its
+    // name is free again at once.
+    assert_eq!(
+        rename("Projects/Roadmap.md", "Projects/Plan.md")
+            .await
+            .unwrap()
+            .0,
+        key("Projects/Plan.md")
+    );
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_synced_page_keeps_its_old_name_until_the_remote_delete_syncs() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    store
+        .apply_remote(RemoteRead::Present(RemoteFile {
+            key: key("Synced.md"),
+            body: "from the server".into(),
+            revision: Some(RemoteRevision("a".into())),
+            modified_ms: None,
+            permission: Permission::ReadWrite,
+        }))
+        .await
+        .unwrap();
+    let revision = store
+        .load_page(&key("Synced.md"))
+        .await
+        .unwrap()
+        .unwrap()
+        .local_revision;
+    let (moved, _) = store
+        .rename_page(
+            key("Synced.md"),
+            revision,
+            PagePath::parse("Moved.md").unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        store
+            .rename_page(
+                moved,
+                LocalRevision(1),
+                PagePath::parse("Synced.md").unwrap(),
+                None
+            )
+            .await,
+        Err(StoreError::PathCollision)
+    ));
+    store.shutdown().await.unwrap();
+}

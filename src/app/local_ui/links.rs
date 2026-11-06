@@ -65,13 +65,19 @@ impl State {
         }
     }
 
-    /// Whether the cached page list has a page at exactly `path`, visible or not.
+    /// Whether the cached page list has a visible page at exactly `path`. A page in
+    /// Trash may still hold its name; the store reports that when renaming.
     pub(super) fn page_known(&self, path: &crate::domain::page::PagePath) -> bool {
         self.links
             .catalogue
             .borrow()
             .as_ref()
-            .is_some_and(|(_, catalogue)| catalogue.pages.iter().any(|(known, _)| known == path))
+            .is_some_and(|(_, catalogue)| {
+                catalogue
+                    .pages
+                    .iter()
+                    .any(|(known, visible)| *visible && known == path)
+            })
     }
 
     /// Mark the note's wikilinks whose pages do not exist.

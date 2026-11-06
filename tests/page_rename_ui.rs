@@ -113,6 +113,22 @@ async fn check(
         "A page with that name already exists."
     );
 
+    // Leaving the note closes the bar.
+    let today = key(connection, "Journal/today.md");
+    open(local, &today).await?;
+    settle(window).await?;
+    assert!(
+        !rename.get_open(),
+        "the bar belongs to the note it was opened on"
+    );
+    open(local, &plan).await?;
+
+    // The caret stays where it was.
+    window.invoke_focus_editor();
+    window.invoke_select_find_match(3, 3);
+    settle(window).await?;
+    window.invoke_rename_current_note();
+    until(window, || rename.get_open()).await?;
     rename.set_name("Archive/Roadmap".into());
     press(window, Key::Return.into());
     let roadmap = key(connection, "Archive/Roadmap.md");
@@ -120,6 +136,8 @@ async fn check(
     assert_eq!(local.current_key(), Some(roadmap.clone()));
     assert!(!rename.get_open());
     assert_eq!(window.get_note_text(), "# Plan");
+    until(window, || window.get_editor_caret() == 3).await?;
+    assert_eq!(window.get_editor_caret(), 3);
     assert_eq!(
         store
             .load_page(&key(connection, "Journal/today.md"))

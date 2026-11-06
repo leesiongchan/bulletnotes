@@ -957,7 +957,7 @@ impl Coordinator {
                     Err(error) if renaming => {
                         self.notice = Some(match error {
                             StoreError::PathCollision => {
-                                "A page with that name already exists. The note was not renamed."
+                                "That name is taken, possibly by a page in Trash that has not finished syncing. The note was not renamed."
                             }
                             StoreError::StaleRevision => {
                                 "The note changed while renaming. Try again."

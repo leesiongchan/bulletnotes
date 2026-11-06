@@ -553,7 +553,9 @@ mod coordination {
         app.receive_ready(finished(request, Err(StoreError::PathCollision)));
         assert_eq!(
             app.notice(),
-            Some("A page with that name already exists. The note was not renamed.")
+            Some(
+                "That name is taken, possibly by a page in Trash that has not finished syncing. The note was not renamed."
+            )
         );
         assert_eq!(app.editor().unwrap().key(), &key("a.md"));
 

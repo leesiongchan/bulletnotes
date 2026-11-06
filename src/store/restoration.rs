@@ -382,8 +382,8 @@ pub(super) fn restore_page(
 pub type LinkRewrite = Box<dyn Fn(&[(PagePath, bool)], &PagePath, &str) -> Option<String> + Send>;
 
 /// Rename a page in one transaction: the old page moves to Trash, where it stays
-/// recoverable, and its text is created at `to` with the same scratchpad place and
-/// editing position. With `rewrite`, links in the page and in other local pages are
+/// recoverable, and its text is created at `to` with its editing position and, while
+/// the name stays under `Quick Notes/`, its scratchpad place. With `rewrite`, links in the page and in other local pages are
 /// updated too; read-only pages and pages with unresolved conflicts keep theirs.
 /// Returns the new key and the other pages that changed.
 pub(super) fn rename_page(
@@ -411,8 +411,17 @@ pub(super) fn rename_page(
         .as_ref()
         .and_then(|rewrite| rewrite(&catalogue, &from.path, &page.body))
     {
+        // Rewritten links shift offsets slightly; stay near the same place.
+        let clamp = |offset: usize| {
+            let mut offset = offset.min(body.len());
+            while !body.is_char_boundary(offset) {
+                offset -= 1;
+            }
+            offset
+        };
+        page.position.anchor = clamp(page.position.anchor);
+        page.position.caret = clamp(page.position.caret);
         page.body = body;
-        page.position = EditorPosition::default();
     }
     let position = page.position;
     let key = restore_page(&tx, &page, Some(to))?;

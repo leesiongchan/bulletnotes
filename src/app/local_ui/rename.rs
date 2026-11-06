@@ -161,4 +161,21 @@ impl State {
             window.invoke_focus_editor();
         }
     }
+
+    /// Close the bar, without moving focus, once its note is no longer shown.
+    pub(super) fn close_stale_rename(&self, window: &crate::AppWindow) {
+        let stale = self
+            .presentation
+            .renaming
+            .borrow()
+            .as_ref()
+            .is_some_and(|from| {
+                let app = self.coordinator.borrow();
+                app.view() != View::Note || app.editor().is_none_or(|editor| editor.key() != from)
+            });
+        if stale {
+            self.presentation.renaming.take();
+            window.global::<PageRename>().set_open(false);
+        }
+    }
 }
