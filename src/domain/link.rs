@@ -211,6 +211,30 @@ pub fn resolve(
     Ok(Resolution::Create(link.path.clone()))
 }
 
+/// `raw` naming `new` instead, if written on `source` it opens `old`. The new page's
+/// full name is written, keeping a leading `/` and any header or position.
+pub fn retarget(
+    raw: &str,
+    source: &PagePath,
+    old: &PagePath,
+    new: &PagePath,
+    pages: &[(PagePath, bool)],
+) -> Option<String> {
+    let link = parse(raw).ok()??;
+    if resolve(&link, source, pages, true) != Ok(Resolution::Open(old.clone())) {
+        return None;
+    }
+    let raw = raw.trim();
+    let core = raw.split_once('#').map_or(raw, |(core, _)| core);
+    let name_end = match core.rsplit_once('@') {
+        Some((page, position)) if parse_position(position).is_some() => page.len(),
+        _ => core.len(),
+    };
+    let name = new.as_str().strip_suffix(".md").unwrap_or(new.as_str());
+    let slash = if link.absolute { "/" } else { "" };
+    Some(format!("{slash}{name}{}", &raw[name_end..]))
+}
+
 /// Whether the link `raw`, written on `source`, can lead to `target`: it opens the
 /// page, or the page is one of an ambiguous link's choices.
 pub fn links_to(
@@ -519,6 +543,36 @@ mod tests {
             !to("#Top", "a.md"),
             "a link within the page is not a backlink"
         );
+    }
+
+    #[test]
+    fn retargeting_renames_links_that_open_the_page_and_keeps_anchors() {
+        let pages: Vec<_> = ["Projects/Plan.md", "Home/Notes.md", "Work/Notes.md"]
+            .iter()
+            .map(|p| (path(p), true))
+            .collect();
+        let old = path("Projects/Plan.md");
+        let new = path("Archive/Roadmap.md");
+        let to = |raw| retarget(raw, &path("a.md"), &old, &new, &pages);
+        assert_eq!(to("plan").as_deref(), Some("Archive/Roadmap"));
+        assert_eq!(
+            to("Plan#Goals #2").as_deref(),
+            Some("Archive/Roadmap#Goals #2")
+        );
+        assert_eq!(
+            to("/Projects/Plan@L3C2").as_deref(),
+            Some("/Archive/Roadmap@L3C2")
+        );
+        assert_eq!(to(" projects/plan.md ").as_deref(), Some("Archive/Roadmap"));
+        assert_eq!(to("Someday"), None);
+        assert_eq!(to("#Top"), None);
+        let notes = |raw| retarget(raw, &path("a.md"), &path("Work/Notes.md"), &new, &pages);
+        assert_eq!(
+            notes("Notes"),
+            None,
+            "an ambiguous link is left for the user"
+        );
+        assert_eq!(notes("Work/Notes").as_deref(), Some("Archive/Roadmap"));
     }
 
     #[test]

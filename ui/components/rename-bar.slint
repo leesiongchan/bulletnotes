@@ -1,0 +1,109 @@
+import { Theme, Typography, Radius, Spacing } from "theme.slint";
+import { ActionButton } from "action-button.slint";
+
+// Renaming the current note. Rust opens the bar with the note's name and counts the
+// other pages whose links would change (-1 while counting).
+export global PageRename {
+    in-out property <bool> open;
+    in-out property <string> name;
+    in property <int> link-pages: -1;
+    in-out property <bool> update-links: true;
+    in property <string> message;
+    callback submit(string, bool);
+    callback cancel();
+}
+
+// A small switch that fits the bar, drawn like SettingToggle's.
+component CompactToggle inherits FocusScope {
+    in property <string> label;
+    in-out property <bool> checked;
+    horizontal-stretch: 0;
+    accessible-role: switch;
+    accessible-checkable: true;
+    accessible-label: root.label;
+    accessible-checked: root.checked;
+    function toggle() { root.checked = !root.checked; }
+    accessible-action-default => { root.toggle(); }
+    key-pressed(event) => {
+        if (event.text == " ") { root.toggle(); return accept; }
+        return reject;
+    }
+    HorizontalLayout {
+        spacing: Spacing.sm;
+        Rectangle {
+            width: 30px;
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                width: 30px; height: 18px; border-radius: self.height / 2;
+                background: root.checked ? Theme.palette.accent : Theme.palette.line.with-alpha(Theme.high-contrast ? 1 : 0.35);
+                border-width: root.has-focus || Theme.high-contrast ? 2px : 0px;
+                border-color: root.has-focus ? Theme.palette.ink : Theme.palette.line;
+                Rectangle {
+                    x: root.checked ? 14px : 2px; y: 2px; width: 14px; height: 14px;
+                    border-radius: self.height / 2;
+                    background: Theme.palette.dark ? Theme.palette.ink : Theme.palette.paper;
+                }
+            }
+        }
+        Text {
+            text: root.label; color: Theme.palette.ink; font-size: Typography.small;
+            vertical-alignment: center; accessible-role: none;
+        }
+    }
+    TouchArea { clicked => { root.focus(); root.toggle(); } }
+}
+
+export component RenameBar inherits Rectangle {
+    private property <bool> open: PageRename.open;
+    changed open => {
+        if (root.open) { root.focus-name(); }
+    }
+    public function focus-name() {
+        name-input.focus();
+        name-input.select-all();
+    }
+    background: Theme.palette.paper;
+    HorizontalLayout {
+        padding-left: 26px; padding-right: 10px;
+        padding-top: 3px; padding-bottom: 3px; spacing: Spacing.sm;
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: Radius.card;
+            background: Theme.palette.surface;
+            border-width: 1px;
+            border-color: name-input.has-focus ? Theme.palette.accent : Theme.palette.line;
+            name-input := TextInput {
+                x: 8px; width: parent.width - 16px; height: parent.height;
+                vertical-alignment: center; single-line: true;
+                text <=> PageRename.name;
+                color: Theme.palette.ink; font-size: Typography.small;
+                selection-background-color: Theme.palette.cursor;
+                selection-foreground-color: Theme.palette.ink;
+                input-method-hints: { capitalization:none, auto-correct:false, auto-complete:false };
+                accessible-label: "New page name";
+                key-pressed(event) => {
+                    if (event.text == Key.Return) { PageRename.submit(self.text, PageRename.update-links); return accept; }
+                    if (event.text == Key.Escape) { PageRename.cancel(); return accept; }
+                    return reject;
+                }
+            }
+            Text {
+                x: 8px; width: parent.width - 16px; height: parent.height;
+                text: "Page name, such as Projects/Plan"; visible: PageRename.name == "";
+                vertical-alignment: center; font-size: Typography.small; color: Theme.palette.muted;
+                accessible-role: none;
+            }
+        }
+        if PageRename.message != "": Text {
+            max-width: 260px;
+            text: PageRename.message; color: Theme.palette.accent; font-size: Typography.caption;
+            vertical-alignment: center; overflow: elide;
+        }
+        if PageRename.message == "" && PageRename.link-pages > 0: CompactToggle {
+            label: PageRename.link-pages == 1 ? "Update links in 1 page" : "Update links in \{PageRename.link-pages} pages";
+            checked <=> PageRename.update-links;
+        }
+        ActionButton { icon: @image-url("../../assets/icons/right.svg"); label: "Rename, Enter"; clicked => { PageRename.submit(PageRename.name, PageRename.update-links); } }
+        ActionButton { icon: @image-url("../../assets/icons/close.svg"); label: "Cancel rename, Escape"; clicked => { PageRename.cancel(); } }
+    }
+}

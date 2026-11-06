@@ -23,6 +23,8 @@ pub(super) struct Presentation {
     pub(super) link_target: RefCell<Option<(PageKey, crate::domain::link::Anchor)>>,
     /// The page a list of pages was offered from, and where each choice opens.
     pub(super) link_choice: RefCell<Option<LinkChoices>>,
+    /// The note the rename bar was opened for.
+    pub(super) renaming: RefCell<Option<PageKey>>,
 }
 impl Presentation {
     pub(super) fn reset(&self) {

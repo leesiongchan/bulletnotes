@@ -5,6 +5,7 @@ mod lifecycle;
 mod links;
 mod metadata;
 mod presentation;
+mod rename;
 mod scratchpads;
 mod search;
 mod synchronization;

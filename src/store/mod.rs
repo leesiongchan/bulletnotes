@@ -6,6 +6,7 @@ pub use draft_admission::DraftAdmissionRequest;
 mod outbox;
 mod pages;
 pub use pages::LinkCatalogue;
+pub use restoration::LinkRewrite;
 mod probes;
 mod reconciliation;
 pub mod recovery;
@@ -450,6 +451,20 @@ impl StoreHandle {
             .await?;
         self.local_changes.send_replace(());
         Ok(key)
+    }
+    /// Rename a page, moving the old one to Trash and optionally rewriting links to it.
+    pub async fn rename_page(
+        &self,
+        from: PageKey,
+        expected: LocalRevision,
+        to: PagePath,
+        rewrite: Option<LinkRewrite>,
+    ) -> Result<(PageKey, Vec<PageKey>), StoreError> {
+        let renamed = self
+            .call(move |w| restoration::rename_page(&mut w.db, from, expected, to, rewrite))
+            .await?;
+        self.local_changes.send_replace(());
+        Ok(renamed)
     }
     pub async fn empty_trash(&self, ids: Vec<TrashId>) -> Result<(), StoreError> {
         self.call(move |w| restoration::empty_trash(&mut w.db, ids))

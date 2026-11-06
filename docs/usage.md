@@ -44,6 +44,15 @@ Command+Shift+B, or **Show Pages Linking Here** in the editor's context menu,
 lists the other pages whose wikilinks lead to the current note, including
 ambiguous links that could mean it; choosing one opens that page at the link.
 Only pages stored on this device are searched.
+**Rename Page…** in the editor's context menu opens a name field under the
+toolbar; Return renames and Escape cancels. The note's text moves to the new
+name, keeping its place in the scratchpad stack, and the old page goes to Trash,
+where it can be restored. When other pages link to the note, **Update links in N
+pages** (on by default) rewrites every link that opens it, including links
+inside the note itself, to the new full name, keeping labels, headings and
+positions. Ambiguous links, read-only pages, pages with an unresolved conflict
+and pages that are not stored on this device keep their links. Each rewritten
+page saves and syncs like a normal edit.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains
 deferred.

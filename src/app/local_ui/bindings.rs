@@ -1,7 +1,7 @@
 //! Slint callback registration for local editing and navigation.
 use super::{State, presentation::LinkChoices};
 use crate::{
-    AppWindow, LinkPicker, SearchAdapter,
+    AppWindow, LinkPicker, PageRename, SearchAdapter,
     app::{
         coordinator::{AppAction, LinkOutcome},
         markdown,
@@ -67,6 +67,22 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     {
         let state = state.clone();
         window.on_show_backlinks(move || show_backlinks(&state));
+    }
+    {
+        let state = state.clone();
+        window.on_rename_current_note(move || state.begin_rename());
+    }
+    {
+        let state = state.clone();
+        window
+            .global::<PageRename>()
+            .on_submit(move |name, update_links| state.submit_rename(&name, update_links));
+    }
+    {
+        let state = state.clone();
+        window
+            .global::<PageRename>()
+            .on_cancel(move || state.cancel_rename());
     }
     {
         let state = state.clone();

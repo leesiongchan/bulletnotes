@@ -31,6 +31,13 @@ pub enum LinkOutcome {
 pub enum AppAction {
     ResolveConflict(ConflictResolution),
     MoveToTrash(PageKey, LocalRevision),
+    /// Rename the current page at a flushed revision, optionally updating links to it.
+    RenamePage {
+        from: PageKey,
+        revision: LocalRevision,
+        to: PagePath,
+        update_links: bool,
+    },
     PrepareSearchTrash(Vec<PageKey>),
     ConfirmSearchTrash(u64),
     CancelSearchTrash,
@@ -213,6 +220,8 @@ pub struct Coordinator {
     active_conflict: Option<(PageKey, LocalRevision, uuid::Uuid)>,
     search_folder: Option<PagePath>,
     search_scope: crate::store::search::SearchScope,
+    /// The transition renaming a page, so its failure gets a specific notice.
+    renaming: Option<u64>,
 }
 impl Coordinator {
     pub fn new(connection: ConnectionId, make_draft: impl FnMut() -> PageKey + 'static) -> Self {
@@ -246,6 +255,7 @@ impl Coordinator {
             results: None,
             notice: None,
             make_draft: Box::new(make_draft),
+            renaming: None,
             selected_uncached: None,
             selected_page_error: None,
             catalogue_progress: None,
@@ -547,6 +557,30 @@ impl Coordinator {
                     );
                 }
             }
+            AppAction::RenamePage {
+                from,
+                revision,
+                to,
+                update_links,
+            } => {
+                if from.connection == self.connection
+                    && self
+                        .editor
+                        .as_ref()
+                        .is_some_and(|editor| editor.key() == &from)
+                {
+                    self.transition(
+                        Transition::Recovery(RecoveryIntent::Rename {
+                            from,
+                            revision,
+                            to,
+                            update_links,
+                        }),
+                        &mut effects,
+                    );
+                    self.renaming = Some(self.transition_id);
+                }
+            }
             AppAction::RestoreTrash(id, path) => self.transition(
                 Transition::Recovery(RecoveryIntent::RestoreTrash(id, path)),
                 &mut effects,
@@ -833,6 +867,10 @@ impl Coordinator {
                     return effects;
                 }
                 let search_operation = self.search_management.operation == Some(request_id);
+                let renaming = self.renaming == Some(request_id);
+                if renaming {
+                    self.renaming = None;
+                }
                 if search_operation {
                     self.search_management.operation = None;
                 }
@@ -915,6 +953,18 @@ impl Coordinator {
                                 }
                             }
                         }
+                    }
+                    Err(error) if renaming => {
+                        self.notice = Some(match error {
+                            StoreError::PathCollision => {
+                                "A page with that name already exists. The note was not renamed."
+                            }
+                            StoreError::StaleRevision => {
+                                "The note changed while renaming. Try again."
+                            }
+                            StoreError::ReadOnly => "This page is read-only and cannot be renamed.",
+                            _ => "The note could not be renamed. It is unchanged.",
+                        })
                     }
                     Err(_) => {
                         self.notice = Some(

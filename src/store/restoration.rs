@@ -377,6 +377,85 @@ pub(super) fn restore_page(
     outbox::queue_put(db, pages::id(db, &key)?, &restored)?;
     Ok(key)
 }
+/// Rewrites a page body's links for a rename: given the page list before the rename,
+/// the page the body belongs to and the body, the new body if any link changed.
+pub type LinkRewrite = Box<dyn Fn(&[(PagePath, bool)], &PagePath, &str) -> Option<String> + Send>;
+
+/// Rename a page in one transaction: the old page moves to Trash, where it stays
+/// recoverable, and its text is created at `to` with the same scratchpad place and
+/// editing position. With `rewrite`, links in the page and in other local pages are
+/// updated too; read-only pages and pages with unresolved conflicts keep theirs.
+/// Returns the new key and the other pages that changed.
+pub(super) fn rename_page(
+    db: &mut Connection,
+    from: PageKey,
+    expected: LocalRevision,
+    to: PagePath,
+    rewrite: Option<LinkRewrite>,
+) -> Result<(PageKey, Vec<PageKey>), StoreError> {
+    if to == from.path {
+        return Err(StoreError::InvalidData);
+    }
+    let tx = db.transaction()?;
+    let catalogue = pages::link_catalogue(&tx, &from.connection)?.pages;
+    let canonical = pages::load_stored(&tx, &from)?.ok_or(StoreError::PageMissing)?;
+    let mut page = super::editor_rebase::restore(&tx, canonical)?
+        .presented()
+        .clone();
+    let sources = match rewrite {
+        Some(_) => pages::link_sources(&tx, &from.connection)?,
+        None => Vec::new(),
+    };
+    trash_in_transaction(&tx, from.clone(), expected)?;
+    if let Some(body) = rewrite
+        .as_ref()
+        .and_then(|rewrite| rewrite(&catalogue, &from.path, &page.body))
+    {
+        page.body = body;
+        page.position = EditorPosition::default();
+    }
+    let position = page.position;
+    let key = restore_page(&tx, &page, Some(to))?;
+    tx.execute(
+        "UPDATE pages SET anchor=?1,caret=?2,scroll_y=?3 WHERE id=?4",
+        params![
+            position.anchor as i64,
+            position.caret as i64,
+            position.scroll_y,
+            pages::id(&tx, &key)?
+        ],
+    )?;
+    let mut updated = Vec::new();
+    if let Some(rewrite) = rewrite {
+        for (path, _) in sources {
+            let other = PageKey {
+                connection: from.connection.clone(),
+                path,
+            };
+            if other == from || other == key || remote::read_conflict(&tx, &other)?.is_some() {
+                continue;
+            }
+            let Some(current) = pages::load(&tx, &other)? else {
+                continue;
+            };
+            if current.permission != Permission::ReadWrite {
+                continue;
+            }
+            let Some(body) = rewrite(&catalogue, &other.path, &current.body) else {
+                continue;
+            };
+            let next = current
+                .local_revision
+                .next()
+                .map_err(|_| StoreError::InvalidData)?;
+            pages::save_transaction(&tx, other.clone(), body, next)?;
+            updated.push(other);
+        }
+    }
+    tx.commit()?;
+    tracing::debug!(links_updated = updated.len(), "Page renamed");
+    Ok((key, updated))
+}
 pub(super) fn restore_trash(
     db: &mut Connection,
     id: TrashId,

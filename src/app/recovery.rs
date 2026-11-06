@@ -17,6 +17,12 @@ pub enum RecoveryIntent {
     RestoreTrash(TrashId, Option<PagePath>),
     RestoreCopy(uuid::Uuid, Option<PagePath>),
     EmptyTrash(Vec<TrashId>),
+    Rename {
+        from: PageKey,
+        revision: LocalRevision,
+        to: PagePath,
+        update_links: bool,
+    },
 }
 pub struct RecoveryOutcome {
     pub affected: Vec<PageKey>,
@@ -86,6 +92,30 @@ pub async fn execute(
                 .recovery_item(connection, RecoveryKind::Copy, id)
                 .await?;
             outcome.restored = Some(store.restore_recovery(id, path).await?);
+        }
+        RecoveryIntent::Rename {
+            from,
+            revision,
+            to,
+            update_links,
+        } => {
+            if from.connection != *connection {
+                return Err(StoreError::InvalidData);
+            }
+            let rewrite = update_links.then(|| {
+                let (old, new) = (from.path.clone(), to.clone());
+                Box::new(
+                    move |pages: &[(PagePath, bool)], source: &PagePath, body: &str| {
+                        super::markdown::retarget_links(body, source, &old, &new, pages)
+                    },
+                ) as crate::store::LinkRewrite
+            });
+            let (key, _) = store
+                .rename_page(from.clone(), revision, to, rewrite)
+                .await?;
+            // Only the old page left; pages whose links changed stay where they are.
+            outcome.affected.push(from);
+            outcome.restored = Some(key);
         }
         RecoveryIntent::EmptyTrash(ids) => {
             for id in &ids {

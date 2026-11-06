@@ -50,7 +50,9 @@ and folder, selection and drag state, and the page actions.
 appearance and general preferences and the panel's actions; the window also
 reads its font size, paper and footer preferences. `LinkPicker` in
 `ui/components/link-picker.slint` holds a titled list of pages to open: those an
-ambiguous wikilink could mean, or those linking to the current note. `app-window.slint` re-exports all four, and Rust uses them through the
+ambiguous wikilink could mean, or those linking to the current note.
+`PageRename` in `ui/components/rename-bar.slint` holds the rename bar's name,
+link count and choice. `app-window.slint` re-exports all five, and Rust uses them through the
 window:
 
 ```rust

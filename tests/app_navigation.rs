@@ -521,4 +521,70 @@ mod coordination {
         assert_eq!(app.notice(), Some("refused"));
         assert_eq!(app.editor().unwrap().key(), &key("a.md"));
     }
+    #[test]
+    fn renaming_opens_the_new_page_or_explains_why_it_did_not() {
+        use bulletnotes::app::recovery::{RecoveryIntent, RecoveryOutcome};
+        let mut app = app();
+        let rename = |app: &mut Coordinator, to: &str| {
+            let effects = app.dispatch_ready(AppAction::RenamePage {
+                from: key("a.md"),
+                revision: LocalRevision(0),
+                to: PagePath::parse(to).unwrap(),
+                update_links: true,
+            });
+            effects
+                .iter()
+                .find_map(|effect| match effect {
+                    AppEffect::Recovery {
+                        request_id,
+                        intent: RecoveryIntent::Rename { .. },
+                        ..
+                    } => Some(*request_id),
+                    _ => None,
+                })
+                .expect("the rename runs")
+        };
+        let finished = |request_id, result| AppEvent::RecoveryFinished {
+            request_id,
+            connection: key("a.md").connection.clone(),
+            result,
+        };
+        let request = rename(&mut app, "b.md");
+        app.receive_ready(finished(request, Err(StoreError::PathCollision)));
+        assert_eq!(
+            app.notice(),
+            Some("A page with that name already exists. The note was not renamed.")
+        );
+        assert_eq!(app.editor().unwrap().key(), &key("a.md"));
+
+        let request = rename(&mut app, "c.md");
+        let effects = app.receive_ready(finished(
+            request,
+            Ok(RecoveryOutcome {
+                affected: vec![key("a.md")],
+                prepared_trash: None,
+                stack: None,
+                page: None,
+                restored: Some(key("c.md")),
+            }),
+        ));
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, AppEffect::LoadPage { key: k, .. } if *k == key("c.md")))
+        );
+        // A later recovery failure gets the general notice again.
+        let request = {
+            let effects = app.dispatch_ready(AppAction::EmptyTrash(vec![]));
+            effects
+                .iter()
+                .find_map(|effect| match effect {
+                    AppEffect::Recovery { request_id, .. } => Some(*request_id),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        app.receive_ready(finished(request, Err(StoreError::PathCollision)));
+        assert!(app.notice().unwrap().starts_with("Recovery action"));
+    }
 }

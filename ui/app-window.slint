@@ -11,11 +11,12 @@ import { LinkSuggestion, LinkSuggestions, UiTheme, PageRow, ThemeOption, ThemePa
 import { ActionButton } from "components/action-button.slint";
 import { FindBar } from "components/find-bar.slint";
 import { LinkPicker, LinkPickerPanel } from "components/link-picker.slint";
+import { PageRename, RenameBar } from "components/rename-bar.slint";
 import { NoteEditor } from "components/note-editor.slint";
 import { PageBrowser, SearchAdapter } from "components/page-browser.slint";
 import { PaperSurface } from "components/paper-surface.slint";
 import { AppearanceAdapter, AppearancePanel } from "components/appearance-panel.slint";
-export { AppearanceAdapter, LinkPicker, RecoveryAdapter, SearchAdapter }
+export { AppearanceAdapter, LinkPicker, PageRename, RecoveryAdapter, SearchAdapter }
 export { LinkSuggestion, LinkSuggestions, UiTheme, PageRow, ThemeOption, ThemePair, MarkdownCommand, MarkdownEdit, CodePanel, UiView, SettingsCategory, UiRecoveryKind, UiAppearanceMode, UiPaperType, UiPaperStyle, UiPaperIntensity }
 
 export component AppWindow inherits Window {
@@ -51,6 +52,8 @@ export component AppWindow inherits Window {
     pure callback suggest-links(string, int, int) -> LinkSuggestions;
     // Lists the pages whose wikilinks lead to the current note.
     callback show-backlinks();
+    // Opens the rename bar for the current note; Rust fills `PageRename`.
+    callback rename-current-note();
     pure callback highlight-markdown(string, UiTheme, bool, [string]) -> [TextInputDecoration];
     private property <[TextInputDecoration]> note-decorations: root.highlight-markdown(root.note-text,root.theme,root.system-high-contrast,root.missing-links);
     in property <string> status-text;
@@ -139,8 +142,9 @@ export component AppWindow inherits Window {
     callback find-opened();
     callback find-query-changed(string);
     callback find-step(int);
-    public function show-find() { if (root.active-view != UiView.note) { root.return-to-note(); } root.find-visible = true; find.focus-query(); root.find-opened(); }
+    public function show-find() { if (root.active-view != UiView.note) { root.return-to-note(); } PageRename.open = false; root.find-visible = true; find.focus-query(); root.find-opened(); }
     public function close-find() { root.find-visible = false; editor.focus-editor(); }
+    public function focus-rename() { rename-bar.focus-name(); }
     public function select-find-match(anchor:int, caret:int) { editor.select-match(anchor,caret); }
     callback native-window-ready();
     callback native-preferences-changed();
@@ -257,7 +261,7 @@ export component AppWindow inherits Window {
                 editor := NoteEditor {
                     width: parent.width;
                     height: parent.height;
-                    top-clearance:root.find-visible ? 93.75px : 33.75px;
+                    top-clearance:root.find-visible || PageRename.open ? 93.75px : 33.75px;
                     paper-material:root.paper-material-active;
                     paper-type:root.paper-type;
                     text <=> root.note-text;
@@ -275,6 +279,7 @@ export component AppWindow inherits Window {
                     suggest-links(source,caret,revision) => { root.suggest-links(source,caret,revision) }
                     move-to-trash => { root.trash-current-note(); }
                     show-backlinks => { root.show-backlinks(); }
+                    rename-page => { root.rename-current-note(); }
                     key-pressed(event) => { root.shortcut(event) }
                 }
 
@@ -287,8 +292,13 @@ export component AppWindow inherits Window {
                     close => { root.close-find(); }
                 }
 
+                rename-bar := RenameBar {
+                    y: 48px; height: 36px; width: parent.width;
+                    visible: PageRename.open;
+                }
+
                 LinkPickerPanel {
-                    x: Spacing.page; y: root.find-visible ? 92px : 48px;
+                    x: Spacing.page; y: root.find-visible || PageRename.open ? 92px : 48px;
                     width: min(parent.width - 2 * Spacing.page, 480px);
                 }
 

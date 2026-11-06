@@ -1,6 +1,7 @@
 //! Source-only Markdown decorations; neither editing nor serialization belongs here.
 use crate::{
     UiTheme,
+    domain::{link, page::PagePath},
     theme::{self, contrast::contrast_ratio},
 };
 use pulldown_cmark::{Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
@@ -345,6 +346,32 @@ pub(super) fn wikilinks(source: &str) -> impl Iterator<Item = (String, usize)> +
     })
 }
 
+/// `body`, written on `source`, with every wikilink that opens `old` renamed to `new`,
+/// or `None` when no link changes. Labels and anchors stay as written.
+pub(super) fn retarget_links(
+    body: &str,
+    source: &PagePath,
+    old: &PagePath,
+    new: &PagePath,
+    pages: &[(PagePath, bool)],
+) -> Option<String> {
+    let mut rewritten = String::new();
+    let mut copied = 0;
+    for (raw, start) in wikilinks(body) {
+        // Only edit a destination found verbatim right after its `[[`.
+        let name = start + 2;
+        if !body[start..].starts_with("[[") || !body[name..].starts_with(raw.as_str()) {
+            continue;
+        }
+        if let Some(target) = link::retarget(&raw, source, old, new, pages) {
+            rewritten.push_str(&body[copied..name]);
+            rewritten.push_str(&target);
+            copied = name + raw.len();
+        }
+    }
+    (copied > 0).then(|| rewritten + &body[copied..])
+}
+
 /// Whether `offset` falls in inline code or a code block, where `[[` is literal.
 pub(super) fn in_code(source: &str, offset: usize) -> bool {
     events(source).any(|(event, range)| {
@@ -591,6 +618,35 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn renaming_rewrites_only_links_to_the_page() {
+        let path = |p: &str| PagePath::parse(p).unwrap();
+        let pages = [(path("Projects/Plan.md"), true), (path("Other.md"), true)];
+        let body =
+            "[[plan|the plan]], [[Other]], `[[Plan]]`, [[/Projects/Plan#Goals]] é [[Plan@3]]";
+        assert_eq!(
+            retarget_links(
+                body,
+                &path("a.md"),
+                &path("Projects/Plan.md"),
+                &path("Roadmap.md"),
+                &pages
+            )
+            .as_deref(),
+            Some("[[Roadmap|the plan]], [[Other]], `[[Plan]]`, [[/Roadmap#Goals]] é [[Roadmap@3]]")
+        );
+        assert_eq!(
+            retarget_links(
+                "[[Other]]",
+                &path("a.md"),
+                &path("Projects/Plan.md"),
+                &path("Roadmap.md"),
+                &pages
+            ),
+            None
+        );
     }
 
     #[test]
