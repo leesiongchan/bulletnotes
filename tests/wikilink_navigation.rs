@@ -177,7 +177,7 @@ async fn check(
     let work = key(connection, "Work/Notes.md");
     until(window, || local.current_key().as_ref() == Some(&work)).await?;
     assert!(choices(window).is_empty());
-    assert_eq!(local.current_key(), Some(work));
+    assert_eq!(local.current_key(), Some(work.clone()));
 
     open(local, &today).await?;
     follow_at(window, SOURCE.find("[[#Top]]").unwrap() + 3).await?;
@@ -235,7 +235,53 @@ async fn check(
         Some(String::new()),
         "a missing target becomes a real local page"
     );
+
+    // Cmd+Shift+B lists the pages linking here; picking one opens it at the link.
+    backlinks_shortcut(window);
+    until(window, || !choices(window).is_empty()).await?;
+    assert_eq!(choices(window), ["Journal/today.md"]);
+    assert_eq!(
+        window.global::<LinkPicker>().get_title(),
+        "Pages linking here"
+    );
+    press(window, Key::Return.into());
+    until(window, || local.current_key().as_ref() == Some(&today)).await?;
+    assert_eq!(local.current_key(), Some(today.clone()));
+    until(window, || window.get_editor_caret() as usize == someday_at).await?;
+    assert_eq!(
+        window.get_editor_caret() as usize,
+        someday_at,
+        "the source page opens at its link"
+    );
+
+    // An ambiguous link may mean either page, so it counts for both.
+    open(local, &work).await?;
+    backlinks_shortcut(window);
+    until(window, || !choices(window).is_empty()).await?;
+    assert_eq!(choices(window), ["Journal/today.md"]);
+    press(window, Key::Escape.into());
+    settle(window).await?;
+
+    open(local, &today).await?;
+    backlinks_shortcut(window);
+    until(window, || window.get_status_text().starts_with("No other")).await?;
+    assert!(choices(window).is_empty());
+    assert_eq!(window.get_status_text(), "No other pages link here.");
     Ok(())
+}
+fn backlinks_shortcut(window: &AppWindow) {
+    window.invoke_focus_editor();
+    for modifier in [Key::Control, Key::Shift] {
+        window.window().dispatch_event(WindowEvent::KeyPressed {
+            text: modifier.into(),
+        });
+    }
+    press(window, "B".into());
+    for modifier in [Key::Shift, Key::Control] {
+        window.window().dispatch_event(WindowEvent::KeyReleased {
+            text: modifier.into(),
+        });
+    }
 }
 
 #[test]

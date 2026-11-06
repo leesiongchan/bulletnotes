@@ -1,8 +1,10 @@
 import { Theme, Typography, Radius, Spacing } from "theme.slint";
 
-// Pages an ambiguous wikilink could mean, best match first. Rust fills `choices`
-// and empties it again once the user picks or dismisses.
+// Pages to open: those an ambiguous wikilink could mean, best match first, or
+// those linking to the current page. Rust fills `choices` and empties it again
+// once the user picks or dismisses.
 export global LinkPicker {
+    in property <string> title;
     in property <[string]> choices;
     callback chosen(string);
     callback dismissed();
@@ -14,7 +16,7 @@ export component LinkPickerPanel inherits FocusScope {
     visible: root.count > 0;
     height: self.visible ? rows.preferred-height : 0px;
     accessible-role: list;
-    accessible-label: "Choose the linked page";
+    accessible-label: LinkPicker.title;
     changed count => {
         root.index = 0;
         if (root.count > 0) { root.focus(); }
@@ -41,7 +43,7 @@ export component LinkPickerPanel inherits FocusScope {
             HorizontalLayout {
                 padding-left: Spacing.md;
                 Text {
-                    text: "Several pages match this link";
+                    text: LinkPicker.title;
                     color: Theme.palette.muted;
                     font-size: Typography.small;
                     accessible-role: none;

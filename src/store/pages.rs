@@ -144,6 +144,28 @@ pub(super) fn link_catalogue(
     )?;
     Ok(LinkCatalogue { pages, listed })
 }
+/// Visible pages whose local body contains a wikilink, with that body.
+pub(super) fn link_sources(
+    db: &Connection,
+    connection: &ConnectionId,
+) -> Result<Vec<(PagePath, String)>, StoreError> {
+    let mut query = db.prepare(
+        "SELECT path, body FROM pages WHERE connection=?1 AND NOT (trashed OR remote_deleted) \
+         AND body IS NOT NULL AND instr(body, '[[') > 0 ORDER BY path",
+    )?;
+    query
+        .query_map([connection.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .map(|row| {
+            let (path, body) = row?;
+            Ok((
+                PagePath::parse(&path).map_err(|_| StoreError::InvalidData)?,
+                body,
+            ))
+        })
+        .collect()
+}
 pub(super) fn key_for_id(db: &Connection, id: i64) -> Result<PageKey, StoreError> {
     let (connection, path) = db.query_row(
         "SELECT connection,path FROM pages WHERE id=?1",

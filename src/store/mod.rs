@@ -130,6 +130,15 @@ impl StoreHandle {
         self.call(move |w| pages::link_catalogue(&w.db, &connection))
             .await
     }
+    /// Visible pages whose local body contains a wikilink, with that body.
+    pub async fn link_sources(
+        &self,
+        connection: &ConnectionId,
+    ) -> Result<Vec<(PagePath, String)>, StoreError> {
+        let connection = connection.clone();
+        self.call(move |w| pages::link_sources(&w.db, &connection))
+            .await
+    }
     pub async fn load_stored_page(
         &self,
         key: &PageKey,

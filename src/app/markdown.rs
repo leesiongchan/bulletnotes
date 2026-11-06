@@ -333,14 +333,14 @@ pub(super) fn wikilink_at(source: &str, offset: usize) -> Option<String> {
     })
 }
 
-/// Targets of every wikilink in `source`, as written.
-pub(super) fn wikilinks(source: &str) -> impl Iterator<Item = String> + '_ {
-    events(source).filter_map(|(event, _)| match event {
+/// Targets of every wikilink in `source`, as written, with each link's byte offset.
+pub(super) fn wikilinks(source: &str) -> impl Iterator<Item = (String, usize)> + '_ {
+    events(source).filter_map(|(event, range)| match event {
         Event::Start(Tag::Link {
             link_type: LinkType::WikiLink { .. },
             dest_url,
             ..
-        }) => Some(dest_url.into_string()),
+        }) => Some((dest_url.into_string(), range.start)),
         _ => None,
     })
 }
@@ -596,7 +596,10 @@ mod tests {
     #[test]
     fn wikilink_targets_and_code_regions_are_found() {
         let source = "[[A]] `[[B]]` [[C|c]]\n```\n[[D]]\n```\n";
-        assert_eq!(wikilinks(source).collect::<Vec<_>>(), ["A", "C"]);
+        assert_eq!(
+            wikilinks(source).collect::<Vec<_>>(),
+            [("A".into(), 0), ("C".into(), source.find("[[C").unwrap())]
+        );
         assert!(in_code(source, source.find("[[B").unwrap() + 2));
         assert!(!in_code(source, 2));
         assert!(in_code(source, source.find("[[D").unwrap() + 2));

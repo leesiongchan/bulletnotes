@@ -103,6 +103,7 @@ export component NoteEditor inherits Rectangle {
         return reject;
     }
     callback move-to-trash();
+    callback show-backlinks();
     callback key-pressed(KeyEvent) -> EventResult;
     public function select-match(anchor:int, caret:int) { input.set-selection-offsets(anchor,caret); }
     public function focus-editor() { input.focus(); }
@@ -137,6 +138,7 @@ export component NoteEditor inherits Rectangle {
     context := ContextMenuArea {
         Menu {
             MenuItem { title:"Move note to Trash"; enabled:!root.read-only; activated => { root.move-to-trash(); } }
+            MenuItem { title:"Show Pages Linking Here"; activated => { root.show-backlinks(); } }
             MenuSeparator {}
             MenuItem {
                 title: "Undo";

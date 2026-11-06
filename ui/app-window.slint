@@ -49,6 +49,8 @@ export component AppWindow inherits Window {
     // Bumped whenever the page list behind link suggestions changes.
     in property <int> link-pages-revision;
     pure callback suggest-links(string, int, int) -> LinkSuggestions;
+    // Lists the pages whose wikilinks lead to the current note.
+    callback show-backlinks();
     pure callback highlight-markdown(string, UiTheme, bool, [string]) -> [TextInputDecoration];
     private property <[TextInputDecoration]> note-decorations: root.highlight-markdown(root.note-text,root.theme,root.system-high-contrast,root.missing-links);
     in property <string> status-text;
@@ -200,6 +202,7 @@ export component AppWindow inherits Window {
             if (event.text == "q" || event.text == "Q") { root.request-quit(); return accept; }
             if (event.text == "w" || event.text == "W") { root.request-hide(); return accept; }
             if (event.text == "s" || event.text == "S") { root.save-now(); return accept; }
+            if (event.modifiers.shift && (event.text == "b" || event.text == "B") && root.active-view == UiView.note) { root.show-backlinks(); return accept; }
             if (!event.modifiers.shift && !event.modifiers.alt && !event.modifiers.meta && (event.text == "k" || event.text == "K")) { root.browse-pages(); return accept; }
             if (event.text == "1") { if (root.can-jump-to-newest) {root.jump-to-newest();} return accept; }
             if (event.text == "p" || event.text == "P") {root.toggle-pin();return accept;}
@@ -271,6 +274,7 @@ export component AppWindow inherits Window {
                     link-pages-revision: root.link-pages-revision;
                     suggest-links(source,caret,revision) => { root.suggest-links(source,caret,revision) }
                     move-to-trash => { root.trash-current-note(); }
+                    show-backlinks => { root.show-backlinks(); }
                     key-pressed(event) => { root.shortcut(event) }
                 }
 

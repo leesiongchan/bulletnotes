@@ -1,5 +1,5 @@
 //! Slint callback registration for local editing and navigation.
-use super::State;
+use super::{State, presentation::LinkChoices};
 use crate::{
     AppWindow, LinkPicker, SearchAdapter,
     app::{
@@ -9,7 +9,7 @@ use crate::{
     },
     domain::{
         link::{self, Resolution},
-        page::PageKey,
+        page::{PageKey, PagePath},
     },
 };
 use slint::ComponentHandle;
@@ -50,9 +50,11 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
     }
     {
         let state = state.clone();
-        window.global::<LinkPicker>().on_chosen(move |path| {
-            if let Some((from, anchor)) = close_link_choices(&state)
-                && let Ok(path) = crate::domain::page::PagePath::parse(&path)
+        window.global::<LinkPicker>().on_chosen(move |chosen| {
+            if let Some((from, choices)) = close_link_choices(&state)
+                && let Some((path, anchor)) = choices
+                    .into_iter()
+                    .find(|(path, _)| path.as_str() == chosen.as_str())
             {
                 let target = PageKey {
                     connection: from.connection.clone(),
@@ -61,6 +63,10 @@ pub(super) fn bind(window: &AppWindow, state: &Rc<State>) {
                 open_link(&state, from, LinkOutcome::Open(target), anchor);
             }
         });
+    }
+    {
+        let state = state.clone();
+        window.on_show_backlinks(move || show_backlinks(&state));
     }
     {
         let state = state.clone();
@@ -435,7 +441,11 @@ fn follow_link(state: &Rc<State>, source: &str, caret: i32) -> bool {
                     Ok(Resolution::Open(path)) => LinkOutcome::Open(key(path)),
                     Ok(Resolution::Create(path)) => LinkOutcome::Create(key(path)),
                     Ok(Resolution::Choose(paths)) => {
-                        offer_link_choices(&task, from, anchor, paths);
+                        let choices = paths
+                            .into_iter()
+                            .map(|path| (path, anchor.clone()))
+                            .collect();
+                        offer_link_choices(&task, from, "Several pages match this link", choices);
                         return;
                     }
                     Err(error) => LinkOutcome::Refused(error.notice()),
@@ -458,12 +468,12 @@ fn open_link(state: &Rc<State>, from: PageKey, outcome: LinkOutcome, anchor: Opt
     state.dispatch(AppAction::FollowLink { from, outcome });
 }
 
-/// Show the pages an ambiguous link could mean, unless the user has left its page.
+/// Offer pages to open, unless the user has left the page they were offered from.
 fn offer_link_choices(
     state: &Rc<State>,
     from: PageKey,
-    anchor: Option<link::Anchor>,
-    paths: Vec<crate::domain::page::PagePath>,
+    title: &str,
+    choices: Vec<(PagePath, Option<link::Anchor>)>,
 ) {
     let current = {
         let app = state.coordinator.borrow();
@@ -474,14 +484,17 @@ fn offer_link_choices(
     let Some(window) = state.window.upgrade().filter(|_| current) else {
         return;
     };
-    let choices: Vec<slint::SharedString> = paths.iter().map(|path| path.as_str().into()).collect();
-    *state.presentation.link_choice.borrow_mut() = Some((from, anchor));
-    window
-        .global::<LinkPicker>()
-        .set_choices(slint::ModelRc::from(choices.as_slice()));
+    let paths: Vec<slint::SharedString> = choices
+        .iter()
+        .map(|(path, _)| path.as_str().into())
+        .collect();
+    *state.presentation.link_choice.borrow_mut() = Some((from, choices));
+    let picker = window.global::<LinkPicker>();
+    picker.set_title(title.into());
+    picker.set_choices(slint::ModelRc::from(paths.as_slice()));
 }
 
-fn close_link_choices(state: &Rc<State>) -> Option<(PageKey, Option<link::Anchor>)> {
+fn close_link_choices(state: &Rc<State>) -> Option<LinkChoices> {
     if let Some(window) = state.window.upgrade() {
         window
             .global::<LinkPicker>()
@@ -489,4 +502,73 @@ fn close_link_choices(state: &Rc<State>) -> Option<(PageKey, Option<link::Anchor
         window.invoke_focus_editor();
     }
     state.presentation.link_choice.borrow_mut().take()
+}
+
+/// List the pages whose wikilinks lead to the current page, each opening at its link.
+fn show_backlinks(state: &Rc<State>) {
+    let from = {
+        let app = state.coordinator.borrow();
+        if app.view() != View::Note || app.loading() {
+            return;
+        }
+        let Some(editor) = app.editor() else {
+            return;
+        };
+        editor.key().clone()
+    };
+    let task = state.clone();
+    if slint::spawn_local(async move {
+        let found = async {
+            let sources = task.store.link_sources(&from.connection).await?;
+            let catalogue = task.store.link_catalogue(&from.connection).await?;
+            Ok::<_, crate::domain::error::StoreError>(backlinks(
+                &from.path,
+                &sources,
+                &catalogue.pages,
+            ))
+        }
+        .await;
+        match found {
+            Ok(choices) if choices.is_empty() => task.dispatch(AppAction::FollowLink {
+                from,
+                outcome: LinkOutcome::Refused("No other pages link here."),
+            }),
+            Ok(choices) => offer_link_choices(&task, from, "Pages linking here", choices),
+            Err(error) => {
+                tracing::warn!(%error, "backlinks could not be read");
+                task.dispatch(AppAction::FollowLink {
+                    from,
+                    outcome: LinkOutcome::Refused("Links to this page could not be listed."),
+                });
+            }
+        }
+    })
+    .is_err()
+    {
+        tracing::warn!("backlink search could not be scheduled");
+    }
+}
+
+/// Each other page with a link that can lead to `target`, opening at its first such link.
+fn backlinks(
+    target: &PagePath,
+    sources: &[(PagePath, String)],
+    pages: &[(PagePath, bool)],
+) -> Vec<(PagePath, Option<link::Anchor>)> {
+    // Every link to the page spells its file name, so other bodies are skipped unparsed.
+    let name = target.as_str().rsplit('/').next().unwrap_or_default();
+    let name = name.strip_suffix(".md").unwrap_or(name).to_lowercase();
+    sources
+        .iter()
+        .filter(|(path, body)| path != target && body.to_lowercase().contains(&name))
+        .filter_map(|(path, body)| {
+            let (_, at) = markdown::wikilinks(body)
+                .find(|(raw, _)| link::links_to(raw, path, target, pages))?;
+            let offset = body[..at].chars().count();
+            Some((
+                path.clone(),
+                Some(link::Anchor::Position(link::Position::Offset(offset))),
+            ))
+        })
+        .collect()
 }

@@ -211,6 +211,24 @@ pub fn resolve(
     Ok(Resolution::Create(link.path.clone()))
 }
 
+/// Whether the link `raw`, written on `source`, can lead to `target`: it opens the
+/// page, or the page is one of an ambiguous link's choices.
+pub fn links_to(
+    raw: &str,
+    source: &PagePath,
+    target: &PagePath,
+    pages: &[(PagePath, bool)],
+) -> bool {
+    let Ok(Some(link)) = parse(raw) else {
+        return false;
+    };
+    match resolve(&link, source, pages, true) {
+        Ok(Resolution::Open(path)) => path == *target,
+        Ok(Resolution::Choose(paths)) => paths.contains(target),
+        _ => false,
+    }
+}
+
 /// Whether following `raw` would create a page. Without a complete listing nothing
 /// counts as missing, because the page may exist remotely.
 pub fn dangles(raw: &str, pages: &[(PagePath, bool)], listed: bool) -> bool {
@@ -479,6 +497,27 @@ mod tests {
         assert_eq!(
             choices("d/x.md"),
             ranked(&["d/e/Tag.md", "a/Tag.md", "b/c/Tag.md"])
+        );
+    }
+
+    #[test]
+    fn backlinks_count_links_that_open_or_may_mean_the_page() {
+        let pages: Vec<_> = ["Projects/Plan.md", "Home/Notes.md", "Work/Notes.md"]
+            .iter()
+            .map(|p| (path(p), true))
+            .collect();
+        let to = |raw, target| links_to(raw, &path("a.md"), &path(target), &pages);
+        assert!(to("plan#Goals", "Projects/Plan.md"));
+        assert!(to("/Projects/Plan@3", "Projects/Plan.md"));
+        assert!(
+            to("Notes", "Work/Notes.md"),
+            "one of an ambiguous link's choices"
+        );
+        assert!(!to("Home/Notes", "Work/Notes.md"));
+        assert!(!to("Someday", "Projects/Plan.md"));
+        assert!(
+            !to("#Top", "a.md"),
+            "a link within the page is not a backlink"
         );
     }
 

@@ -96,3 +96,45 @@ async fn catalogued_trashed_and_unknown_targets_resolve_against_the_real_store()
     assert!(elsewhere.pages.is_empty() && !elsewhere.listed);
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn link_sources_are_visible_local_bodies_containing_wikilinks() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = StoreHandle::open(&database(&directory)).await.unwrap();
+    let connection = key("a.md").connection.clone();
+    for (path, body) in [
+        ("Linker.md", "See [[Plan]]."),
+        ("Plain.md", "No links [here]."),
+        ("Gone.md", "Was [[Plan]]."),
+    ] {
+        store.create_draft(key(path)).await.unwrap();
+        store
+            .save_local(key(path), body.into(), LocalRevision(1))
+            .await
+            .unwrap();
+    }
+    store
+        .move_to_trash(key("Gone.md"), LocalRevision(1))
+        .await
+        .unwrap();
+    // A remote-only page has no local body to read.
+    store
+        .record_catalogue(
+            &connection,
+            vec![RemoteMetadata {
+                key: key("Remote.md"),
+                modified_ms: Some(1),
+                content_length: None,
+                permission: Permission::ReadWrite,
+                revision: None,
+            }],
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.link_sources(&connection).await.unwrap(),
+        [(path("Linker.md"), "See [[Plan]].".to_owned())]
+    );
+    store.shutdown().await.unwrap();
+}

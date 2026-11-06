@@ -8,6 +8,12 @@ use crate::{
 use slint::ComponentHandle;
 use std::cell::{Cell, RefCell};
 
+/// Pages offered from the page `.0`, each with where it opens.
+pub(super) type LinkChoices = (
+    PageKey,
+    Vec<(PagePath, Option<crate::domain::link::Anchor>)>,
+);
+
 #[derive(Default)]
 pub(super) struct Presentation {
     pub(super) key: RefCell<Option<PageKey>>,
@@ -15,8 +21,8 @@ pub(super) struct Presentation {
     pub(super) search: Cell<Option<u64>>,
     /// A followed link's page and anchor, revealed once that page is presented.
     pub(super) link_target: RefCell<Option<(PageKey, crate::domain::link::Anchor)>>,
-    /// The page and anchor of an ambiguous link while the user picks its target.
-    pub(super) link_choice: RefCell<Option<(PageKey, Option<crate::domain::link::Anchor>)>>,
+    /// The page a list of pages was offered from, and where each choice opens.
+    pub(super) link_choice: RefCell<Option<LinkChoices>>,
 }
 impl Presentation {
     pub(super) fn reset(&self) {

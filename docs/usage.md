@@ -40,6 +40,10 @@ you left it. `[[Page@123]]` puts the caret at that character offset (counted
 from 0), and `[[Page@L12C3]]` at line 12, column 3; positions past the end
 stop at the end. Meta-page (`[[^…]]`) and document
 (`[[file.pdf]]`) links are not opened.
+Command+Shift+B, or **Show Pages Linking Here** in the editor's context menu,
+lists the other pages whose wikilinks lead to the current note, including
+ambiguous links that could mean it; choosing one opens that page at the link.
+Only pages stored on this device are searched.
 Themes without explicit Markdown colors retain contrast-based fallbacks;
 Increase Contrast uses ink. Blur remains
 deferred.

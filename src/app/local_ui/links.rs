@@ -76,7 +76,7 @@ impl State {
         if let Some((owner, catalogue)) = self.links.catalogue.borrow().as_ref()
             && *owner == connection
         {
-            for target in markdown::wikilinks(&text) {
+            for (target, _) in markdown::wikilinks(&text) {
                 if !missing.iter().any(|known| known == target.as_str())
                     && link::dangles(&target, &catalogue.pages, catalogue.listed)
                 {
