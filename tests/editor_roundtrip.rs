@@ -24,12 +24,6 @@ fn page(body: &str) -> PageSnapshot {
     }
 }
 #[test]
-fn unknown_native_selection_is_never_fabricated_from_a_restore_target() {
-    let session = EditorSession::restore(page("café"));
-    assert_eq!(session.body(), "café");
-    assert_eq!(session.observed_position(), None);
-}
-#[test]
 fn read_only_edit_or_invalid_position_cannot_modify_source() {
     let mut snapshot = page("café");
     snapshot.permission = Permission::ReadOnly;

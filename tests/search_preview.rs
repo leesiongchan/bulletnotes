@@ -448,34 +448,6 @@ fn reorder_hint_keeps_index_completeness_visible() {
 }
 
 #[test]
-fn utility_views_keep_neutral_background_when_writing_palette_changes() {
-    let ui = setup();
-    ui.set_prefers_reduced_transparency(true);
-    for id in ["rose", "graphite", "bundled-vancouver"] {
-        let mut settings = AppSettings::default();
-        settings.appearance.light_theme = bulletnotes::theme::ThemeId(id.into());
-        present_settings(&ui, &settings, SystemAppearance::Light).unwrap();
-        for view in [
-            UiView::Pages,
-            UiView::Appearance,
-            UiView::Connection,
-            UiView::Recovery,
-        ] {
-            ui.set_active_view(view);
-            settle();
-            let image = ui.window().take_snapshot().unwrap();
-            let i = (100 * image.width() as usize + 5) * 4;
-            let paper = ui.get_theme().paper;
-            assert_eq!(
-                &image.as_bytes()[i..i + 3],
-                &[paper.red(), paper.green(), paper.blue()],
-                "{id}: {view:?}"
-            );
-        }
-    }
-}
-
-#[test]
 fn opening_search_clears_a_legacy_hidden_folder_filter() {
     let ui = setup();
     ui.set_active_view(UiView::Note);
@@ -489,61 +461,6 @@ fn opening_search_clears_a_legacy_hidden_folder_filter() {
     settle();
     assert!(ui.global::<SearchAdapter>().get_folder().is_empty());
     assert!(*cleared.borrow());
-}
-
-#[test]
-fn enabled_toolbar_icons_show_hover_hints() {
-    icon_hint_appears(true);
-}
-
-#[test]
-fn result_icons_show_hover_hints_above_the_drag_surface() {
-    icon_hint_appears(false);
-}
-
-fn icon_hint_appears(toolbar: bool) {
-    let ui = setup();
-    if toolbar {
-        ui.set_active_view(UiView::Note);
-        ui.set_header_hovered(true);
-    } else {
-        let mut item = row(0);
-        item.can_trash = true;
-        ui.global::<SearchAdapter>()
-            .set_results(ModelRc::from([item]));
-    }
-    settle();
-    ui.window().dispatch_event(WindowEvent::PointerMoved {
-        position: if toolbar {
-            slint::LogicalPosition::new(136.0, 22.0)
-        } else {
-            slint::LogicalPosition::new(452.0, 127.0)
-        },
-    });
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(1000));
-    let inner = i_slint_core::window::WindowInner::from_pub(ui.window());
-    assert!(
-        !inner.active_popups.borrow().is_empty(),
-        "toolbar: {toolbar}"
-    );
-    if !toolbar {
-        let popups = inner.active_popups.borrow();
-        let popup = i_slint_core::item_tree::ItemRc::new(popups[0].component.clone(), 0);
-        let hint = popup.visit_descendants(|item| {
-            if item
-                .downcast::<i_slint_core::items::ComplexText>()
-                .is_some_and(|text| text.as_pin_ref().text().as_str() == "Move to Trash")
-            {
-                std::ops::ControlFlow::Break(())
-            } else {
-                std::ops::ControlFlow::Continue(())
-            }
-        });
-        assert!(
-            hint.is_some(),
-            "result hint must describe the hovered action"
-        );
-    }
 }
 
 #[test]

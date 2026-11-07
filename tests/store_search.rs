@@ -86,17 +86,19 @@ async fn search_is_literal_and_scoped() {
     assert_eq!(all.total, 2);
     assert_eq!(all.indexed, 2);
     assert_eq!(all.catalogue_total, 2);
-    let punctuation = store
-        .search(SearchQuery {
-            scope: bulletnotes::store::search::SearchScope::AllPages,
-            connection: a.connection.clone(),
-            text: "\" : * OR - ()".into(),
-            folder: None,
-            offset: 0,
-            limit: 50,
-        })
-        .await;
-    assert!(punctuation.is_ok());
+    for text in ["\" : * OR - ()", "\"", "*", "()", ":", "-", "\"\"\""] {
+        let result = store
+            .search(SearchQuery {
+                scope: bulletnotes::store::search::SearchScope::AllPages,
+                connection: a.connection.clone(),
+                text: text.into(),
+                folder: None,
+                offset: 0,
+                limit: 50,
+            })
+            .await;
+        assert!(result.is_ok(), "literal query failed: {text}");
+    }
     store.shutdown().await.unwrap();
 }
 #[tokio::test]
@@ -147,28 +149,6 @@ async fn empty_query_orders_recent_visits_then_paths_and_respects_folder() {
         .unwrap();
     assert_eq!(results.total, 2);
     assert_eq!(results.items[0].key, key("Projects/a.md"));
-    store.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn punctuation_only_searches_do_not_become_fts_syntax() {
-    let directory = tempfile::tempdir().unwrap();
-    let store = StoreHandle::open(&database(&directory)).await.unwrap();
-    let page = key("a.md");
-    store.create_draft(page.clone()).await.unwrap();
-    for text in ["\"", "*", "()", ":", "-", "\"\"\""] {
-        let result = store
-            .search(SearchQuery {
-                scope: bulletnotes::store::search::SearchScope::AllPages,
-                connection: page.connection.clone(),
-                text: text.into(),
-                folder: None,
-                offset: 0,
-                limit: 20,
-            })
-            .await;
-        assert!(result.is_ok(), "literal query failed: {text}");
-    }
     store.shutdown().await.unwrap();
 }
 

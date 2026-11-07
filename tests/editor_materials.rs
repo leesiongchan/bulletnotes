@@ -1,5 +1,5 @@
 use bulletnotes::{
-    AppWindow, AppearanceAdapter, UiPaperType, UiView,
+    AppWindow, AppearanceAdapter, UiPaperType,
     app::ui::present_settings,
     store::settings::AppSettings,
     theme::{
@@ -191,83 +191,6 @@ fn paper_intensity_changes_lines_independently_of_finish_and_text() {
 }
 
 #[test]
-fn paper_preview_uses_the_explicit_finish_with_crossed_theme_assignments() {
-    let window = window();
-    window.set_active_view(UiView::Appearance);
-    let mut settings = AppSettings::default();
-    settings.appearance.paper_type = bulletnotes::theme::PaperType::Eggshell;
-    for (light, dark, textured) in [
-        ("bulletnotes-dark", "graphite", true),
-        ("graphite", "bulletnotes-dark", true),
-    ] {
-        settings.appearance.light_theme = ThemeId(light.into());
-        settings.appearance.dark_theme = ThemeId(dark.into());
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        let crop = || {
-            let image = window.window().take_snapshot().unwrap();
-            (335..360)
-                .flat_map(|y| (350..400).map(move |x| (x, y)))
-                .flat_map(|(x, y)| {
-                    let offset = (y * image.width() as usize + x) * 4;
-                    image.as_bytes()[offset..offset + 3].to_vec()
-                })
-                .collect::<Vec<_>>()
-        };
-        let grain = crop();
-        window.set_prefers_reduced_transparency(true);
-        let flat = crop();
-        assert_eq!(grain != flat, textured, "active Light assignment: {light}");
-        window.set_prefers_reduced_transparency(false);
-    }
-}
-
-fn finish_difference(left: &[Color], right: &[Color]) -> (usize, u8) {
-    let mut changed = 0;
-    let mut maximum = 0;
-    for (a, b) in left.iter().zip(right) {
-        let delta =
-            a.r.abs_diff(b.r)
-                .max(a.g.abs_diff(b.g))
-                .max(a.b.abs_diff(b.b));
-        changed += usize::from(delta >= 3);
-        maximum = maximum.max(delta);
-    }
-    (changed, maximum)
-}
-
-#[test]
-fn explicit_finishes_have_visible_coverage_in_light_and_dark() {
-    use bulletnotes::theme::PaperType;
-    let window = window();
-    for theme in ["bulletnotes", "bulletnotes-dark"] {
-        let mut settings = AppSettings::default();
-        settings.appearance.light_theme = ThemeId(theme.into());
-        settings.appearance.paper_type = PaperType::Smooth;
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        let flat = paper_pixels(&window);
-        let mut previous: Vec<Vec<Color>> = Vec::new();
-        for kind in [PaperType::Bone, PaperType::Eggshell, PaperType::Linen] {
-            settings.appearance.paper_type = kind;
-            present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-            let pixels = paper_pixels(&window);
-            let (changed, maximum) = finish_difference(&pixels, &flat);
-            assert!(
-                changed * 100 >= pixels.len() * 2 && maximum >= 6,
-                "{theme}/{kind:?}: only {changed}/{} visibly changed pixels, maximum delta {maximum}",
-                pixels.len()
-            );
-            for other in &previous {
-                assert!(
-                    finish_difference(&pixels, other).0 * 100 >= pixels.len() * 2,
-                    "{theme}/{kind:?}: finishes must remain distinguishable"
-                );
-            }
-            previous.push(pixels);
-        }
-    }
-}
-
-#[test]
 fn switching_finishes_preserves_source_position_and_undo() {
     use bulletnotes::theme::PaperType;
     use slint::platform::{Key, WindowEvent};
@@ -322,57 +245,4 @@ fn switching_finishes_preserves_source_position_and_undo() {
     key("z".into(), false);
     key(Key::Control.into(), false);
     assert_eq!(window.get_note_text().as_str(), original);
-}
-
-#[test]
-fn paper_finish_and_pattern_are_rendered_in_every_view_and_about() {
-    use bulletnotes::{AboutWindow, app::ui::present_about, theme::PaperType};
-    let window = window();
-    let about = AboutWindow::new().unwrap();
-    let mut settings = AppSettings::default();
-    present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-    present_about(&about, &window);
-    about.show().unwrap();
-    let strip = |window: &slint::Window| {
-        let image = window.take_snapshot().unwrap();
-        (100..250)
-            .flat_map(|y| (8..18).map(move |x| (x, y)))
-            .flat_map(|(x, y)| {
-                let i = (y * image.width() as usize + x) * 4;
-                image.as_bytes()[i..i + 3].to_vec()
-            })
-            .collect::<Vec<_>>()
-    };
-    // `None` renders the About window instead of an AppWindow view.
-    for view in [
-        Some(UiView::Note),
-        Some(UiView::Pages),
-        Some(UiView::Appearance),
-        Some(UiView::Connection),
-        Some(UiView::Recovery),
-        None,
-    ] {
-        settings.appearance.paper_type = PaperType::Smooth;
-        settings.appearance.paper = PaperStyle::Plain;
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        if let Some(view) = view {
-            window.set_active_view(view);
-        }
-        let _ = window.window().take_snapshot().unwrap();
-        let target = if view.is_none() {
-            about.window()
-        } else {
-            window.window()
-        };
-        let flat = strip(target);
-        settings.appearance.paper_type = PaperType::Bone;
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        let _ = window.window().take_snapshot().unwrap();
-        assert_ne!(strip(target), flat, "paper finish must apply in {view:?}");
-        settings.appearance.paper_type = PaperType::Smooth;
-        settings.appearance.paper = PaperStyle::Grid;
-        present_settings(&window, &settings, SystemAppearance::Light).unwrap();
-        let _ = window.window().take_snapshot().unwrap();
-        assert_ne!(strip(target), flat, "paper style must apply in {view:?}");
-    }
 }

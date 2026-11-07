@@ -123,6 +123,11 @@ fn shared_editor_position_rejects_invalid_offsets_and_nonfinite_scroll() {
             scroll_y: 0.0,
         },
         EditorPosition {
+            anchor: 1,
+            caret: 2,
+            scroll_y: 0.0,
+        },
+        EditorPosition {
             anchor: 0,
             caret: 3,
             scroll_y: 0.0,
@@ -131,6 +136,16 @@ fn shared_editor_position_rejects_invalid_offsets_and_nonfinite_scroll() {
             anchor: 0,
             caret: 0,
             scroll_y: f32::INFINITY,
+        },
+        EditorPosition {
+            anchor: 0,
+            caret: 0,
+            scroll_y: f32::NAN,
+        },
+        EditorPosition {
+            anchor: 0,
+            caret: 0,
+            scroll_y: -1.0,
         },
     ] {
         assert!(position.validate("é").is_err());

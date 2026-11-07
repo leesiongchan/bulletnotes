@@ -45,34 +45,6 @@ fn history_restores_selection() {
 }
 
 #[test]
-fn invalid_utf8_offsets_or_scroll_are_rejected() {
-    for pos in [
-        EditorPosition {
-            anchor: 1,
-            caret: 2,
-            scroll_y: 0.0,
-        },
-        EditorPosition {
-            anchor: 0,
-            caret: 3,
-            scroll_y: 0.0,
-        },
-        EditorPosition {
-            anchor: 0,
-            caret: 0,
-            scroll_y: f32::NAN,
-        },
-        EditorPosition {
-            anchor: 0,
-            caret: 0,
-            scroll_y: -1.0,
-        },
-    ] {
-        assert!(pos.validate("é").is_err());
-    }
-}
-
-#[test]
 fn opening_new_page_after_back_discards_forward_history() {
     let mut nav = NavigationState::default();
     nav.open(key("a.md"), EditorPosition::default());

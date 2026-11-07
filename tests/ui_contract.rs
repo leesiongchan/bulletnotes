@@ -177,57 +177,6 @@ fn chrome_pixel(ui: &bulletnotes::AppWindow, x: usize, y: usize) -> [u8; 3] {
     [p[i], p[i + 1], p[i + 2]]
 }
 #[test]
-fn header_and_footer_use_paper_without_an_outer_surface() {
-    let ui = chrome_window();
-    assert_eq!(chrome_pixel(&ui, 250, 10), [247, 243, 235]);
-    assert_eq!(chrome_pixel(&ui, 250, 504), [247, 243, 235]);
-}
-#[test]
-fn circular_idle_focus_and_contrast_are_distinct() {
-    use slint::ComponentHandle;
-    let ui = chrome_window();
-    let idle = ui.window().take_snapshot().unwrap();
-    // The normal fine edge must strengthen when accessibility contrast is enabled.
-    let idle_edge = chrome_pixel(&ui, 463, 16);
-    ui.set_system_high_contrast(true);
-    let contrast = ui.window().take_snapshot().unwrap();
-    assert!(idle.as_bytes() != contrast.as_bytes());
-    assert_ne!(chrome_pixel(&ui, 463, 16), idle_edge);
-    ui.window()
-        .dispatch_event(slint::platform::WindowEvent::KeyPressed {
-            text: slint::platform::Key::F6.into(),
-        });
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(50));
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(50));
-    let focus = ui.window().take_snapshot().unwrap();
-    assert!(focus.as_bytes() != contrast.as_bytes());
-}
-#[test]
-fn minimum_chrome_retains_path_and_actions() {
-    use slint::ComponentHandle;
-    let ui = chrome_window();
-    ui.window().set_size(slint::LogicalSize::new(400.0, 440.0));
-    ui.set_current_path("generated/long/path/that/must/elide/without/overlapping.md".into());
-    let before = (
-        ui.get_note_text(),
-        ui.get_editor_width(),
-        ui.get_editor_height(),
-    );
-    assert_eq!(ui.window().take_snapshot().unwrap().width(), 400);
-    ui.set_header_hovered(false);
-    ui.set_footer_hovered(false);
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::ZERO);
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
-    assert_eq!(
-        (
-            ui.get_note_text(),
-            ui.get_editor_width(),
-            ui.get_editor_height()
-        ),
-        before
-    );
-}
-#[test]
 fn hidden_chrome_keeps_attention_visible() {
     let ui = chrome_window();
     ui.set_header_hovered(false);

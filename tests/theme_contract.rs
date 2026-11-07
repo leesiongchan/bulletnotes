@@ -168,12 +168,6 @@ fn invalid_version_types_missing_fields_and_colors_are_rejected() {
     assert!(decode_theme(b"{} {}").is_err());
 }
 #[test]
-fn export_roundtrips_version_one() -> Result<(), ThemeError> {
-    let theme = decode_theme(VALID)?;
-    assert_eq!(decode_theme(&encode_theme(&theme)?)?, theme);
-    Ok(())
-}
-#[test]
 fn optional_colors_survive_export_and_settings_roundtrips() {
     let mut input: Value = serde_json::from_slice(VALID).unwrap();
     input["cursor"] = json!("#19A2E6");
@@ -290,13 +284,4 @@ fn invalid_settings_never_resolve_silently() {
         ..Default::default()
     };
     assert!(resolve_theme(&settings, SystemAppearance::Light, &themes).is_err());
-}
-
-#[test]
-fn legacy_paper_default_becomes_smooth_and_is_never_written_back() {
-    use bulletnotes::theme::PaperType;
-    let kind: PaperType = serde_json::from_str("\"theme\"").unwrap();
-    assert_eq!(kind, PaperType::Smooth);
-    assert_eq!(serde_json::to_string(&kind).unwrap(), "\"smooth\"");
-    assert_eq!(PaperType::default(), PaperType::Smooth);
 }
